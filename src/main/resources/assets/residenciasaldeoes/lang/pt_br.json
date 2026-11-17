@@ -43,5 +43,6 @@
   "block.residenciasaldeoes.reinforced_door": "Porta Reforçada",
   "item.residenciasaldeoes.reinforced_door": "Porta Reforçada",
   "block.residenciasaldeoes.emerald_chest": "Baú Esmerálico",
-  "item.residenciasaldeoes.emerald_chest": "Baú Esmerálico"
+  "item.residenciasaldeoes.emerald_chest": "Baú Esmerálico",
+  "itemGroup.kraftcity": "KraftCity"
 }

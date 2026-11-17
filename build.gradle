@@ -6,7 +6,7 @@ plugins { id 'eclipse'; id 'maven-publish'; id 'net.minecraftforge.gradle' versi
 apply plugin: 'org.spongepowered.mixin'
 version = project.property('mod_version')
 group = 'br.com.residenciasaldeoes'
-archivesBaseName = 'residencias-dos-aldeoes'
+archivesBaseName = 'kraftcity'
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 minecraft {
  mappings channel: 'official', version: '1.19.2'
@@ -31,7 +31,7 @@ processResources {
  inputs.property 'mod_version', project.version
  filesMatching('META-INF/mods.toml') { expand mod_version: project.version }
 }
-jar { manifest { attributes(['Specification-Title':'residenciasaldeoes','Specification-Vendor':'OpenAI','Specification-Version':'1','Implementation-Title':project.name,'Implementation-Version':project.jar.archiveVersion]) } }
+jar { manifest { attributes(['Specification-Title':'KraftCity','Specification-Vendor':'OpenAI','Specification-Version':'1','Implementation-Title':project.name,'Implementation-Version':project.jar.archiveVersion]) } }
 jar.finalizedBy('reobfJar')
 
 sourceSets {

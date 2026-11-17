@@ -94,7 +94,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: residencias-dos-aldeoes-${{ steps.version.outputs.value }}
+          name: kraftcity-${{ steps.version.outputs.value }}
           path: |
             build/libs/*.jar
             gametest-console.log

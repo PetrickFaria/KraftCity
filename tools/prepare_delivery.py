@@ -3,9 +3,9 @@ import os, hashlib, subprocess, shutil, re
 
 version=dict(line.split('=',1) for line in Path('gradle.properties').read_text().splitlines() if '=' in line)['mod_version']
 out=Path('artifact-output');out.mkdir(exist_ok=True)
-jar=Path(f'build/libs/residencias-dos-aldeoes-{version}.jar')
+jar=Path(f'build/libs/kraftcity-{version}.jar')
 shutil.copy2(jar,out/jar.name)
-subprocess.run(['git','archive','--format=zip','--output='+str(out/f'residencias-dos-aldeoes-{version}-source.zip'),'HEAD'],check=True)
+subprocess.run(['git','archive','--format=zip','--output='+str(out/f'kraftcity-{version}-source.zip'),'HEAD'],check=True)
 for name in ['gametest-console.log','client-console.log','client-restore-console.log']:
     p=Path(name)
     if p.exists():shutil.copy2(p,out/name)
@@ -14,7 +14,7 @@ sha=os.environ['GITHUB_SHA']
 game_test_log=Path('gametest-console.log')
 match=re.search(r'All (\d+) required tests passed',game_test_log.read_text(encoding='utf-8',errors='replace')) if game_test_log.exists() else None
 game_test_result=f"{match.group(1)} Forge GameTests aprovados" if match else "resultado Forge GameTest não identificado no log"
-(out/f'relatorio-{version}.md').write_text(f"""# Residências dos Aldeões {version}
+(out/f'relatorio-{version}.md').write_text(f"""# KraftCity {version}
 
 Minecraft Java 1.19.2 / Forge 43.5.0 / Java 17.
 

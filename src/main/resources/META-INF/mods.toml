@@ -4,9 +4,9 @@ license="MIT"
 [[mods]]
 modId="residenciasaldeoes"
 version="${mod_version}"
-displayName="Residências dos Aldeões"
+displayName="KraftCity"
 authors="Petrick Faria"
-description='''Permite criar residências e registrar aldeões para retorno e contenção noturna.'''
+description='''KraftCity: sistema residencial e fundação modular para os futuros setores Industrial, Comercial, Militar e Construtor.'''
 [[dependencies.residenciasaldeoes]]
 modId="forge"
 mandatory=true

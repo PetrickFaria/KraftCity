@@ -4,7 +4,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: residencias-dos-aldeoes-release
+  group: kraftcity-release
   cancel-in-progress: false
 jobs:
   publish:
@@ -35,7 +35,7 @@ jobs:
           exact_tag="$(git tag --points-at "$head_sha" --list 'v[0-9]*' | sort -V | tail -n 1)"
           if [[ -n "$exact_tag" ]]; then
             version="${exact_tag#v}"
-            jar="residencias-dos-aldeoes-$version.jar"
+            jar="kraftcity-$version.jar"
             if gh release view "$exact_tag" --json assets --jq ".assets[].name" 2>/dev/null | grep -Fxq "$jar"; then
               echo "skip=true" >> "$GITHUB_OUTPUT"
               echo "value=$version" >> "$GITHUB_OUTPUT"
@@ -121,7 +121,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          jar="build/libs/residencias-dos-aldeoes-$VERSION.jar"
+          jar="build/libs/kraftcity-$VERSION.jar"
           test -s "$jar"
 
           if [[ "$REPAIR" != "true" ]]; then
@@ -158,6 +158,6 @@ jobs:
             gh release upload "$tag" "$jar" --clobber
           else
             gh release create "$tag" "$jar" --target "$target" \
-              --title "Residências dos Aldeões $VERSION" \
+              --title "KraftCity $VERSION" \
               --notes "Build versioned for Minecraft Java 1.19.2, Forge 43.5.0, Java 17."
           fi
