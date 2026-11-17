@@ -98,8 +98,8 @@ public final class FoundationVisualCheck {
             if (previews().stream().noneMatch(e -> e.pos().equals(SECOND) && !e.permanent())) throw new IllegalStateException("Limits toggle did not synchronize");
             Screenshot.grab(new File("../build"), "visual-kraftcity-limits-off.png", mc.getMainRenderTarget(), message -> {});
             System.out.println("KRAFTCITY_LIMITS_TOGGLE_AND_REMOVAL_PASSED");
-            mc.stop();
         }
+        if(ticks>=770)EmploymentVisualCheck.tick(mc,ticks);
     }
 
     public static void verifyRestore(net.minecraft.server.level.ServerLevel level) {

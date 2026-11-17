@@ -53,6 +53,7 @@ public final class VisualClientCheck {
                         new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(pos),Direction.UP,pos,false));
                     System.out.println("TEN_SLOTS_WORLD_RESTART_PASSED");
                     br.com.kraftcity.test.FoundationVisualCheck.verifyRestore(level);
+                    br.com.kraftcity.test.EmploymentVisualCheck.verifyRestore(level);
                 });
             }
             ticks++;
