@@ -172,8 +172,7 @@ retorno à Guarda, transformação/cura e reabertura em outra JVM.
 
 Resultado local: **152/152 GameTests** (117 anteriores + 35 militares),
 **12/12 verificadores estáticos** e cliente gráfico completo aprovado, com
-42 capturas e reabertura do mundo. Commit, Actions, artefato e SHA-256 serão
-registrados após a validação remota.
+42 capturas e reabertura do mundo. A identidade da entrega remota consta abaixo.
 
 ## Identificadores e evidência local
 
@@ -195,3 +194,29 @@ com mods de criaturas/EMF/ETF/Fresh Animations. Compartilhamento/concorrência
 foram automatizados no servidor; IDs de mods usam a mesma seleção persistente.
 O runner continua aceitando apenas o encerramento tardio conhecido do daemon
 Gradle depois de todos os marcadores obrigatórios reais do Minecraft.
+
+## Entrega validada — 1.0.99
+
+- Branch: `feature/kraftcity-military`.
+- Commit de código validado: `674e55e69446a2bfbefed6249113b303658a5150`.
+- [Actions 44184138505 — sucesso](https://github.com/PetrickFaria/KraftCity/actions/runs/44184138505).
+- [Artefato kraftcity-1.0.99](https://github.com/PetrickFaria/KraftCity/actions/runs/44184138505/artifacts/14374321628).
+- JAR no ZIP: `build/libs/kraftcity-1.0.99.jar`, 543683 bytes.
+- SHA-256: `82c4029324fb0f3415aba4c4c3f29579ec7906fc4ffc76ce96b7c0cf273d636a`.
+
+Uma única execução de Actions nesta etapa, após os testes locais. Aprovados:
+**152/152 GameTests**, **12/12 verificadores estáticos**, cliente gráfico real e
+reabertura em nova JVM. O artefato foi baixado: JAR Java 17 sem classes de teste,
+mixins remapeados, quatro marcadores militares do cliente, sete marcadores de
+persistência e 42 PNGs válidos 1600×900; as cinco capturas militares remotas foram
+inspecionadas. Nenhuma exceção de tarefa ou erro não tratado nos logs finais.
+Hash e commit conferem com o relatório gerado no próprio CI e SHA256SUMS.
+
+A cópia em `artifact-output/kraftcity-1.0.99.jar` é idêntica à de `build/libs`:
+instalar apenas uma cópia, igual no cliente e servidor. O pacote também inclui
+fonte completo, relatórios, logs e capturas. `main` permanece intocada.
+
+Retomada: usar este commit de código ou seu descendente apenas documental
+`[skip ci]`; auditar refs/Actions posteriores antes de alterar. Não voltar à
+`main` desatualizada ou à base 1.0.98. Construtor não foi implementado nesta etapa.
+O commit desta seção registra a evidência e não altera o JAR nem inicia novo CI.
