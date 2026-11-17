@@ -22,8 +22,8 @@ public final class MilitaryEvents {
     @SubscribeEvent public void tick(TickEvent.ServerTickEvent e){
         var server=ServerLifecycleHooks.getCurrentServer();if(server==null||e.phase!=TickEvent.Phase.END)return;
         for(var s:EmploymentData.get(server.overworld()).stations())if(s.active&&s.worker!=null&&Military.military(s)){
-            var l=server.getLevel(s.dimension);if(l==null||!l.hasChunkAt(s.pos))continue;
-            if(l.getEntity(s.worker) instanceof Villager v)Military.tick(l,s,v);
+            var l=server.getLevel(s.dimension);if(l==null||!l.hasChunkAt(s.pos)&&Military.mode(s)!=Military.Mode.FOLLOW)continue;
+            if(l.getEntity(s.worker) instanceof Villager v){if(!v.isNoAi())Military.tick(l,s,v);else Military.bind(s,v);}
             else if(l.getEntity(s.worker) instanceof SoldierZombie z){Military.bind(s,z);Military.stats(l,z);s.setChanged();}
         }
     }

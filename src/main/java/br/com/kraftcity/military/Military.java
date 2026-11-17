@@ -62,7 +62,7 @@ public final class Military {
         }return false;
     }
     public static boolean authorized(ServerLevel l,EmploymentData.Station s,Villager v,LivingEntity target){
-        if(!target.isAlive()||target==v||target instanceof Player||ResidenceData.get(l).owner(target.getUUID())!=null||!selected(s,target.getType()))return false;
+        if(!target.isAlive()||target==v||target instanceof Player||target instanceof Villager&&ResidenceData.get(l).owner(target.getUUID())!=null||!selected(s,target.getType()))return false;
         if(!onDuty(l,s)||v.isSleeping()||!Employment.valid(l,v.getUUID()))return false;
         if(mode(s)==Mode.FOLLOW){var p=s.military.hasUUID("player")?l.getPlayerByUUID(s.military.getUUID("player")):null;var orders=s.military.getCompound("orders");String key=target.getUUID().toString();boolean ordered=orders.contains(key)&&l.getGameTime()-orders.getLong(key)>=0&&l.getGameTime()-orders.getLong(key)<=MilitaryModule.CONTRIBUTION_TICKS.get();return p!=null&&target.distanceToSqr(p)<=100&&ordered;}
         if(target.distanceToSqr(Vec3.atCenterOf(s.pos))>Math.pow(MilitaryModule.DETECTION.get(),2))return false;
@@ -77,7 +77,7 @@ public final class Military {
         return choices.stream().min(Comparator.<LivingEntity>comparingInt(t->protectedArea(l,t)?0:1).thenComparingDouble(v::distanceToSqr).thenComparing(t->t.getUUID().toString())).orElse(null);
     }
     public static void tick(ServerLevel l,EmploymentData.Station s,Villager v){
-        if(!Employment.valid(l,v.getUUID())||!l.hasChunkAt(s.pos))return;bind(s,v);stats(l,v);
+        if(!Employment.valid(l,v.getUUID())||!l.hasChunkAt(s.pos)&&mode(s)!=Mode.FOLLOW)return;bind(s,v);stats(l,v);
         if(!onDuty(l,s)){if(!s.military.getBoolean("resting"))v.getNavigation().stop();s.military.putBoolean("resting",true);s.military.remove("target");v.stopUsingItem();sleep(l,s,v);heal(l,s,v);return;}
         s.military.remove("resting");
         if(v.isSleeping()){v.stopSleeping();v.getNavigation().stop();}heal(l,s,v);
