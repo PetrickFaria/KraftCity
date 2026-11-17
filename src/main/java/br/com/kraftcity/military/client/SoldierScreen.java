@@ -54,6 +54,6 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
     @Override public boolean mouseReleased(double x,double y,int b){return blacklist?false:super.mouseReleased(x,y,b);}
     @Override public boolean mouseDragged(double x,double y,int b,double dx,double dy){return blacklist?false:super.mouseDragged(x,y,b,dx,dy);}
     @Override public boolean mouseScrolled(double x,double y,double delta){if(blacklist){page+=delta<0?1:-1;buttonsForRows();return true;}return super.mouseScrolled(x,y,delta);}
-    @Override public boolean keyPressed(int key,int scan,int modifiers){if(blacklist&&search!=null&&search.isFocused()&&key!=256)return search.keyPressed(key,scan,modifiers);return super.keyPressed(key,scan,modifiers);}
+    @Override public boolean keyPressed(int key,int scan,int modifiers){if(blacklist){if(key==256){blacklist=false;buttons();return true;}return search!=null&&search.isFocused()&&search.keyPressed(key,scan,modifiers);}return super.keyPressed(key,scan,modifiers);}
     @Override public boolean charTyped(char c,int modifiers){return blacklist&&search!=null&&search.isFocused()?search.charTyped(c,modifiers):super.charTyped(c,modifiers);}
 }
