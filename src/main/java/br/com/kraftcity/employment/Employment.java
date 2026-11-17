@@ -52,7 +52,7 @@ public final class Employment {
     public static void release(ServerLevel level,UUID worker){
         var data=EmploymentData.get(level);
         for(ServerLevel world:level.getServer().getAllLevels())if(world.getEntity(worker) instanceof Villager v)br.com.kraftcity.industry.IndustrialWork.restoreHand(v);
-        for(var s:data.stations())if(worker.equals(s.worker)){s.worker=null;s.setChanged();}
+        for(var s:data.stations())if(worker.equals(s.worker)){s.worker=null;if(s.sector==Profession.Sector.COMMERCIAL)s.commerce.putLong("epoch",s.commerce.getLong("epoch")+1);s.setChanged();}
         var workforce=WorkforceData.get(level);var old=workforce.worker(worker).orElse(null);
         if(old!=null&&old.workstation().isPresent()){
             old.profession().ifPresent(p->{var progress=workforce.progress(worker,p);workforce.setProgress(worker,p,old.level(),progress.xp());});

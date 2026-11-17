@@ -6,13 +6,17 @@ public final class EmploymentConfig {
     public static final int INDUSTRIAL_COST=10;
     public static final ForgeConfigSpec SPEC;
     public static final ForgeConfigSpec.BooleanValue COMMERCIAL_ENABLED;
-    public static final ForgeConfigSpec.IntValue COMMERCIAL_COST, ACTION_TICKS, FISH_TICKS, BREED_TICKS, OTHER_LEVEL_ACTIONS, CARE_TICKS;
+    public enum CookingFuel { PENDING, VANILLA_FUEL }
+    public static final ForgeConfigSpec.EnumValue<CookingFuel> COOKING_FUEL;
+    public static final ForgeConfigSpec.IntValue COMMERCIAL_COST, ACTION_TICKS, FISH_TICKS, BREED_TICKS, OTHER_LEVEL_ACTIONS, CARE_TICKS, COMMERCIAL_RULESET;
     static {
         var b=new ForgeConfigSpec.Builder();
-        b.comment("Preço comercial definitivo PENDENTE. Só habilite após decisão explícita do administrador.").push("contratacao");
-        COMMERCIAL_ENABLED=b.define("habilitarContratacaoComercial",false);
-        COMMERCIAL_COST=b.comment("-1 = preço não definido, cobrança bloqueada. Não é contratação gratuita.")
-                .defineInRange("custoComercialEsmeraldas",-1,-1,64);
+        b.comment("Etapa 04 aprovada: comercial habilitado por 10 esmeraldas. Opcoes administrativas explicitas.").push("contratacao");
+        COMMERCIAL_ENABLED=b.define("habilitarContratacaoComercial",true);
+        COMMERCIAL_COST=b.comment("Padrao aprovado: 10 para as tres profissoes. -1 pausa a cobranca.")
+                .defineInRange("custoComercialEsmeraldas",10,-1,64);
+        COMMERCIAL_RULESET=b.comment("Migracao unica de configuracoes anteriores a decisao comercial aprovada.").defineInRange("regrasComerciais",0,0,1);
+        COOKING_FUEL=b.comment("Aprovado pelo usuario: credito de combustivel vanilla por receita de forno, independente do tempo comercial.").defineEnum("combustivelChurrasqueiro",CookingFuel.VANILLA_FUEL);
         b.pop();b.push("industria");
         ACTION_TICKS=b.comment("Intervalo operacional provisorio, nao altera tempos vanilla de crescimento.").defineInRange("intervaloAcoesTicks",20,1,1200);
         FISH_TICKS=b.comment("Tempo-base configuravel Lv3; Lv1..5 = 1.5/1.25/1/0.75/0.5 vezes este tempo.").defineInRange("pescaBaseTicks",600,20,24000);

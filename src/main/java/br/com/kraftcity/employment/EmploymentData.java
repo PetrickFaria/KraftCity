@@ -38,6 +38,8 @@ public final class EmploymentData extends SavedData {
         public BlockPos pos=BlockPos.ZERO;
         /** Additive stage-03 state; absent in schema-1 worlds means untouched defaults. */
         public CompoundTag industry=new CompoundTag();
+        /** Stage 04: optional, no item copies or migration of existing slots. */
+        public CompoundTag commerce=new CompoundTag();
         private Station(EmploymentData owner,UUID id,Profession.Sector sector){super(SLOTS);this.owner=owner;this.id=id;this.sector=sector;}
         @Override public void setChanged(){super.setChanged();if(owner!=null){owner.revision++;owner.setDirty();}}
         public boolean at(ServerLevel level,BlockPos position){return active&&dimension.equals(level.dimension())&&pos.equals(position);}
@@ -52,7 +54,7 @@ public final class EmploymentData extends SavedData {
             ListTag items=new ListTag();for(int i=0;i<SLOTS;i++)if(!s.getItem(i).isEmpty()){
                 CompoundTag item=s.getItem(i).save(new CompoundTag());item.putInt("slot",i);items.add(item);
             }
-            t.put("items",items);t.put("industry",s.industry.copy());entries.add(t);
+            t.put("items",items);t.put("industry",s.industry.copy());t.put("commerce",s.commerce.copy());entries.add(t);
         }
         root.put("stations",entries);return root;
     }
@@ -61,7 +63,7 @@ public final class EmploymentData extends SavedData {
         EmploymentData data=new EmploymentData();
         for(Tag raw:root.getList("stations",Tag.TAG_COMPOUND)){
             CompoundTag t=(CompoundTag)raw;Station s=new Station(data,t.getUUID("id"),Profession.Sector.valueOf(t.getString("sector")));
-            s.industry=t.getCompound("industry").copy();
+            s.industry=t.getCompound("industry").copy();s.commerce=t.getCompound("commerce").copy();
             s.profession=Profession.byId(t.getString("profession"));s.worker=t.hasUUID("worker")?t.getUUID("worker"):null;
             s.active=t.getBoolean("active");s.dimension=ResourceKey.create(Registry.DIMENSION_REGISTRY,new ResourceLocation(t.getString("dimension")));s.pos=BlockPos.of(t.getLong("position"));
             for(Tag item:t.getList("items",Tag.TAG_COMPOUND)){CompoundTag e=(CompoundTag)item;int slot=e.getInt("slot");if(slot<0||slot>=SLOTS)throw new IllegalArgumentException("Invalid station slot");s.setItem(slot,ItemStack.of(e));}
