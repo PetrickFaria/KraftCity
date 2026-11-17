@@ -36,7 +36,7 @@ public final class WorkNetwork {
         var s=menu.station();if(s==null)return;var home=br.com.residenciasaldeoes.data.ResidenceData.get(p.getLevel());
         var candidates=menu.hiring?Employment.candidates(p.getLevel()).stream().map(v->new Candidate(v.getUUID(),home.residentName(v.getUUID()))).toList():List.<Candidate>of();
         var progress=s.worker!=null&&s.profession!=null?br.com.kraftcity.workforce.WorkforceData.get(p.getLevel()).progress(s.worker,s.profession.id()):new br.com.kraftcity.workforce.WorkforceData.Progress(0,0);
-        CHANNEL.send(PacketDistributor.PLAYER.with(()->p),new Snapshot(menu.containerId,s.id,candidates,EmploymentConfig.cost(s.sector),s.worker==null?"Sem trabalhador":home.residentName(s.worker),s.worker!=null,progress.level(),progress.xp(),br.com.kraftcity.industry.IndustrialRules.size(p.getLevel(),s),s.industry.getBoolean("preview"),status));
+        CHANNEL.send(PacketDistributor.PLAYER.with(()->p),new Snapshot(menu.containerId,s.id,candidates,EmploymentConfig.cost(s.sector),s.worker==null?"Sem trabalhador":home.residentName(s.worker),s.worker!=null,s.sector==Profession.Sector.INDUSTRIAL&&s.worker!=null?br.com.kraftcity.industry.IndustrialRules.level(p.getLevel(),s):progress.level(),progress.xp(),br.com.kraftcity.industry.IndustrialRules.size(p.getLevel(),s),s.industry.getBoolean("preview"),status));
     }
     private WorkNetwork(){}
 }
