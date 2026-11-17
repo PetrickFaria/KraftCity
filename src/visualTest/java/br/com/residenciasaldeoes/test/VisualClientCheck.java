@@ -54,6 +54,7 @@ public final class VisualClientCheck {
                     System.out.println("TEN_SLOTS_WORLD_RESTART_PASSED");
                     br.com.kraftcity.test.FoundationVisualCheck.verifyRestore(level);
                     br.com.kraftcity.test.EmploymentVisualCheck.verifyRestore(level);
+                    br.com.kraftcity.test.IndustryVisualCheck.verifyRestore(level);
                 });
             }
             ticks++;

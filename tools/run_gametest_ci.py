@@ -1,11 +1,14 @@
 """Require actual GameTest completion; tolerate only Gradle's post-success daemon shutdown."""
 from pathlib import Path
 import subprocess
+import shutil
 import re
 import sys
 import time
 
 run=Path('run-gametest');run.mkdir(exist_ok=True)
+# Dedicated generated fixture only: do not inherit queued residents/items from a previous run.
+if (run/'world').exists():shutil.rmtree(run/'world')
 (run/'server.properties').write_text('level-type=minecraft:flat\ngenerator-settings={}\ngenerate-structures=false\nview-distance=5\nsimulation-distance=5\n')
 log_path=Path('gametest-console.log')
 started=time.time()

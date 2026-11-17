@@ -137,7 +137,11 @@ public final class EmploymentVisualCheck {
             }catch(ReflectiveOperationException e){throw new IllegalStateException(e);}
             capture(mc,"visual-residential-employed.png");System.out.println("EMPLOYMENT_RESIDENTIAL_INDICATOR_PASSED");
         }
-        if(ticks==1120)mc.stop();
+        if(ticks>=1120)IndustryVisualCheck.tick(mc,ticks);
+    }
+    public static void restoreNightFixture(ServerLevel level){
+        var s=station(level,POST);var resident=(Villager)level.getEntity(s.worker);
+        ResidenceData.get(level).reserveBed(s.worker,level.dimension(),HOME,BED);resident.startSleeping(BED);
     }
     public static void verifyRestore(ServerLevel level){
         var s=station(level,POST);check(s!=null&&s.active&&s.worker!=null&&s.profession==Profession.FARMER,"Employment lost after process restart");

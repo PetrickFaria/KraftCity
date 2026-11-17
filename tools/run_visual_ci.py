@@ -11,7 +11,10 @@ if not shutil.which('xvfb-run'):
 source=Path('run-gametest/world')
 if not source.exists():
     sys.exit('GameTest world unavailable for graphical inspection.')
-shutil.copytree(source,Path('run/saves/visual-check'),dirs_exist_ok=True)
+# Replace this generated fixture before the first JVM; the second JVM below reopens it unchanged.
+visual_world=Path('run/saves/visual-check')
+if visual_world.exists():shutil.rmtree(visual_world)
+shutil.copytree(source,visual_world)
 # Inspect the unchanged Portuguese UI labels instead of untranslated English keys.
 Path('run').mkdir(exist_ok=True)
 Path('run/options.txt').write_text('lang:pt_br\nguiScale:3\n')
@@ -21,7 +24,7 @@ with log.open('w') as out:
     result=subprocess.run(['xvfb-run','-a','-s','-screen 0 1920x1080x24','bash','gradlew','--no-daemon','-Pvisual_check=true','runClient'],stdout=out,stderr=subprocess.STDOUT)
 text=log.read_text(errors='replace')
 print('\n'.join(text.splitlines()[-35:]))
-for name in ['visual-chests.png','visual-doors.png','visual-anchor-slots.png','visual-reference-door.png','visual-chest-cavity.png','visual-courier-deposit.png','visual-courier-closed.png','visual-steve-opacity-multiple.png','visual-kraftcity-limits-two.png','visual-kraftcity-limits-removed.png','visual-kraftcity-limits-off.png','visual-industrial-hiring.png','visual-farmer-inventory.png','visual-worker-inventory.png','visual-replaced-workstation.png','visual-commercial-pending.png','visual-rehired-progress.png','visual-residential-employed.png']+[f'visual-steve-opacity-{percent}.png' for percent in (0,10,25,50,75,90,100)]:
+for name in ['visual-chests.png','visual-doors.png','visual-anchor-slots.png','visual-reference-door.png','visual-chest-cavity.png','visual-courier-deposit.png','visual-courier-closed.png','visual-steve-opacity-multiple.png','visual-kraftcity-limits-two.png','visual-kraftcity-limits-removed.png','visual-kraftcity-limits-off.png','visual-industrial-hiring.png','visual-farmer-inventory.png','visual-worker-inventory.png','visual-replaced-workstation.png','visual-commercial-pending.png','visual-rehired-progress.png','visual-residential-employed.png','visual-industry-blue-limits.png']+[f'visual-industry-{name}.png' for name in ('farmer','butcher','shepherd','fisherman','breeder','beekeeper')]+[f'visual-steve-opacity-{percent}.png' for percent in (0,10,25,50,75,90,100)]:
     path=Path('build/screenshots')/name
     if not path.exists() or path.stat().st_mtime < started:sys.exit('Minecraft did not capture a fresh '+name)
     data=path.read_bytes()
@@ -33,6 +36,9 @@ for marker in ['COURIER_PLAYER_OVERLAP_PASSED','COURIER_CLIENT_OPEN_CLOSE_PASSED
     if marker not in text:sys.exit('Minecraft client check missing '+marker)
 for marker in ['EMPLOYMENT_GRAPHICAL_CONTRACT_PASSED','EMPLOYMENT_INVENTORY_SHARED_PASSED','EMPLOYMENT_PORTABLE_INVENTORY_PASSED','COMMERCIAL_PENDING_NO_CHARGE_PASSED','EMPLOYMENT_REHIRE_PROGRESS_PASSED','EMPLOYMENT_RESIDENTIAL_INDICATOR_PASSED']:
     if marker not in text:sys.exit('Employment client check missing '+marker)
+if 'INDUSTRY_BLUE_LIMITS_PASSED' not in text:sys.exit('Blue work area toggle was not validated.')
+for job in ('FARMER','BUTCHER','SHEPHERD','FISHERMAN','BREEDER','BEEKEEPER'):
+    if f'INDUSTRY_{job}_FUNCTIONAL_PASSED' not in text:sys.exit('Industry client check missing '+job)
 print('Real Minecraft client captured all required scenes; image inspection is still required.')
 if 'KRAFTCITY_LIMITS_TOGGLE_AND_REMOVAL_PASSED' not in text:
     sys.exit('Residence limit toggle/removal check did not complete.')
@@ -50,6 +56,8 @@ if 'EMPLOYMENT_WORLD_RESTART_PASSED' not in restored_text:
     sys.exit('Employment inventory/progression did not survive process restart.')
 if 'WORKFORCE_WORLD_RESTART_PASSED' not in restored_text:
     sys.exit('Workforce state did not survive a complete Minecraft process restart.')
+if 'INDUSTRY_SIX_JOBS_WORLD_RESTART_PASSED' not in restored_text:
+    sys.exit('Six industrial jobs did not survive process restart.')
 if restored.returncode and 'Gradle build daemon disappeared unexpectedly' not in restored_text:
     sys.exit(restored.returncode)
 p=Path('build/screenshots/visual-anchor-restored.png')
