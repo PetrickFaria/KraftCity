@@ -211,3 +211,33 @@ filtros e progressão sem duplicar o inventário nem trocar a identidade do post
 - Não foram executadas sessões dedicadas com dois clientes humanos nem novas
   combinações EMF/ETF/Fresh Animations. Concorrência foi exercitada com dois
   jogadores simulados no servidor e duplo clique por pacotes de cliente real.
+
+### Entrega validada — 1.0.96
+
+- Código aprovado pelo CI: `0cc687b71516d89a5acbd2927ac73353408f0b9e`,
+  branch `feature/kraftcity-employment`. `main` não foi usada nem alterada.
+- [Execução 44005876367](https://github.com/PetrickFaria/KraftCity/actions/runs/44005876367)
+  concluída com sucesso na primeira execução remota desta etapa: build,
+  12 verificadores estáticos, **62/62 GameTests**, cliente gráfico e nova JVM.
+- [Artefato kraftcity-1.0.96](https://github.com/PetrickFaria/KraftCity/actions/runs/44005876367/artifacts/14295081138):
+  instalar somente `build/libs/kraftcity-1.0.96.jar` do ZIP. A cópia de mesmo
+  nome em `artifact-output/` é byte a byte idêntica, não um segundo mod.
+- SHA-256 do JAR publicado:
+  `61b71f25c85718982ba3dc1d74c09fa4228051f0a76faf8c0895e4d956b9d550`.
+- Artefato baixado e conferido: hash/relatório/commit, metadados 1.0.96,
+  bytecode Java 17 sem classes de teste, seis marcadores gráficos de emprego,
+  três marcadores de recarga e 26 capturas em 1600×900. Telas industrial,
+  profissional e comercial pendente inspecionadas no resultado remoto.
+- Entrega por artefato do Actions; não foi publicada uma GitHub Release.
+  O serviço de upload de releases já havia recusado a autenticação neste
+  ambiente. Não foi repetida a tentativa nem aberto outro workflow.
+
+Para a próxima etapa, partir desse commit validado (ou da documentação
+posterior desta mesma branch), preservar a identidade do posto e seus
+inventários, e consultar as pendências acima antes de definir regras novas.
+O mod id continua `residenciasaldeoes`; os novos IDs são `industrial`,
+`commercial`, `work_farmer`, `work_butcher`, `work_shepherd`,
+`work_fisherman`, `work_breeder`, `work_beekeeper`, `work_baker`,
+`work_confectioner`, `work_grill_cook`, além do menu/BlockEntity `workstation`.
+IDs residenciais anteriores continuam preservados. Cliente e servidor devem
+usar o mesmo JAR 1.0.96, pois esta etapa acrescenta o canal de rede de emprego.
