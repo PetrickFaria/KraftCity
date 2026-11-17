@@ -139,10 +139,10 @@ public final class FoundationGameTests {
         check(net.minecraftforge.fml.ModList.get().getModContainerById(KraftCity.MOD_ID).orElseThrow()
                 .getModInfo().getDisplayName().equals("KraftCity"), "Public mod name did not change");
         check(CityModule.values().length == 5 && java.util.Arrays.stream(CityModule.values())
-                .filter(CityModule::implemented).count() == 1 && CityModule.RESIDENTIAL.implemented(), "Premature module activation");
+                .filter(CityModule::implemented).count() == 3 && CityModule.RESIDENTIAL.implemented(), "Premature module activation");
         NonNullList<ItemStack> items = NonNullList.create();
         KraftCity.CREATIVE_TAB.fillItemList(items);
-        check(items.size() == 4 && items.get(0).is(ResidenciasDosAldeoes.ANCHOR_ITEM.get()), "Creative items missing");
+        check(items.size() == 6 && items.get(0).is(ResidenciasDosAldeoes.ANCHOR_ITEM.get()), "Creative items missing");
         check(ForgeRegistries.BLOCKS.getKey(ResidenciasDosAldeoes.ANCHOR.get())
                 .equals(new ResourceLocation("residenciasaldeoes", "ancora_residencial")), "Residential ID changed");
         check(ForgeRegistries.BLOCKS.getKeys().stream().noneMatch(id -> id.getNamespace().equals("kraftcity")), "Placeholder blocks registered");

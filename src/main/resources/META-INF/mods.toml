@@ -6,7 +6,7 @@ modId="residenciasaldeoes"
 version="${mod_version}"
 displayName="KraftCity"
 authors="Petrick Faria"
-description='''KraftCity: sistema residencial e fundação modular para os futuros setores Industrial, Comercial, Militar e Construtor.'''
+description='''KraftCity: residências preservadas, postos Industrial/Comercial, contratação industrial e inventários compartilhados. Preço comercial e produção das profissões pendentes.'''
 [[dependencies.residenciasaldeoes]]
 modId="forge"
 mandatory=true

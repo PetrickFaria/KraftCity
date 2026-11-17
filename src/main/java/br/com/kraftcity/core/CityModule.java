@@ -2,11 +2,11 @@ package br.com.kraftcity.core;
 
 import net.minecraft.resources.ResourceLocation;
 
-/** Extension identities, not block registrations or enabled gameplay. */
+/** Block/UI module availability; profession production remains a separate stage. */
 public enum CityModule {
     RESIDENTIAL("residential", true),
-    INDUSTRIAL("industrial", false),
-    COMMERCIAL("commercial", false),
+    INDUSTRIAL("industrial", true),
+    COMMERCIAL("commercial", true),
     MILITARY("military", false),
     BUILDER("builder", false);
 

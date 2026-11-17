@@ -1,0 +1,43 @@
+package br.com.kraftcity.employment;
+
+import br.com.kraftcity.api.ResidentUnlinkedEvent;
+import br.com.kraftcity.api.ResidentIdentityChangedEvent;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.npc.Villager;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
+import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.eventbus.api.*;
+import net.minecraftforge.server.ServerLifecycleHooks;
+
+public final class EmploymentEvents {
+    @SubscribeEvent public void unlinked(ResidentUnlinkedEvent event){var server=ServerLifecycleHooks.getCurrentServer();if(server!=null)Employment.release(server.overworld(),event.resident);}
+    @SubscribeEvent public void identityChanged(ResidentIdentityChangedEvent event){
+        var server=ServerLifecycleHooks.getCurrentServer();if(server==null)return;
+        Employment.release(server.overworld(),event.previous);
+        br.com.kraftcity.workforce.WorkforceData.get(server.overworld()).rebindHistory(event.previous,event.current);
+    }
+    @SubscribeEvent public void removed(EntityLeaveLevelEvent event){
+        if(event.getEntity() instanceof Villager v&&event.getLevel() instanceof ServerLevel l
+                &&v.getRemovalReason()!=null&&v.getRemovalReason().shouldDestroy())Employment.release(l,v.getUUID());
+    }
+    @SubscribeEvent public void died(LivingDeathEvent event){if(event.getEntity() instanceof Villager v&&v.level instanceof ServerLevel l)Employment.release(l,v.getUUID());}
+    @SubscribeEvent public void joined(EntityJoinLevelEvent event){if(event.getEntity() instanceof Villager v&&event.getLevel() instanceof ServerLevel l){var s=EmploymentData.get(l).assigned(v.getUUID());if(s!=null&&!s.dimension.equals(l.dimension()))Employment.release(l,v.getUUID());else Employment.valid(l,v.getUUID());}}
+    @SubscribeEvent public void tick(TickEvent.ServerTickEvent event){
+        var server=ServerLifecycleHooks.getCurrentServer();if(event.phase!=TickEvent.Phase.END||server==null||server.getTickCount()%20!=0)return;
+        for(var s:EmploymentData.get(server.overworld()).stations())Employment.reconcile(server.overworld(),s);
+    }
+    @SubscribeEvent(priority=EventPriority.HIGH) public void interact(PlayerInteractEvent.EntityInteract event){
+        if(!(event.getEntity() instanceof ServerPlayer player)||!(event.getTarget() instanceof Villager v)||event.getHand()!=InteractionHand.MAIN_HAND)return;
+        var data=player.getPersistentData();if(data.getBoolean("residenciasaldeoes_register")||data.getBoolean("residenciasaldeoes_unlink"))return;
+        if(Employment.valid(player.getLevel(),v.getUUID())){
+            var s=EmploymentData.get(player.getLevel()).assigned(v.getUUID());
+            WorkBlock.open(player,s,v.getUUID());event.setCanceled(true);event.setCancellationResult(InteractionResult.SUCCESS);
+        }
+    }
+}
