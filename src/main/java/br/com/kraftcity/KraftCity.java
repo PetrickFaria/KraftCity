@@ -23,6 +23,7 @@ public final class KraftCity {
             items.add(new ItemStack(ResidenciasDosAldeoes.EMERALD_FRAGMENT.get()));
             items.add(new ItemStack(br.com.kraftcity.employment.WorkModule.INDUSTRIAL.get()));
             items.add(new ItemStack(br.com.kraftcity.employment.WorkModule.COMMERCIAL.get()));
+            items.add(new ItemStack(br.com.kraftcity.employment.WorkModule.MILITARY.get()));
         }
     };
 

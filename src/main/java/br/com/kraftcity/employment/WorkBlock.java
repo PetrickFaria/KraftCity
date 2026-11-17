@@ -17,9 +17,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraftforge.network.NetworkHooks;
 
 public final class WorkBlock extends BaseEntityBlock {
+    public static final net.minecraft.world.level.block.state.properties.DirectionProperty FACING=HorizontalDirectionalBlock.FACING;
+    @Override protected void createBlockStateDefinition(StateDefinition.Builder<Block,BlockState> b){b.add(FACING);}
+    @Override public BlockState getStateForPlacement(net.minecraft.world.item.context.BlockPlaceContext c){return defaultBlockState().setValue(FACING,c.getHorizontalDirection().getOpposite());}
     public final Profession.Sector sector;
     public final Profession profession;
-    public WorkBlock(Profession.Sector sector,Profession profession){super(BlockBehaviour.Properties.of(Material.WOOD).strength(2.5F).sound(SoundType.WOOD));this.sector=sector;this.profession=profession;}
+    public WorkBlock(Profession.Sector sector,Profession profession){super(BlockBehaviour.Properties.of(Material.WOOD).strength(2.5F).sound(SoundType.WOOD));this.sector=sector;this.profession=profession;registerDefaultState(stateDefinition.any().setValue(FACING,net.minecraft.core.Direction.NORTH));}
     @Override public BlockEntity newBlockEntity(BlockPos pos,BlockState state){return new WorkBlockEntity(pos,state);}
     @Override public RenderShape getRenderShape(BlockState state){return RenderShape.MODEL;}
     @Override public PushReaction getPistonPushReaction(BlockState state){return PushReaction.BLOCK;}
@@ -40,7 +43,8 @@ public final class WorkBlock extends BaseEntityBlock {
         open(player,s,viaWorker,s.profession==null);
     }
     public static void open(ServerPlayer player,EmploymentData.Station s,java.util.UUID viaWorker,boolean hiring){
-        var provider=new SimpleMenuProvider((id,inventory,p)->new WorkMenu(id,inventory,s,hiring,viaWorker),Component.literal(s.profession==null?s.sector==Profession.Sector.INDUSTRIAL?"Bloco Industrial":"Bloco Comercial":s.profession.label));
+        if(s.sector==Profession.Sector.MILITARY&&s.profession!=null&&!hiring){br.com.kraftcity.military.SoldierMenu.open(player,s,viaWorker);return;}
+        var provider=new SimpleMenuProvider((id,inventory,p)->new WorkMenu(id,inventory,s,hiring,viaWorker),Component.literal(s.profession==null?s.sector==Profession.Sector.INDUSTRIAL?"Bloco Industrial":s.sector==Profession.Sector.MILITARY?"Bloco Militar":"Bloco Comercial":s.profession.label));
         NetworkHooks.openScreen(player,provider,buffer->{buffer.writeBlockPos(s.pos);buffer.writeUUID(s.id);buffer.writeBoolean(hiring);buffer.writeEnum(s.sector);buffer.writeInt(s.profession==null?-1:s.profession.ordinal());buffer.writeBoolean(viaWorker!=null);if(viaWorker!=null)buffer.writeUUID(viaWorker);});
     }
     @Override public void setPlacedBy(Level level,BlockPos pos,BlockState state,LivingEntity placer,ItemStack stack){

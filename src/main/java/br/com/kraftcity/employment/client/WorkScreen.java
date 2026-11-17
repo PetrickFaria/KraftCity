@@ -56,7 +56,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         int row=0;for(var p:Profession.values())if(p.sector==menu.sector&&(menu.profession==null||menu.profession==p)){
             addRenderableWidget(new Button(leftPos+181,topPos+30+row++*20,161,18,Component.literal((profession==p?"> ":"")+p.label),b->{profession=p;buttons();}));
         }
-        Button hire=addRenderableWidget(new Button(leftPos+216,topPos+155,126,20,Component.literal("Contratar"),b->{
+        Button hire=addRenderableWidget(new Button(leftPos+216,topPos+155,126,20,Component.literal(menu.sector==Profession.Sector.MILITARY?"Treinar":"Contratar"),b->{
             if(selected!=null&&profession!=null)WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Hire(menu.containerId,menu.stationId,selected,profession.ordinal()));
         }));
         hire.active=snapshot!=null&&snapshot.cost()>=0&&selected!=null&&profession!=null;

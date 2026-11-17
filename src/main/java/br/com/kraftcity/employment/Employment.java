@@ -36,7 +36,7 @@ public final class Employment {
         if(!s.active)return;
         if(s.worker!=null)release(level,s.worker);
         s.active=false;s.setChanged();
-        var block=s.profession!=null?WorkModule.PROFESSIONAL.get(s.profession).get():s.sector==Profession.Sector.INDUSTRIAL?WorkModule.INDUSTRIAL.get():WorkModule.COMMERCIAL.get();
+        var block=s.profession!=null?WorkModule.PROFESSIONAL.get(s.profession).get():WorkModule.generic(s.sector);
         ItemStack token=new ItemStack(block);token.getOrCreateTag().putUUID("KraftCityStation",s.id);
         ItemEntity item=new ItemEntity(level,s.pos.getX()+.5,s.pos.getY()+.5,s.pos.getZ()+.5,token);
         item.setInvulnerable(true);item.setUnlimitedLifetime();level.addFreshEntity(item);
@@ -50,6 +50,7 @@ public final class Employment {
         else if(s.worker!=null)valid(level,s.worker);
     }
     public static void release(ServerLevel level,UUID worker){
+        br.com.kraftcity.military.Military.release(level,worker);
         var data=EmploymentData.get(level);
         for(ServerLevel world:level.getServer().getAllLevels())if(world.getEntity(worker) instanceof Villager v)br.com.kraftcity.industry.IndustrialWork.restoreHand(v);
         for(var s:data.stations())if(worker.equals(s.worker)){s.worker=null;if(s.sector==Profession.Sector.COMMERCIAL)s.commerce.putLong("epoch",s.commerce.getLong("epoch")+1);s.setChanged();}
@@ -81,6 +82,7 @@ public final class Employment {
     public static String hire(ServerPlayer player,EmploymentData.Station s,UUID worker,Profession profession){
         ServerLevel level=player.getLevel();
         if(!level.getServer().isSameThread())throw new IllegalStateException("Hiring off server thread");
+        if(s.military.getBoolean("zombie"))return "ineligible";
         if(!s.at(level,s.pos)||s.worker!=null||(s.profession!=null&&s.profession!=profession)||profession==null||profession.sector!=s.sector)return "invalid";
         if(!(level.getBlockEntity(s.pos) instanceof WorkBlockEntity be)||!s.id.equals(be.identity())
                 ||player.distanceToSqr(s.pos.getX()+.5,s.pos.getY()+.5,s.pos.getZ()+.5)>64)return "invalid";
@@ -91,7 +93,7 @@ public final class Employment {
         // Physical replacement first. A failed block operation never consumes payment.
         if(s.profession==null){
             CONVERTING.set(true);
-            try { if(!level.setBlock(s.pos,WorkModule.PROFESSIONAL.get(profession).get().defaultBlockState(),3))return "invalid"; }
+            try { if(!level.setBlock(s.pos,WorkModule.PROFESSIONAL.get(profession).get().defaultBlockState().setValue(WorkBlock.FACING,level.getBlockState(s.pos).getValue(WorkBlock.FACING)),3))return "invalid"; }
             finally { CONVERTING.remove(); }
         }
         if(!(level.getBlockEntity(s.pos) instanceof WorkBlockEntity converted))throw new IllegalStateException("Missing professional block entity");
@@ -104,6 +106,6 @@ public final class Employment {
         // The custom block is the workstation. Never assign a conflicting vanilla career/POI.
         villager.releasePoi(MemoryModuleType.JOB_SITE);villager.releasePoi(MemoryModuleType.POTENTIAL_JOB_SITE);
         villager.getBrain().eraseMemory(MemoryModuleType.JOB_SITE);villager.getBrain().eraseMemory(MemoryModuleType.POTENTIAL_JOB_SITE);
-        payment.shrink(price);s.setChanged();return "ok";
+        payment.shrink(price);s.setChanged();if(profession==Profession.SOLDIER)br.com.kraftcity.military.Military.trained(level,s,villager,player);return "ok";
     }
 }

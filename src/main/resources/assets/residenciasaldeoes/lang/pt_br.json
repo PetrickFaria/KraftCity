@@ -80,5 +80,8 @@
   "item.residenciasaldeoes.diamond_fishing_rod": "Vara de Pesca de Diamante",
   "item.residenciasaldeoes.netherite_shears": "Tesoura de Netherita",
   "item.residenciasaldeoes.netherite_fishing_rod": "Vara de Pesca de Netherita",
-  "itemGroup.kraftcity_tools": "KraftCity — Ferramentas"
+  "itemGroup.kraftcity_tools": "KraftCity — Ferramentas",
+  "block.residenciasaldeoes.military": "Bloco Militar",
+  "entity.residenciasaldeoes.soldier_zombie": "Soldado Zumbi",
+  "block.residenciasaldeoes.work_soldier": "Bloco de Soldado"
 }

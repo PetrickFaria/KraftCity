@@ -24,7 +24,7 @@ public final class EmploymentEvents {
     }
     @SubscribeEvent public void removed(EntityLeaveLevelEvent event){
         if(event.getEntity() instanceof Villager v&&event.getLevel() instanceof ServerLevel l
-                &&v.getRemovalReason()!=null&&v.getRemovalReason().shouldDestroy())Employment.release(l,v.getUUID());
+                &&!br.com.kraftcity.military.Military.transferring(v.getUUID())&&v.getRemovalReason()!=null&&v.getRemovalReason().shouldDestroy())Employment.release(l,v.getUUID());
     }
     @SubscribeEvent public void died(LivingDeathEvent event){if(event.getEntity() instanceof Villager v&&v.level instanceof ServerLevel l)Employment.release(l,v.getUUID());}
     @SubscribeEvent public void joined(EntityJoinLevelEvent event){if(event.getEntity() instanceof Villager v&&event.getLevel() instanceof ServerLevel l){var s=EmploymentData.get(l).assigned(v.getUUID());if(s!=null&&!s.dimension.equals(l.dimension()))Employment.release(l,v.getUUID());else Employment.valid(l,v.getUUID());}}

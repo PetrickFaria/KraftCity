@@ -40,6 +40,8 @@ public final class EmploymentData extends SavedData {
         public CompoundTag industry=new CompoundTag();
         /** Stage 04: optional, no item copies or migration of existing slots. */
         public CompoundTag commerce=new CompoundTag();
+        public CompoundTag military=new CompoundTag();
+        public final SimpleContainer equipment=new SimpleContainer(6){@Override public void setChanged(){super.setChanged();Station.this.setChanged();}};
         private Station(EmploymentData owner,UUID id,Profession.Sector sector){super(SLOTS);this.owner=owner;this.id=id;this.sector=sector;}
         @Override public void setChanged(){super.setChanged();if(owner!=null){owner.revision++;owner.setDirty();}}
         public boolean at(ServerLevel level,BlockPos position){return active&&dimension.equals(level.dimension())&&pos.equals(position);}
@@ -54,6 +56,7 @@ public final class EmploymentData extends SavedData {
             ListTag items=new ListTag();for(int i=0;i<SLOTS;i++)if(!s.getItem(i).isEmpty()){
                 CompoundTag item=s.getItem(i).save(new CompoundTag());item.putInt("slot",i);items.add(item);
             }
+            t.put("military",s.military.copy());ListTag gear=new ListTag();for(int i=0;i<6;i++){CompoundTag e=s.equipment.getItem(i).save(new CompoundTag());e.putInt("slot",i);gear.add(e);}t.put("military_equipment",gear);
             t.put("items",items);t.put("industry",s.industry.copy());t.put("commerce",s.commerce.copy());entries.add(t);
         }
         root.put("stations",entries);return root;
@@ -63,6 +66,7 @@ public final class EmploymentData extends SavedData {
         EmploymentData data=new EmploymentData();
         for(Tag raw:root.getList("stations",Tag.TAG_COMPOUND)){
             CompoundTag t=(CompoundTag)raw;Station s=new Station(data,t.getUUID("id"),Profession.Sector.valueOf(t.getString("sector")));
+            s.military=t.getCompound("military").copy();for(Tag rawGear:t.getList("military_equipment",Tag.TAG_COMPOUND)){var e=(CompoundTag)rawGear;int slot=e.getInt("slot");if(slot<0||slot>=6)throw new IllegalArgumentException("Invalid military equipment slot");s.equipment.setItem(slot,ItemStack.of(e));}
             s.industry=t.getCompound("industry").copy();s.commerce=t.getCompound("commerce").copy();
             s.profession=Profession.byId(t.getString("profession"));s.worker=t.hasUUID("worker")?t.getUUID("worker"):null;
             s.active=t.getBoolean("active");s.dimension=ResourceKey.create(Registry.DIMENSION_REGISTRY,new ResourceLocation(t.getString("dimension")));s.pos=BlockPos.of(t.getLong("position"));
