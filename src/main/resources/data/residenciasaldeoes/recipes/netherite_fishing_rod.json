@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:smithing",
+  "base": {
+    "item": "residenciasaldeoes:diamond_fishing_rod"
+  },
+  "addition": {
+    "item": "minecraft:netherite_ingot"
+  },
+  "result": {
+    "item": "residenciasaldeoes:netherite_fishing_rod"
+  }
+}

@@ -21,5 +21,19 @@
   "block.residenciasaldeoes.work_confectioner": "Bloco de Confeiteiro",
   "item.residenciasaldeoes.work_confectioner": "Bloco de Confeiteiro",
   "block.residenciasaldeoes.work_grill_cook": "Bloco de Churrasqueiro",
-  "item.residenciasaldeoes.work_grill_cook": "Bloco de Churrasqueiro"
+  "item.residenciasaldeoes.work_grill_cook": "Bloco de Churrasqueiro",
+  "item.residenciasaldeoes.emerald_sword": "Espada de Esmeralda",
+  "item.residenciasaldeoes.emerald_hoe": "Enxada de Esmeralda",
+  "item.residenciasaldeoes.emerald_axe": "Machado de Esmeralda",
+  "item.residenciasaldeoes.wood_shears": "Tesoura de Madeira",
+  "item.residenciasaldeoes.iron_fishing_rod": "Vara de Pesca de Ferro",
+  "item.residenciasaldeoes.gold_shears": "Tesoura de Ouro",
+  "item.residenciasaldeoes.gold_fishing_rod": "Vara de Pesca de Ouro",
+  "item.residenciasaldeoes.emerald_shears": "Tesoura de Esmeralda",
+  "item.residenciasaldeoes.emerald_fishing_rod": "Vara de Pesca de Esmeralda",
+  "item.residenciasaldeoes.diamond_shears": "Tesoura de Diamante",
+  "item.residenciasaldeoes.diamond_fishing_rod": "Vara de Pesca de Diamante",
+  "item.residenciasaldeoes.netherite_shears": "Tesoura de Netherita",
+  "item.residenciasaldeoes.netherite_fishing_rod": "Vara de Pesca de Netherita",
+  "itemGroup.kraftcity_tools": "KraftCity — Ferramentas"
 }
