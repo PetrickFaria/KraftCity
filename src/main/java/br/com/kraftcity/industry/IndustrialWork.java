@@ -210,7 +210,7 @@ public final class IndustrialWork {
             int index=Math.floorMod(cursor+scan,total),column=index/5;
             BlockPos p=s.pos.offset(column%size-size/2,index%5-2,column/size-size/2);
             if(!l.hasChunkAt(p))continue;BlockState state=l.getBlockState(p);
-            if(state.is(Blocks.SUGAR_CANE)&&l.getBlockState(p.below()).is(Blocks.SUGAR_CANE)&&!l.getBlockState(p.below(2)).is(Blocks.SUGAR_CANE)&&l.hasChunkAt(p.above())&&l.getBlockState(p.above()).is(Blocks.SUGAR_CANE)){
+            if(state.is(Blocks.SUGAR_CANE)&&l.getBlockState(p.below()).is(Blocks.SUGAR_CANE)&&!l.getBlockState(p.below(2)).is(Blocks.SUGAR_CANE)&&l.hasChunkAt(p.above())&&l.getBlockState(p.above()).is(Blocks.SUGAR_CANE)&&!l.getBlockState(p.above(2)).is(Blocks.SUGAR_CANE)){
                 if(!reach(v,p)){s.industry.putInt("cursor",index);s.setChanged();return;}
                 if(!breakAllowed(l,s,v,p)||!breakAllowed(l,s,v,p.above()))continue;
                 var cane=new ItemStack(Items.SUGAR_CANE,2);if(!insert(s,cane,false)){alert(l,s,"space","Sem espaço para cana; coluna preservada.");return;}

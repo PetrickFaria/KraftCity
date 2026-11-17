@@ -46,7 +46,7 @@ public final class CommercialWork {
             if(Math.floorMod(l.getDayTime(),24000)<13000&&!l.isRaining()&&!v.isSleeping())evening(l,s,v);
             pause(s);return;
         }
-        if(!ownsNavigation(v)){pause(s);return;}
+        if(!ownsNavigation(v)){state(s,v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")?"Pausa para transporte residencial; progresso preservado.":"Pausa por clima/rotina residencial; progresso preservado.");return;}
         var plans=CommercialRecipes.plans(l,s.profession);
         if(plans.isEmpty()){state(s,"Receita aprovada indisponível.");IndustrialWork.alert(l,s,"recipe","Receita apropriada não encontrada no jogo/datapack.");return;}
         String id=s.commerce.getString("recipe");var plan=id.isEmpty()?null:plans.stream().filter(p->p.id().toString().equals(id)).findFirst().orElse(null);
@@ -63,7 +63,7 @@ public final class CommercialWork {
             if(supply==null){state(s,"Estoque insuficiente; progresso preservado.");IndustrialWork.alert(l,s,"stock","Faltam insumos necessários no posto e nos descartes industriais carregados.");return;}
             state(s,"Buscando insumos no descarte industrial.");
             if(!reach(v,supply.chest.pos()))return;
-            if(!IndustrialWork.allowed(l,s,v,supply.chest.pos(),null,"commercial_supply"))return;
+            if(!IndustrialWork.allowed(l,s,v,supply.chest.pos(),null,"commercial_supply")||!stillWorker(l,s,v)||v.distanceToSqr(Vec3.atCenterOf(supply.chest.pos()))>9)return;
             take(l,s,supply,plan.count()-count(s,plan.input()));return;
         }
         if(!reach(v,s.pos)){state(s,"Indo ao posto de trabalho.");return;}
@@ -71,7 +71,7 @@ public final class CommercialWork {
             state(s,EmploymentConfig.COOKING_FUEL.get()==EmploymentConfig.CookingFuel.PENDING?"Combustível pendente; produção pausada.":"Falta combustível vanilla.");
             IndustrialWork.alert(l,s,"fuel",s.commerce.getString("status"));return;
         }
-        if(!IndustrialWork.allowed(l,s,v,s.pos,null,"commercial_produce")){state(s,"Proteção recusou a operação.");return;}
+        if(!IndustrialWork.allowed(l,s,v,s.pos,null,"commercial_produce")||!stillWorker(l,s,v)){state(s,"Proteção/vínculo recusou a operação.");return;}
         int elapsed=Math.min(duration(level(l,s)),s.commerce.getInt("elapsed")+elapsedTicks);
         s.commerce.putInt("elapsed",elapsed);state(s,"Produzindo; insumos consumidos ao concluir.");s.setChanged();
         if(elapsed<duration(level(l,s)))return;
@@ -80,6 +80,7 @@ public final class CommercialWork {
         data.setProgress(s.worker,s.profession.id(),Math.min(5,Math.max(old.level(),1+(int)Math.min(4,xp/25))),xp);
         s.commerce.remove("recipe");s.commerce.putInt("elapsed",0);state(s,"Receita concluída.");s.setChanged();
     }
+    private static boolean stillWorker(ServerLevel l,EmploymentData.Station s,Villager v){return commercial(s)&&v.getUUID().equals(s.worker)&&l.getEntity(s.worker)==v&&Employment.valid(l,s.worker);}
     public static int count(EmploymentData.Station s,Item input){int n=s.getItem(28).is(input)?s.getItem(28).getCount():0;for(int i=0;i<27;i++)if(s.getItem(i).is(input))n+=s.getItem(i).getCount();return n;}
     private static boolean reach(Villager v,BlockPos p){
         if(v.distanceToSqr(Vec3.atCenterOf(p))<=9){v.getNavigation().stop();return true;}
@@ -93,7 +94,7 @@ public final class CommercialWork {
         for(var industrial:EmploymentData.get(l).stations()){
             if(!industrial.active||industrial.profession!=source||!industrial.dimension.equals(s.dimension)||!l.hasChunkAt(industrial.pos))continue;
             if(!(l.getBlockEntity(industrial.pos) instanceof WorkBlockEntity be)||!industrial.id.equals(be.identity()))continue;
-            for(var chest:DiscardChests.around(l,industrial,IndustrialWork.area(l,industrial)))for(var plan:plans)
+            for(var chest:DiscardChests.around(l,industrial,IndustrialWork.area(l,industrial)))if(DiscardChests.canOpen(l,chest.pos(),IndustrialWork.actor(l,s,v)))for(var plan:plans)
                 if(containerCount(chest.inventory(),plan.input())>0&&count(s,plan.input())<plan.count())candidates.add(new Supply(industrial,chest,plan));
         }
         candidates.sort(Comparator.<Supply>comparingDouble(c->c.chest.pos().distSqr(s.pos)).thenComparingInt(c->c.chest.pos().getX()).thenComparingInt(c->c.chest.pos().getY()).thenComparingInt(c->c.chest.pos().getZ()).thenComparing(c->c.plan.id().toString()));
@@ -153,7 +154,7 @@ public final class CommercialWork {
                 if(chest==null)IndustrialWork.alert(l,s,"discard","Falta baú de descarte válido a até cinco blocos do limite da área.");
                 else{
                     if(!reach(v,chest.pos())){state(s,"Levando produtos ao descarte.");return;}
-                    if(IndustrialWork.allowed(l,s,v,chest.pos(),null,"commercial_deposit"))for(int i=0;i<27;i++)if(CommercialRecipes.product(s.profession,s.getItem(i))){
+                    if(IndustrialWork.allowed(l,s,v,chest.pos(),null,"commercial_deposit")&&stillWorker(l,s,v))for(int i=0;i<27;i++)if(CommercialRecipes.product(s.profession,s.getItem(i))){
                         var stack=s.getItem(i);var remaining=IndustrialWork.transfer(chest.inventory(),stack);stack.shrink(stack.getCount()-remaining.getCount());s.setChanged();
                     }
                 }
