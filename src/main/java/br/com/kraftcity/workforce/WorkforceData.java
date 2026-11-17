@@ -26,6 +26,32 @@ public final class WorkforceData extends SavedData {
     public static final String NAME = "kraftcity_workforce";
     private static final int SCHEMA = 1;
     private final Map<UUID, WorkerRecord> workers = new LinkedHashMap<>();
+    public record Progress(int level,long xp) {
+        public Progress { if(level<0||xp<0)throw new IllegalArgumentException("Negative progression"); }
+    }
+    private final Map<UUID,Map<ResourceLocation,Progress>> history=new LinkedHashMap<>();
+    public Progress progress(UUID worker,ResourceLocation profession){
+        Progress saved=history.getOrDefault(worker,Map.of()).get(profession);
+        if(saved!=null)return saved;
+        WorkerRecord current=workers.get(worker);
+        return new Progress(current!=null&&current.profession().filter(profession::equals).isPresent()?current.level():0,0);
+    }
+    /** Explicit server API; no XP earning or level progression rules are introduced here. */
+    public void setProgress(UUID worker,ResourceLocation profession,int level,long xp){
+        history.computeIfAbsent(worker,k->new LinkedHashMap<>()).put(profession,new Progress(level,xp));
+        WorkerRecord current=workers.get(worker);
+        if(current!=null&&current.profession().filter(profession::equals).isPresent())
+            workers.put(worker,new WorkerRecord(worker,current.profession(),level,current.workstation(),current.area(),current.inventory()));
+        setDirty();
+    }
+    public boolean rebindHistory(UUID previous,UUID current){
+        if(previous.equals(current))return true;
+        if(workers.containsKey(current)||history.containsKey(current))return false;
+        WorkerRecord old=workers.remove(previous);var past=history.remove(previous);
+        if(old!=null)workers.put(current,new WorkerRecord(current,old.profession(),old.level(),Optional.empty(),old.area(),old.inventory()));
+        if(past!=null)history.put(current,past);
+        if(old!=null||past!=null)setDirty();return true;
+    }
 
     public static WorkforceData get(ServerLevel level) {
         return level.getServer().overworld().getDataStorage()
@@ -69,6 +95,12 @@ public final class WorkforceData extends SavedData {
             entries.add(entry);
         }
         tag.put("workers", entries);
+        ListTag past=new ListTag();
+        history.forEach((id,professions)->professions.forEach((profession,progress)->{
+            CompoundTag e=new CompoundTag();e.putUUID("id",id);e.putString("profession",profession.toString());
+            e.putInt("level",progress.level());e.putLong("xp",progress.xp());past.add(e);
+        }));
+        tag.put("profession_history",past);
         return tag;
     }
 
@@ -98,6 +130,10 @@ public final class WorkforceData extends SavedData {
             if (data.workers.putIfAbsent(worker.id(), worker) != null) {
                 throw new IllegalArgumentException("Duplicate worker UUID: " + worker.id());
             }
+        }
+        for(Tag raw:tag.getList("profession_history",Tag.TAG_COMPOUND)){
+            CompoundTag e=(CompoundTag)raw;
+            data.history.computeIfAbsent(e.getUUID("id"),k->new LinkedHashMap<>()).put(new ResourceLocation(e.getString("profession")),new Progress(e.getInt("level"),e.getLong("xp")));
         }
         return data;
     }
