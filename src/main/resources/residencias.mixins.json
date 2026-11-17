@@ -21,6 +21,8 @@
     "ResidentialDoorWeatherMixin",
     "WorkerAcquirePoiMixin",
     "IndustrialNavigationMixin",
-    "IndustrialIrrigationMixin"
+    "IndustrialIrrigationMixin",
+    "MilitaryEquipmentMixin",
+    "MilitaryCureMixin"
   ]
 }

@@ -445,7 +445,7 @@ public class VillagerResidenceEvents {
         List<Villager> active=new ArrayList<>();Villager leader=null;
         for(UUID id:home.residents){
             if(!(level.getEntity(id) instanceof Villager villager)||!villager.isAlive()||villager.isBaby()||villager.isNoAi()
-                    ||villager.isTrading()||villager.getPersistentData().contains(EMERALD_TRANSFER)
+                    ||br.com.kraftcity.military.Military.isSoldier(villager)||villager.isTrading()||villager.getPersistentData().contains(EMERALD_TRANSFER)
                     ||villager.getPersistentData().contains(NIGHT_DOOR_TASK))continue;
             if(leader==null)leader=villager;
             active.add(villager);
@@ -605,7 +605,7 @@ public class VillagerResidenceEvents {
         long now=level.getGameTime();
         boolean opening=task.getBoolean("open");
         if(shouldCloseResidentialDoors(level,home)==opening||now-task.getLong("started")>10_000L
-                ||villager.isSleeping()||villager.isNoAi()||villager.isTrading()
+                ||villager.isSleeping()||villager.isNoAi()||br.com.kraftcity.military.Military.isSoldier(villager)||villager.isTrading()
                 ||entityData.contains(EMERALD_TRANSFER)){
             finishNightDoorClosure(villager);return true;
         }
@@ -753,7 +753,7 @@ public class VillagerResidenceEvents {
             attempts.put(home.pos,currentGameTime+40L);
             for(UUID id:home.residents){
                 if(!(level.getEntity(id) instanceof Villager villager)||!villager.isAlive()||villager.isBaby()
-                        ||villager.isNoAi()||villager.isSleeping()||villager.isTrading()
+                        ||villager.isNoAi()||br.com.kraftcity.military.Military.isSoldier(villager)||villager.isSleeping()||villager.isTrading()
                         ||currentGameTime<villager.getPersistentData().getLong("residenciasaldeoes_courier_retry_after"))continue;
                 BlockPos homeApproach=findApproach(level,home.pos,villager);
                 if(homeApproach==null)continue;
@@ -1029,6 +1029,7 @@ public class VillagerResidenceEvents {
     }
     @SubscribeEvent public void onVillagerTick(LivingEvent.LivingTickEvent event){
         if(!(event.getEntity() instanceof Villager villager)||!(villager.level instanceof ServerLevel level))return;
+        if(br.com.kraftcity.military.Military.isSoldier(villager))return;
         if(villager.tickCount%20==0&&villager.getPersistentData().hasUUID("residenciasaldeoes_resident_identity"))
             ResidenceData.get(level).updateResidentAge(villager);
         if(villager.getPersistentData().contains(EMERALD_TRANSFER)){tickEmeraldTransfer(level,villager);return;}
@@ -1274,7 +1275,7 @@ public class VillagerResidenceEvents {
     private void tickNightWander(ServerLevel level,Villager villager,ResidenceData.Home home){
         CompoundTag persistent=villager.getPersistentData();
         long now=level.getGameTime();
-        if(villager.isSleeping()||villager.isNoAi()||villager.isTrading()||villager.isPassenger()
+        if(villager.isSleeping()||villager.isNoAi()||br.com.kraftcity.military.Military.isSoldier(villager)||villager.isTrading()||villager.isPassenger()
                 ||!insideResidence(villager.getX(),villager.getY(),villager.getZ(),home)){
             clearNightWander(villager,true);return;
         }
