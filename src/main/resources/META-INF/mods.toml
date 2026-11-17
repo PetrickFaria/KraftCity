@@ -6,7 +6,7 @@ modId="residenciasaldeoes"
 version="${mod_version}"
 displayName="KraftCity"
 authors="Petrick Faria"
-description='''KraftCity: residências preservadas, contratação e seis profissões industriais, ferramentas, áreas de trabalho e inventários persistentes compartilhados. Preço e produção comercial pendentes.'''
+description='''KraftCity: residências preservadas, seis profissões industriais e três comerciais, contratação por 10 esmeraldas, ferramentas, logística e inventários persistentes compartilhados.'''
 [[dependencies.residenciasaldeoes]]
 modId="forge"
 mandatory=true

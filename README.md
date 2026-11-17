@@ -2,17 +2,18 @@
 
 Minecraft Java 1.19.2 · Forge 43.5.0 · Java 17.
 
-O Bloco Residencial é preservado como subsistema do KraftCity, com namespace
-`residenciasaldeoes`. A etapa 02 acrescenta Blocos Industrial/Comercial,
-contratação industrial por 10 esmeraldas e inventários persistentes dos postos.
-O preço comercial continua pendente: contratação comercial vem desabilitada.
-A Etapa 03 acrescenta produção e progressão das seis profissões industriais,
-ferramentas por material, áreas azuis e descarte associado. Produção comercial
-continua reservada à próxima etapa. Veja as regras configuráveis e instruções abaixo.
+O Bloco Residencial e as seis profissões industriais são preservados, com
+namespace `residenciasaldeoes`. A Etapa 04 habilita contratação comercial por
+10 esmeraldas e produção de Padeiros, Confeiteiros e Churrasqueiros. Cada receita
+leva 60/50/40/30/15 segundos conforme Lv1–Lv5, com níveis em 25/50/75/100
+produções acumuladas. Combustível vanilla do Churrasqueiro foi aprovado pelo
+usuário; receitas são as existentes no jogo/datapack. Inventários, progressão
+e operações parciais são persistentes e compartilhados entre bloco/trabalhador.
 
 - [Etapa 01: arquitetura e base validada](docs/KRAFTCITY-ETAPA-01.md).
 - [Etapa 02: contratos, inventários e vínculos preservados](docs/KRAFTCITY-ETAPA-02.md).
 - [Etapa 03: seis profissões industriais, ferramentas, uso e regras configuráveis](docs/KRAFTCITY-ETAPA-03.md).
+- [Etapa 04: profissões comerciais, combustível, logística e atualização de saves](docs/KRAFTCITY-ETAPA-04.md).
 - Novos blocos genéricos: aba KraftCity do Criativo ou
   `/give @s residenciasaldeoes:industrial` e `/give @s residenciasaldeoes:commercial`.
   Ingredientes/receitas dos novos blocos ainda precisam ser especificados.
