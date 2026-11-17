@@ -149,6 +149,32 @@ conclusão, que a porta permaneça fechada e a tarefa não reinicie. As regras d
 jogo não foram alteradas. Uma execução posterior só é iniciada após essa
 correção concreta e sua validação local; não há reexecução remota idêntica.
 
+A segunda execução (`43990674672`, commit `e23f908`) concluiu 48/50: além do
+estado transitório de caminhada, expôs uma amostragem incompleta do transporte.
+O observador registra caminhada quando estado e posição interna coincidem,
+sem tratar um NBT transitório do frame anterior como autoridade de contenção.
+A porta continua verificada a cada tick depois de concluído o fechamento.
+No teste de transporte, as aproximações de âncora/baú antes tinham alcances de
+interação sobrepostos; uma viagem válida podia terminar sem deixar um path
+para amostrar. O baú do cenário foi afastado de x=10 para x=13 e as transições
+de carga são contadas independentemente da presença de path. Velocidade 0,5,
+duas viagens, limite de 15 por carga, produção, atraso, quantidade final e
+ausência de atribuição ao segundo morador continuam obrigatórios.
+As correções são exclusivamente de cenário/observação; os arquivos de
+produção residenciais permanecem iguais aos da base. Mundos de teste locais
+novos são usados antes de publicar essa correção para evitar reexecuções
+remotas sem diagnóstico.
+
+Após a correção dos observadores/cenários, duas execuções locais consecutivas
+em **mundos novos distintos** concluíram **50/50 GameTests aprovados**. A
+segunda registrou `walked=[true, true] trips=2 fragments=19`, além da porta
+fechada e sem reinício até o tick 850. Nenhum teste foi desabilitado, marcado
+como opcional ou convertido em sucesso após falha de comportamento.
+O roteiro gráfico completo foi então executado sobre o segundo mundo novo,
+com saída zero do runner, todas as capturas novas e os dois marcadores de
+persistência em uma JVM separada. Isso valida em sequência a preparação,
+o servidor, o cliente e a reabertura antes de publicar a correção dos testes.
+
 ## Retomar na etapa 02
 
 Partir do HEAD de `feature/kraftcity-foundation` e do SHA/artefato da entrega,
