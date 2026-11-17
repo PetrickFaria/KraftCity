@@ -10,35 +10,35 @@ for name in ['gametest-console.log','client-console.log','client-restore-console
     p=Path(name)
     if p.exists():shutil.copy2(p,out/name)
 if Path('build/screenshots').exists():shutil.copytree('build/screenshots',out/'screenshots',dirs_exist_ok=True)
-for stage in ('01','02'):
+for stage in ('01','02','03'):
     shutil.copy2(f'docs/KRAFTCITY-ETAPA-{stage}.md',out/f'KRAFTCITY-ETAPA-{stage}.md')
 sha=os.environ['GITHUB_SHA']
 match=re.search(r'All (\d+) required tests passed',Path('gametest-console.log').read_text(errors='replace'))
 assert match, 'GameTest success evidence missing'
 digest=hashlib.sha256(jar.read_bytes()).hexdigest()
 (out/'SHA256SUMS.txt').write_text(f'{digest}  {jar.name}\n')
-(out/f'relatorio-{version}.md').write_text(f"""# KraftCity {version} — etapa 02
+(out/f'relatorio-{version}.md').write_text(f"""# KraftCity {version} — etapa 03
 
 Minecraft Java 1.19.2 / Forge 43.5.0 / Java 17.
 
-- Base: KraftCity 1.0.95, commit aprovado 7ae2ad9fa13102abe581bacd2dd4fe1d025a0f2f.
-- Residencial preservado; eventos de ciclo de vida e indicador de trabalho integram os postos novos.
-- Industrial: seis opções reais, contratação por 10 esmeraldas, um trabalhador por posto e um posto por trabalhador.
-- Comercial: três opções de tela; preço definitivo pendente, contratação e cobrança desabilitadas por padrão.
-- Blocos profissionais são registros distintos, com o mesmo inventário acessível pelo bloco e trabalhador.
-- Inventário 3x9 + quatro slots específicos reservados + slot exclusivo para esmeraldas.
-- SavedData único do posto; objeto recuperável leva somente UUID, impedindo duplicação por cópia do token.
-- História de nível/XP por profissão preservada na perda de vínculo e recontratação; sem regras de ganho de XP/produção.
-- {match.group(1)} Forge GameTests obrigatórios aprovados, mais os 12 verificadores estáticos do workflow.
-- Cliente gráfico: contratação por botão/rede, duplo clique, inventário compartilhado, quebra/recolocação,
-  cobrança comercial forjada recusada, recontratação e indicador residencial verde.
-- Reabertura em outra JVM: inventário, associação, nível/XP, moradia/cama e pendência comercial verificados.
-- Ingredientes/receitas dos novos blocos, filtros/produção, propriedade de postos e progressão ficam pendentes;
-  as receitas antigas continuam preservadas. Novos blocos genéricos disponíveis no Criativo/comandos.
-- EMF/ETF/Fresh Animations e sessões dedicadas com dois clientes humanos não foram revalidados.
-- Decisões, limites e estratégia exata de serialização: KRAFTCITY-ETAPA-02.md incluído.
+- Base aprovada: 1.0.96, 0cc687b71516d89a5acbd2927ac73353408f0b9e; branch feature/kraftcity-industry.
+- Seis profissões industriais: Fazendeiro, Açougueiro, Pastoreiro, Pescador, Criador e Apicultor.
+- Contratos, cobrança industrial de 10 esmeraldas, UUIDs e inventário 3x9 + cinco slots específicos preservados.
+- Área 5x5..13x13 por nível, seleção menor no Lv5, limites azuis independentes dos verdes residenciais.
+- Desgaste fracionário, colheitas/tosas 25/50/75/100, histórico persistente por profissão.
+- Culturas maduras/replantio, irrigação sem fonte, reprodução com pares e capacidade, lã sem abate,
+  peixe somente com água real, lobos com cuidador lógico sem UUID de jogador, mel com fumaça e prioridade de frascos.
+- Descarte associado a baú/barril, reserva plantável, retirada de até cinco insumos no amanhecer, retorno residencial no entardecer.
+- Ferramentas de esmeralda, variantes customizadas de tesouras/varas, receitas, modelos tingidos e nomes em português.
+- SavedData schema 1 aditivo; token recuperável continua UUID-only, sem cópia de inventário nem recontratação automática.
+- {match.group(1)} GameTests obrigatórios aprovados, preservando 62 anteriores, e 12 verificadores estáticos.
+- Cliente gráfico: cenas e marcadores reais das seis profissões, GUI sincronizada, regressões de contratação/descarte
+  e reabertura em outra JVM verificando postos, produtos, inventários, vínculos, nível/XP e dados residenciais.
+- Regras provisórias configuráveis, detalhes dos tiers, suporte de culturas e integração com proteção: KRAFTCITY-ETAPA-03.md.
+- Preço/produção comercial, Militar e Construtor não implementados. Sem testes novos de packs EMF/ETF/Fresh Animations
+  nem sessão com dois clientes humanos; concorrência coberta no servidor e pacotes reais do cliente.
 
-Commit: {sha}.
+Commit validado: {sha}.
 SHA-256 JAR: {digest}.
 """,encoding='utf-8')
 print('Delivery prepared:',jar.name,'commit',sha,'SHA-256',digest)

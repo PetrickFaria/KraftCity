@@ -6,10 +6,13 @@ O Bloco Residencial é preservado como subsistema do KraftCity, com namespace
 `residenciasaldeoes`. A etapa 02 acrescenta Blocos Industrial/Comercial,
 contratação industrial por 10 esmeraldas e inventários persistentes dos postos.
 O preço comercial continua pendente: contratação comercial vem desabilitada.
-Produção e progressão das profissões ainda não estão implementadas.
+A Etapa 03 acrescenta produção e progressão das seis profissões industriais,
+ferramentas por material, áreas azuis e descarte associado. Produção comercial
+continua reservada à próxima etapa. Veja as regras configuráveis e instruções abaixo.
 
 - [Etapa 01: arquitetura e base validada](docs/KRAFTCITY-ETAPA-01.md).
-- [Etapa 02: uso, persistência, decisões pendentes e regressões](docs/KRAFTCITY-ETAPA-02.md).
+- [Etapa 02: contratos, inventários e vínculos preservados](docs/KRAFTCITY-ETAPA-02.md).
+- [Etapa 03: seis profissões industriais, ferramentas, uso e regras configuráveis](docs/KRAFTCITY-ETAPA-03.md).
 - Novos blocos genéricos: aba KraftCity do Criativo ou
   `/give @s residenciasaldeoes:industrial` e `/give @s residenciasaldeoes:commercial`.
   Ingredientes/receitas dos novos blocos ainda precisam ser especificados.
