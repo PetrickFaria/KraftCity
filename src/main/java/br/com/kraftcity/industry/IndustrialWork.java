@@ -87,7 +87,8 @@ public final class IndustrialWork {
     public static boolean allowed(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos pos,Entity target,String action){
         if(!l.hasChunkAt(pos)||!l.getWorldBorder().isWithinBounds(pos))return false;
         var p=actor(l,s,v);
-        boolean denied=MinecraftForge.EVENT_BUS.post(new WorkActionEvent(l,s,v,pos,target,action));
+        boolean denied=!br.com.kraftcity.logistics.DiscardChests.canOpen(l,pos,p);
+        denied|=MinecraftForge.EVENT_BUS.post(new WorkActionEvent(l,s,v,pos,target,action));
         if(target!=null)denied|=MinecraftForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(p,InteractionHand.MAIN_HAND,target));
         if(denied)alert(l,s,"protection","A proteção recusou esta ação de trabalho.");
         return !denied;
@@ -147,18 +148,18 @@ public final class IndustrialWork {
     }
     public static boolean insert(EmploymentData.Station s,ItemStack out,boolean commit){return outputs(s,List.of(out),commit);}
     public static Container chest(ServerLevel l,EmploymentData.Station s){
-        if(!s.industry.contains("discard"))return null;BlockPos p=BlockPos.of(s.industry.getLong("discard"));
-        if(!l.hasChunkAt(p)||!area(l,s).contains(Vec3.atCenterOf(p)))return null;
-        var be=l.getBlockEntity(p);
-        if(be instanceof ChestBlockEntity&&l.getBlockState(p).getBlock() instanceof ChestBlock b)return ChestBlock.getContainer(b,l.getBlockState(p),l,p,true);
-        return be instanceof BarrelBlockEntity c?c:null;
+        var access=br.com.kraftcity.logistics.DiscardChests.around(l,s,area(l,s)).stream().findFirst().orElse(null);
+        return access==null?null:access.inventory();
+    }
+    public static BlockPos chestPosition(ServerLevel l,EmploymentData.Station s){
+        return br.com.kraftcity.logistics.DiscardChests.around(l,s,area(l,s)).stream().findFirst().map(br.com.kraftcity.logistics.DiscardChests.Access::pos).orElse(null);
     }
     public static void deposit(ServerLevel l,EmploymentData.Station s,Villager v){
-        Container chest=chest(l,s);if(chest==null){alert(l,s,"discard","Associe um Baú de Descarte dentro da área; itens continuam no posto.");return;}
-        BlockPos p=BlockPos.of(s.industry.getLong("discard"));if(!allowed(l,s,v,p,null,"deposit"))return;
+        Container chest=chest(l,s);if(chest==null){alert(l,s,"discard","Falta baú de descarte a até cinco blocos do limite; itens continuam no posto.");return;}
+        BlockPos p=chestPosition(l,s);if(p==null||!allowed(l,s,v,p,null,"deposit"))return;
         int reserve=IndustrialRules.size(l,s)*IndustrialRules.size(l,s);
         for(int i=0;i<27;i++){
-            var stack=s.getItem(i);int keep=s.profession==Profession.FARMER&&plant(stack)!=null?Math.min(reserve,stack.getCount()):0;
+            var stack=s.getItem(i);int keep=s.profession==Profession.FARMER&&(plant(stack)!=null||stack.is(Items.SUGAR_CANE))?Math.min(reserve,stack.getCount()):0;
             if(keep>0)reserve-=keep;
             int count=stack.getCount()-keep;if(count<=0)continue;
             ItemStack excess=stack.copy();excess.setCount(count);ItemStack remainder=transfer(chest,excess);
@@ -174,11 +175,15 @@ public final class IndustrialWork {
         }return rest;
     }
     private static void dawnSupply(ServerLevel l,EmploymentData.Station s,Villager v){
-        int remaining=5;
+        int remaining=5;var sources=new ArrayList<br.com.kraftcity.logistics.DiscardChests.Access>();Set<BlockPos> seen=new HashSet<>();
         for(var farmer:EmploymentData.get(l).stations()){
-            if(remaining<=0)break;if(!farmer.active||farmer.profession!=Profession.FARMER||!farmer.dimension.equals(s.dimension)||farmer.pos.distSqr(s.pos)>4096)continue;
-            Container source=chest(l,farmer);if(source==null)continue;BlockPos p=BlockPos.of(farmer.industry.getLong("discard"));
-            if(!allowed(l,s,v,p,null,"dawn_supply"))continue;
+            if(!farmer.active||farmer.profession!=Profession.FARMER||!farmer.dimension.equals(s.dimension)||!l.hasChunkAt(farmer.pos)||farmer.pos.distSqr(s.pos)>4096)continue;
+            if(!(l.getBlockEntity(farmer.pos) instanceof WorkBlockEntity be)||!farmer.id.equals(be.identity()))continue;
+            for(var access:br.com.kraftcity.logistics.DiscardChests.around(l,farmer,area(l,farmer)))if(seen.add(access.pos()))sources.add(access);
+        }
+        sources.sort(Comparator.<br.com.kraftcity.logistics.DiscardChests.Access>comparingDouble(a->a.pos().distSqr(s.pos)).thenComparingInt(a->a.pos().getX()).thenComparingInt(a->a.pos().getY()).thenComparingInt(a->a.pos().getZ()));
+        for(var access:sources){
+            if(remaining<=0)break;Container source=access.inventory();BlockPos p=access.pos();if(!allowed(l,s,v,p,null,"dawn_supply"))continue;
             for(int i=0;i<source.getContainerSize()&&remaining>0;i++){
                 var item=source.getItem(i);if(s.profession==Profession.SHEPHERD?!item.is(Items.WHEAT):!food(item))continue;
                 int n=Math.min(remaining,item.getCount());while(n>0){ItemStack take=item.copy();take.setCount(n);if(insert(s,take,false)){insert(s,take,true);source.removeItem(i,n);source.setChanged();remaining-=n;break;}n--;}
@@ -205,6 +210,14 @@ public final class IndustrialWork {
             int index=Math.floorMod(cursor+scan,total),column=index/5;
             BlockPos p=s.pos.offset(column%size-size/2,index%5-2,column/size-size/2);
             if(!l.hasChunkAt(p))continue;BlockState state=l.getBlockState(p);
+            if(state.is(Blocks.SUGAR_CANE)&&l.getBlockState(p.below()).is(Blocks.SUGAR_CANE)&&!l.getBlockState(p.below(2)).is(Blocks.SUGAR_CANE)&&l.hasChunkAt(p.above())&&l.getBlockState(p.above()).is(Blocks.SUGAR_CANE)){
+                if(!reach(v,p)){s.industry.putInt("cursor",index);s.setChanged();return;}
+                if(!breakAllowed(l,s,v,p)||!breakAllowed(l,s,v,p.above()))continue;
+                var cane=new ItemStack(Items.SUGAR_CANE,2);if(!insert(s,cane,false)){alert(l,s,"space","Sem espaço para cana; coluna preservada.");return;}
+                l.setBlock(p.above(),Blocks.AIR.defaultBlockState(),2);l.setBlock(p,Blocks.AIR.defaultBlockState(),3);
+                insert(s,cane,true);IndustrialRules.wear(l,s,tool);IndustrialRules.progress(l,s);
+                s.industry.putInt("cursor",(index+1)%total);s.setChanged();return;
+            }
             if(state.getBlock() instanceof CropBlock crop){
                 if(!crop.isMaxAge(state)){
                     if(!s.getItem(28).is(Items.BONE_MEAL))continue;
@@ -236,6 +249,12 @@ public final class IndustrialWork {
                 s.industry.putInt("cursor",(index+1)%total);s.setChanged();return;
             }
             if(state.isAir()&&l.hasChunkAt(p.below())){
+                int caneSlot=find(s,x->x.is(Items.SUGAR_CANE),0,27);
+                var cane=Blocks.SUGAR_CANE.defaultBlockState();
+                if(caneSlot>=0&&!l.getBlockState(p.below()).is(Blocks.SUGAR_CANE)&&cane.canSurvive(l,p)){
+                    if(!reach(v,p)){s.industry.putInt("cursor",index);s.setChanged();return;}
+                    if(placeAllowed(l,s,v,p,cane)&&l.setBlock(p,cane,3)){s.removeItem(caneSlot,1);s.setChanged();}return;
+                }
                 int input=find(s,x->plant(x)!=null,0,27);if(input<0)continue;
                 BlockState crop=plant(s.getItem(input));BlockState soil=l.getBlockState(p.below());
                 boolean till=soil.is(Blocks.DIRT)||soil.is(Blocks.GRASS_BLOCK)||soil.is(Blocks.DIRT_PATH);
