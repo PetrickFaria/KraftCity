@@ -10,34 +10,35 @@ for name in ['gametest-console.log','client-console.log','client-restore-console
     p=Path(name)
     if p.exists():shutil.copy2(p,out/name)
 if Path('build/screenshots').exists():shutil.copytree('build/screenshots',out/'screenshots',dirs_exist_ok=True)
-for stage in ('01','02','03','04'):
+for stage in ('01','02','03','04','05'):
     shutil.copy2(f'docs/KRAFTCITY-ETAPA-{stage}.md',out/f'KRAFTCITY-ETAPA-{stage}.md')
 sha=os.environ['GITHUB_SHA']
 match=re.search(r'All (\d+) required tests passed',Path('gametest-console.log').read_text(errors='replace'))
 assert match, 'GameTest success evidence missing'
 digest=hashlib.sha256(jar.read_bytes()).hexdigest()
 (out/'SHA256SUMS.txt').write_text(f'{digest}  {jar.name}\n')
-(out/f'relatorio-{version}.md').write_text(f"""# KraftCity {version} — etapa 04
+(out/f'relatorio-{version}.md').write_text(f"""# KraftCity {version} — etapa 05
 
 Minecraft Java 1.19.2 / Forge 43.5.0 / Java 17.
 
-- Base aprovada: 1.0.97, 0d4b7d4d81568474eec7ef39af2143199d32bb10; branch feature/kraftcity-commerce.
-- Residencial e seis profissões industriais preservados. Comercial transformável: Padeiro, Confeiteiro e Churrasqueiro.
-- Contratação comercial aprovada: habilitada, 10 esmeraldas para as três opções, migração única dos antigos defaults.
-- Uma receita = uma produção; Lv2/3/4/5 em 25/50/75/100, tempos 60/50/40/30/15 segundos ativos.
-- Receitas existentes: 3 trigos -> 1 pão; cana -> açúcar vanilla; cinco carnes -> assadas da mesma espécie/quantidade.
-- Combustível vanilla aprovado: crédito por receita de forno (um carvão/8 carnes), remanescentes e calor persistentes.
-- Baús carregados até cinco blocos do limite, mais próximo/desempate determinístico, extração física só do necessário.
-- Cana madura fornecida pelo Fazendeiro, preservando raiz/reserva; três cadeias industriais/comerciais reais testadas.
-- Campo commerce aditivo no SavedData schema 1; sem migração dos 32 slots ou cópias de itens no token.
-- Tempo/receita/combustível preservados durante pausa/recarga; commit simulado antes do débito/resultado/XP.
-- {match.group(1)} GameTests obrigatórios aprovados, preservando os 91 anteriores, e 12 verificadores estáticos.
-- Cliente gráfico: contratos por pacote real, caminhada, produção temporizada das três profissões e limites anteriores.
-- Nova JVM: dados anteriores, três cadeias, operação parcial pausada e retomada produzindo exatamente uma vez.
-- Código-fonte completo, documentação, logs e capturas acompanham o mesmo artefato.
-- Não houve nova sessão com dois clientes humanos ou combinações EMF/ETF/Fresh Animations; concorrência automatizada no servidor.
-- Receitas de blocos genéricos ainda não especificadas; Militar/Construtor fora do escopo. Não há preço/XP/combustível comercial pendente.
-- Regras completas e decisões: KRAFTCITY-ETAPA-04.md; cliente e servidor usam o mesmo JAR (canal emprego v3).
+- Base aprovada 1.0.98, 3ea9d2a8548e27a9bf1e8f17aed3de3b8a19dad8; branch feature/kraftcity-military.
+- Sistemas residenciais, seis profissões industriais e três comerciais preservados.
+- Militar funcional: 15 esmeraldas, um soldado por posto, bloco físico profissional.
+- Livre/Guarda/Seguir; Seguir exige ataque real do jogador e seleção da criatura.
+- Blacklist categorizada, Minecraft/Mods e busca, Creeper desmarcado por padrão.
+- Inventário de 32 slots preservado + seis equipamentos militares; schema 1 aditivo.
+- Combate, munição, durabilidade, encantamentos, XP compartilhado e turnos/cama.
+- Lv1..5 em 0/75/150/225/300 XP: 5/6/7/8/9 corações; XP em milésimos para preservar frações.
+- Soldado Zumbi com UUID/posto/itens/histórico preservados; Fraqueza/Maçã Dourada e cura vanilla.
+- Morte definitiva respeita doMobLoot/Maldição do Desaparecimento, sem duplicar inventário.
+- {match.group(1)} GameTests obrigatórios aprovados e 12 verificadores estáticos.
+- Cliente gráfico: regressões anteriores e contratos/equipamentos/Blacklist/combate/retorno/cura militares.
+- Nova JVM confirma inventário, XP, vínculos, modos e turnos militares, além dos marcadores anteriores.
+- Provisórios configuráveis: cura normal 200 ticks, contribuição/ordens 1200 ticks, alcance operacional 48.
+- Sem receita arbitrária do Militar genérico; Criativo/comandos. Construtor fora do escopo.
+- Não houve sessão com dois clientes humanos nem testes de todos os mods de criaturas; concorrência automatizada.
+- Regras e retomada: KRAFTCITY-ETAPA-05.md; cliente e servidor com o mesmo JAR, emprego v4/militar v1.
+- Código-fonte, documentação, logs e capturas acompanham o artefato.
 
 Commit validado: {sha}.
 SHA-256 JAR: {digest}.

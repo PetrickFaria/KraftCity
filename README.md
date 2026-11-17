@@ -1,4 +1,11 @@
-# KraftCity
+# KraftCity — Etapa 05: sistema militar
+
+Sistema militar integrado: Bloco Militar → Soldado, contratação por 15 esmeraldas,
+modos Livre/Guarda/Seguir, Blacklist por criatura, equipamentos e turnos persistentes,
+progressão acumulada e transformação reversível em Soldado Zumbi.
+[Relatório técnico e continuidade da Etapa 05](docs/KRAFTCITY-ETAPA-05.md).
+
+## Base preservada das etapas 01–04
 
 Minecraft Java 1.19.2 · Forge 43.5.0 · Java 17.
 
@@ -15,7 +22,8 @@ e operações parciais são persistentes e compartilhados entre bloco/trabalhado
 - [Etapa 03: seis profissões industriais, ferramentas, uso e regras configuráveis](docs/KRAFTCITY-ETAPA-03.md).
 - [Etapa 04: profissões comerciais, combustível, logística e atualização de saves](docs/KRAFTCITY-ETAPA-04.md).
 - Novos blocos genéricos: aba KraftCity do Criativo ou
-  `/give @s residenciasaldeoes:industrial` e `/give @s residenciasaldeoes:commercial`.
+  `/give @s residenciasaldeoes:industrial`, `/give @s residenciasaldeoes:commercial`
+  e `/give @s residenciasaldeoes:military`.
   Ingredientes/receitas dos novos blocos ainda precisam ser especificados.
 
 As seções de versões abaixo são histórico do subsistema residencial.
