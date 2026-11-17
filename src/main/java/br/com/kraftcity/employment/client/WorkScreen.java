@@ -79,12 +79,12 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         }else{
             font.draw(pose,"Inventário comum (3 × 9)",94,16,0xFFFFFF);
             String[] labels=switch(menu.profession){
-                case FARMER->new String[]{"Enx.","F.osso","Reserva","Água"};
+                case FARMER->new String[]{"Enx.","F.os.","Ins.2","Água"};
                 case BUTCHER->new String[]{"Mach.","Alim.1","Alim.2","Alim.3"};
-                case SHEPHERD->new String[]{"Tes.","Trigo","Reserva","Equip."};
-                case FISHERMAN->new String[]{"Vara","Reserva","Reserva","Equip."};
+                case SHEPHERD->new String[]{"Tes.","Trigo","Ins.2","Equip."};
+                case FISHERMAN->new String[]{"Vara","Ins.1","Ins.2","Equip."};
                 case BREEDER->new String[]{"Ferr.","Osso","Carne","Equip."};
-                case BEEKEEPER->new String[]{"Coleta","Flores","Reserva","Equip."};
+                case BEEKEEPER->new String[]{"Coleta","Flores","Ins.2","Equip."};
                 default->new String[]{"Ferr.","Ins.1","Ins.2","Equip."};
             };for(int i=0;i<4;i++)font.draw(pose,labels[i],menu.profession==Profession.FARMER&&i==3?274:94+i*36,menu.profession==Profession.FARMER&&i==3?16:91,0xFFFFFF);
             font.draw(pose,"Esmer.",270,91,0xFFFFFF);
