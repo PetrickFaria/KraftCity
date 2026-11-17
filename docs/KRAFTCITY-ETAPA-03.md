@@ -204,8 +204,8 @@ Comandos: build com Java 17/Forge 43.5.0; os 12 verificadores do workflow;
 `python3 tools/run_gametest_ci.py`; com Xvfb/OpenGL,
 `LIBGL_ALWAYS_SOFTWARE=1 python3 tools/run_visual_ci.py`.
 
-Resultado final, commit validado, CI, artefato e hash serão registrados somente
-após a validação completa. Comercial/produção de alimentos da Etapa 04,
+O resultado final validado está registrado ao final deste documento.
+Comercial/produção de alimentos da Etapa 04,
 Militar e Construtor não são implementados nesta etapa.
 
 ### Matriz de regressão da etapa
@@ -252,3 +252,35 @@ retire legitimamente os itens reservados para a verificação de persistência.
   de combinações EMF/ETF/Fresh Animations; concorrência é exercitada no servidor,
   além dos pacotes reais do cliente gráfico.
 - Nenhum workflow remoto foi iniciado durante a depuração local desta etapa.
+
+### Entrega validada — 1.0.97
+
+- Branch: `feature/kraftcity-industry`; código validado:
+  `0d4b7d4d81568474eec7ef39af2143199d32bb10`.
+- [CI 44093358652](https://github.com/PetrickFaria/KraftCity/actions/runs/44093358652)
+  aprovado na **única execução remota desta etapa**, com build, 12 verificações
+  estáticas, **91/91 GameTests**, cliente gráfico e reabertura em outra JVM.
+- [Artefato kraftcity-1.0.97](https://github.com/PetrickFaria/KraftCity/actions/runs/44093358652/artifacts/14333377060).
+  Instalar somente `build/libs/kraftcity-1.0.97.jar` do ZIP, no cliente e no
+  servidor. A cópia em `artifact-output/` é idêntica; não instalar as duas.
+- SHA-256 do JAR publicado:
+  `e358ef62ddd4f9252c7fe471675c85beac4cdbc85796bea40305a1cf87175e1a`.
+- Artefato baixado e conferido: hash/relatório/commit, bytecode Java 17 sem
+  classes de teste, metadados 1.0.97, refmap dos novos mixins, 13 receitas e
+  modelos novos, seis marcadores de produção industrial, limite azul,
+  quatro marcadores de recarga e 33 capturas válidas em 1600×900.
+- Capturas remotas de Fazendeiro, Apicultor e limites azuis inspecionadas;
+  as seis telas também foram inspecionadas na validação local completa.
+- Fontes completas, relatórios, logs e capturas acompanham o mesmo artefato.
+  O namespace `residenciasaldeoes` e os identificadores anteriores foram
+  preservados. `main` não foi usada nem alterada.
+
+Retomar a próxima etapa desse commit validado ou da documentação posterior
+na mesma branch. Preservar UUIDs, os 32 índices do inventário, schema 1 e
+histórico por profissão. Preço/produção comercial e balanceamento dos valores
+provisórios continuam descritos explicitamente acima; não assumir novas
+regras de economia ou sistemas Militar/Construtor já implementados.
+
+Precisão sobre amanhecer: o abastecimento diário ocorre na primeira visita de
+trabalho do período iniciado às 23000, incluindo carregamento/contratação
+tardia naquele período; não repete a retirada quando o trabalhador reconecta.
