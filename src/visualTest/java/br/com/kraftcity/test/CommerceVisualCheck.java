@@ -120,7 +120,7 @@ public final class CommerceVisualCheck {
                     l.setDayTime(13001);var p=mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());p.teleportTo(l,60.5,-57,10.5,180,20);nightReady=true;System.out.println("COMMERCE_PARTIAL_OPERATION_SAVED_FOR_RESTART");
                 }
             });
-            if(nightReady){readyTicks++;if(readyTicks==30)mc.getSingleplayerServer().execute(()->EmploymentVisualCheck.restoreNightFixture(mc.getSingleplayerServer().overworld()));if(readyTicks==80)mc.stop();}
+            if(nightReady){readyTicks++;if(readyTicks==30)mc.getSingleplayerServer().execute(()->EmploymentVisualCheck.restoreNightFixture(mc.getSingleplayerServer().overworld()));if(readyTicks>=80)MilitaryVisualCheck.tick(mc,readyTicks-80);}
             check(ticks<2400,"Partial commercial operation did not reach checkpoint");
         }
     }

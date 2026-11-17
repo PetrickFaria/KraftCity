@@ -24,7 +24,7 @@ with log.open('w') as out:
     result=subprocess.run(['xvfb-run','-a','-s','-screen 0 1920x1080x24','bash','gradlew','--no-daemon','-Pvisual_check=true','runClient'],stdout=out,stderr=subprocess.STDOUT)
 text=log.read_text(errors='replace')
 print('\n'.join(text.splitlines()[-35:]))
-for name in ['visual-chests.png','visual-doors.png','visual-anchor-slots.png','visual-reference-door.png','visual-chest-cavity.png','visual-courier-deposit.png','visual-courier-closed.png','visual-steve-opacity-multiple.png','visual-kraftcity-limits-two.png','visual-kraftcity-limits-removed.png','visual-kraftcity-limits-off.png','visual-industrial-hiring.png','visual-farmer-inventory.png','visual-worker-inventory.png','visual-replaced-workstation.png','visual-commercial-pending.png','visual-rehired-progress.png','visual-residential-employed.png','visual-industry-blue-limits.png','visual-commerce-hiring.png','visual-commerce-baker.png','visual-commerce-confectioner.png','visual-commerce-grill_cook.png']+[f'visual-industry-{name}.png' for name in ('farmer','butcher','shepherd','fisherman','breeder','beekeeper')]+[f'visual-steve-opacity-{percent}.png' for percent in (0,10,25,50,75,90,100)]:
+for name in ['visual-chests.png','visual-doors.png','visual-anchor-slots.png','visual-reference-door.png','visual-chest-cavity.png','visual-courier-deposit.png','visual-courier-closed.png','visual-steve-opacity-multiple.png','visual-kraftcity-limits-two.png','visual-kraftcity-limits-removed.png','visual-kraftcity-limits-off.png','visual-industrial-hiring.png','visual-farmer-inventory.png','visual-worker-inventory.png','visual-replaced-workstation.png','visual-commercial-pending.png','visual-rehired-progress.png','visual-residential-employed.png','visual-industry-blue-limits.png','visual-military-hiring.png','visual-military-soldier.png','visual-military-blacklist.png','visual-military-guard.png','visual-military-zombie.png','visual-commerce-hiring.png','visual-commerce-baker.png','visual-commerce-confectioner.png','visual-commerce-grill_cook.png']+[f'visual-industry-{name}.png' for name in ('farmer','butcher','shepherd','fisherman','breeder','beekeeper')]+[f'visual-steve-opacity-{percent}.png' for percent in (0,10,25,50,75,90,100)]:
     path=Path('build/screenshots')/name
     if not path.exists() or path.stat().st_mtime < started:sys.exit('Minecraft did not capture a fresh '+name)
     data=path.read_bytes()
@@ -41,6 +41,8 @@ for job in ('FARMER','BUTCHER','SHEPHERD','FISHERMAN','BREEDER','BEEKEEPER'):
     if f'INDUSTRY_{job}_FUNCTIONAL_PASSED' not in text:sys.exit('Industry client check missing '+job)
 for job in ('BAKER','CONFECTIONER','GRILL_COOK'):
     if f'COMMERCE_{job}_CHAIN_AND_TIMER_PASSED' not in text:sys.exit('Commercial client chain missing '+job)
+for marker in ('MILITARY_GRAPHICAL_COMBAT_AND_XP_PASSED','MILITARY_GUARD_RETURN_PASSED','MILITARY_FREE_FOLLOW_AND_TRANSFORM_PASSED','MILITARY_VANILLA_CURE_PASSED'):
+    if marker not in text:sys.exit('Military client check missing '+marker)
 print('Real Minecraft client captured all required scenes; image inspection is still required.')
 if 'KRAFTCITY_LIMITS_TOGGLE_AND_REMOVAL_PASSED' not in text:
     sys.exit('Residence limit toggle/removal check did not complete.')
@@ -60,6 +62,7 @@ if 'WORKFORCE_WORLD_RESTART_PASSED' not in restored_text:
     sys.exit('Workforce state did not survive a complete Minecraft process restart.')
 if 'INDUSTRY_SIX_JOBS_WORLD_RESTART_PASSED' not in restored_text:
     sys.exit('Six industrial jobs did not survive process restart.')
+if 'MILITARY_WORLD_RESTART_PASSED' not in restored_text:sys.exit('Military did not survive JVM restart.')
 for marker in ('COMMERCE_THREE_CHAINS_WORLD_RESTART_PASSED','COMMERCE_PARTIAL_RECIPE_RESUMED_ONCE_PASSED'):
     if marker not in restored_text:sys.exit('Commercial restart missing '+marker)
 if restored.returncode and 'Gradle build daemon disappeared unexpectedly' not in restored_text:
