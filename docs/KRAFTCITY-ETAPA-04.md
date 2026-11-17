@@ -232,3 +232,12 @@ EMF/ETF/Fresh Animations; concorrência foi testada automaticamente no servidor.
 Os runners só aceitam o encerramento tardio conhecido do daemon Gradle depois
 de confirmarem todos os marcadores obrigatórios de sucesso do Minecraft.
 Commit/CI/JAR/hash finais serão registrados após a validação remota.
+
+A primeira execução remota, `44131546970`, aprovou build, 12 verificadores e
+117 GameTests, mas interrompeu o teste gráfico residencial: a câmera se
+teletransportava antes de completar a segunda viagem de 17 fragmentos e
+encerrava a abertura do jogador por distância. A sequência de teste agora
+aguarda conservação, abertura simultânea e fechamento, com relógio de
+polling independente e timeout limitado. Nenhuma regra residencial foi
+alterada nem asserção removida. O cliente completo e a reabertura passaram
+localmente após esse ajuste, antes de publicar a correção.

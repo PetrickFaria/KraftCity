@@ -26,7 +26,7 @@ public final class VisualClientCheck {
     private static volatile int opacityVillagerEntityId=-1;
     private static volatile int[] multiOpacityVillagerIds=new int[0];
     private static final int[] MULTI_OPACITY_PERCENTAGES={0,25,75,100};
-    private static int ticks;
+    private static int ticks,clientTicks,courierWaitTicks;
     @SubscribeEvent public static void tick(TickEvent.ClientTickEvent event){
         if(event.phase!=TickEvent.Phase.END||!Boolean.getBoolean("residencias.visualCheck"))return;
         Minecraft mc=Minecraft.getInstance();
@@ -115,7 +115,7 @@ public final class VisualClientCheck {
                         .forEach(net.minecraft.world.entity.Entity::discard);
             });
         }
-        ticks++;
+        ticks++;clientTicks++;
         if(!courierStarted&&ticks>=60&&mc.screen==null){
             courierStarted=true;var server=mc.getSingleplayerServer();
             server.execute(()->{
@@ -143,8 +143,8 @@ public final class VisualClientCheck {
             // The configured trip limit is 15, so a 17-fragment collection is
             // intentionally delivered in two physical trips. Validate total
             // conservation only after the anchor and courier have both finished.
-            if(depositCaptured&&!graphicalDeliveryVerified&&ticks-lastCourierIntegrityCheckTick>=10){
-                lastCourierIntegrityCheckTick=ticks;
+            if(depositCaptured&&!graphicalDeliveryVerified&&clientTicks-lastCourierIntegrityCheckTick>=10){
+                lastCourierIntegrityCheckTick=clientTicks;
                 var server=mc.getSingleplayerServer();
                 server.execute(()->{
                     var level=server.overworld();BlockPos anchorPos=new BlockPos(1,-58,8),chestPos=new BlockPos(4,-58,8);
@@ -175,6 +175,13 @@ public final class VisualClientCheck {
                 closedCaptured=true;System.out.println("COURIER_CLIENT_OPEN_CLOSE_PASSED");
                 Screenshot.grab(new File("../build"),"visual-courier-closed.png",mc.getMainRenderTarget(),message->{});
             }
+        }
+        // Complete both physical trips and the overlapping player opener before
+        // the later camera teleport can close the chest through its normal range check.
+        // Keep a separate monotonic clock so integrity polling continues while waiting.
+        if(ticks==250&&!closedCaptured){
+            ticks--;if(++courierWaitTicks>1200)throw new IllegalStateException("Courier scene timed out: deposit="+depositCaptured+" conserved="+graphicalDeliveryVerified+" overlap="+overlapVerified+" closed="+closedCaptured);
+            return;
         }
         if(ticks==250)Screenshot.grab(new File("../build"),"visual-chests.png",mc.getMainRenderTarget(),message->{});
         if(ticks==270){
