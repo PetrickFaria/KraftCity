@@ -134,11 +134,20 @@ ausência de alteração como comprovação de toda combinação de mods externo
   multiplayer autenticado. Não há alegação de cobertura de todas as ações
   manuais possíveis de cada tela.
 
-A versão de entrega é **1.0.95**, mantendo a sequência da 1.0.94. Um único
-push da branch final aciona o CI; tags de publicação não disparam outra
-compilação idêntica. O workflow de release não precisa ser disparado para
-recompilar o mesmo código. O JAR efetivo e seu SHA-256 são os da entrega/CI,
-identificados pelo SHA do commit, não pelos artefatos antigos de main.
+A versão de entrega é **1.0.95**, mantendo a sequência da 1.0.94. Tags de
+publicação não disparam outra compilação idêntica; não se usa o workflow de
+release para recompilar o mesmo código. O JAR efetivo e seu SHA-256 são os da
+entrega/CI, identificados pelo SHA do commit, não pelos artefatos antigos de main.
+
+A primeira execução remota da etapa (`43989007523`, commit `c5e482b`) compilou
+e aprovou 49/50 GameTests, mas falhou na observação do estado transitório
+`NIGHT_WANDER` exatamente no tick 850. A porta estava fechada e a tarefa
+encerrada; a lógica herdada limpa legitimamente esse estado quando uma
+atividade vanilla assume a navegação. O teste passou a observar a retomada
+da caminhada ao longo da janela e a exigir, em **todos** os ticks após a
+conclusão, que a porta permaneça fechada e a tarefa não reinicie. As regras de
+jogo não foram alteradas. Uma execução posterior só é iniciada após essa
+correção concreta e sua validação local; não há reexecução remota idêntica.
 
 ## Retomar na etapa 02
 

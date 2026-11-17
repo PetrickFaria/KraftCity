@@ -567,13 +567,31 @@ public final class ResidenceGameTests {
         check(data.link(level,h.absolutePos(home),resident).equals("ok"),"Could not link bedless resident");
         BlockPos doorLocal=new BlockPos(7,3,6);placeOpenDoor(h,doorLocal,Blocks.OAK_DOOR);level.setDayTime(13_001L);
         invoke("beginNightDoorClosure",new Class[]{net.minecraft.server.level.ServerLevel.class,long.class},level,450_000L+level.getGameTime());
+        // NIGHT_WANDER deliberately yields to vanilla goals and is not a stable
+        // invariant at an arbitrary tick. Observe the resumed bounded state, and
+        // enforce the actual door/no-restart contract on every following tick.
+        boolean[] completed={false},resumed={false};
+        h.onEachTick(()->{
+            boolean open=level.getBlockState(h.absolutePos(doorLocal)).getValue(DoorBlock.OPEN);
+            boolean active=resident.getPersistentData().contains("residenciasaldeoes_night_door_task");
+            if(!open&&!active)completed[0]=true;
+            if(completed[0]){
+                check(!open,"Bedless nighttime strolling reopened the completed door at tick "+h.getTick());
+                check(!active,"Completed door task restarted at tick "+h.getTick());
+                if(resident.getPersistentData().contains("residenciasaldeoes_night_wander")){
+                    check((Boolean)invoke("insideResidence",new Class[]{BlockPos.class,ResidenceData.Home.class},
+                            resident.blockPosition(),data.owner(resident.getUUID())),"Night-wander state escaped residential bounds");
+                    resumed[0]=true;
+                }
+            }
+        });
         h.runAtTickTime(850,()->{
             check(!level.getBlockState(h.absolutePos(doorLocal)).getValue(DoorBlock.OPEN),
                     "Bedless nighttime strolling reopened the door after the close task completed");
             check(!resident.getPersistentData().contains("residenciasaldeoes_night_door_task"),
                     "Completed door task was started again without a new open-door event");
-            check(resident.getPersistentData().contains("residenciasaldeoes_night_wander"),
-                    "Bedless resident did not enter the bounded night-wander state");
+            check(completed[0]&&resumed[0],"Bedless resident never resumed bounded wandering after closing the door");
+            System.out.println("BEDLESS_DOOR_STAYS_CLOSED_PASSED observed_through_tick=850 bounded_wander_resumed=true");
             h.succeed();
         });
     }
