@@ -175,6 +175,34 @@ com saída zero do runner, todas as capturas novas e os dois marcadores de
 persistência em uma JVM separada. Isso valida em sequência a preparação,
 o servidor, o cliente e a reabertura antes de publicar a correção dos testes.
 
+## Entrega verificada da etapa 01
+
+- Commit de código compilado/testado: `7ae2ad9fa13102abe581bacd2dd4fe1d025a0f2f`.
+- [CI final 43993573824](https://github.com/PetrickFaria/KraftCity/actions/runs/43993573824): **success**,
+  incluindo compilação, 12 verificações estáticas, 50/50 GameTests, cliente
+  gráfico, reabertura e preparação da distribuição.
+- [Artefato kraftcity-1.0.95](https://github.com/PetrickFaria/KraftCity/actions/runs/43993573824/artifacts/14288503837),
+  ID `14288503837`. JAR instalável no ZIP: `build/libs/kraftcity-1.0.95.jar`.
+  A cópia em `artifact-output/` é binariamente idêntica; instale apenas uma.
+- SHA-256: `98552b2dc7708d220030a5bba05bbe6c6ab5b666d5789b507cf35aceccb62c6e`.
+- O artefato foi baixado e conferido: ZIP/JAR íntegro, metadados KraftCity
+  1.0.95, mod id preservado, classes Java 17 (major 61), sem classes de teste,
+  refmap, receitas e recursos presentes, relatório com SHA/commit corretos,
+  marcadores de servidor/cliente/reabertura e 19 capturas 1600×900 válidas.
+  Capturas finais de limites e GUI restaurada também foram inspecionadas.
+- Código publicado em `feature/kraftcity-foundation`; `main` não foi alterada.
+  A atualização final deste documento é apenas documentação, posterior ao
+  commit de código acima, e usa `[skip ci]` para não repetir a compilação.
+- A publicação de uma release com upload direto não foi possível: a API do
+  repositório aceitou a criação do rascunho, mas `uploads.github.com` recusou
+  autenticação com HTTP 401, confirmado também por cliente HTTP autenticado.
+  Os rascunhos vazios criados nas tentativas foram removidos. A entrega é o
+  artefato de CI aprovado acima; não há release publicada nem CI pendente.
+
+Para retomar a etapa 02, use a branch publicada e esse commit de código como
+base validada, preservando o namespace e as decisões deste documento. Os
+quatro novos setores e as profissões continuam sem implementação de jogo.
+
 ## Retomar na etapa 02
 
 Partir do HEAD de `feature/kraftcity-foundation` e do SHA/artefato da entrega,
