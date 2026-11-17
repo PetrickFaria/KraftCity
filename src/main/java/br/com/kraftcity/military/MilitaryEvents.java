@@ -19,6 +19,11 @@ public final class MilitaryEvents {
         if(s!=null&&(!s.dimension.equals(l.dimension())||!s.active))Employment.release(l,z.getUUID());
         if(s!=null&&s.active&&z.getUUID().equals(s.worker)&&s.dimension.equals(l.dimension()))Military.bind(s,z);else for(var slot:Military.GEAR)z.setItemSlot(slot,net.minecraft.world.item.ItemStack.EMPTY);
     }
+    @SubscribeEvent public void removed(net.minecraftforge.event.entity.EntityLeaveLevelEvent e){
+        if(!(e.getLevel() instanceof ServerLevel l)||!(e.getEntity() instanceof SoldierZombie z)||z.getRemovalReason()==null||!z.getRemovalReason().shouldDestroy())return;
+        var s=Military.station(z);if(s==null||!s.military.getBoolean("zombie"))return;
+        Employment.release(l,z.getUUID());s.military.remove("zombie");s.military.remove("villager");s.setChanged();br.com.residenciasaldeoes.data.ResidenceData.get(l).unlink(l,z.getUUID());
+    }
     @SubscribeEvent public void tick(TickEvent.ServerTickEvent e){
         var server=ServerLifecycleHooks.getCurrentServer();if(server==null||e.phase!=TickEvent.Phase.END)return;
         for(var s:EmploymentData.get(server.overworld()).stations())if(s.active&&s.worker!=null&&Military.military(s)){
