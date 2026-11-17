@@ -2,10 +2,18 @@
 
 Minecraft Java 1.19.2 · Forge 43.5.0 · Java 17.
 
-O Bloco Residencial é o primeiro subsistema do KraftCity. A etapa 01 preserva
-o namespace `residenciasaldeoes` e o comportamento da linha 1.0.94; prepara
-dados de trabalhadores e pontos de extensão sem ativar novas profissões.
-Consulte [arquitetura, inventário e matriz de regressão da etapa 01](docs/KRAFTCITY-ETAPA-01.md).
+O Bloco Residencial é preservado como subsistema do KraftCity, com namespace
+`residenciasaldeoes`. A etapa 02 acrescenta Blocos Industrial/Comercial,
+contratação industrial por 10 esmeraldas e inventários persistentes dos postos.
+O preço comercial continua pendente: contratação comercial vem desabilitada.
+Produção e progressão das profissões ainda não estão implementadas.
+
+- [Etapa 01: arquitetura e base validada](docs/KRAFTCITY-ETAPA-01.md).
+- [Etapa 02: uso, persistência, decisões pendentes e regressões](docs/KRAFTCITY-ETAPA-02.md).
+- Novos blocos genéricos: aba KraftCity do Criativo ou
+  `/give @s residenciasaldeoes:industrial` e `/give @s residenciasaldeoes:commercial`.
+  Ingredientes/receitas dos novos blocos ainda precisam ser especificados.
+
 As seções de versões abaixo são histórico do subsistema residencial.
 
 ## Skins PNG para o aldeão vanilla
