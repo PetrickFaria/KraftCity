@@ -45,10 +45,14 @@ public final class VisualClientCheck {
                     for(int i=0;i<10;i++)if(!anchor.getItem(i).is(ResidenciasDosAldeoes.EMERALD_FRAGMENT.get())||anchor.getItem(i).getCount()!=i+1)
                         throw new IllegalStateException("Saved output slot lost or duplicated: "+i);
                     var player=server.getPlayerList().getPlayer(uuid);
+                    // The added limits scene finishes away from the original
+                    // anchor. Reopen its GUI within the normal interaction range.
+                    player.teleportTo(level,1.5,-58,10.5,180F,20F);
                     ResidenciasDosAldeoes.ANCHOR.get().use(level.getBlockState(pos),level,pos,player,
                         net.minecraft.world.InteractionHand.MAIN_HAND,
                         new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(pos),Direction.UP,pos,false));
                     System.out.println("TEN_SLOTS_WORLD_RESTART_PASSED");
+                    br.com.kraftcity.test.FoundationVisualCheck.verifyRestore(level);
                 });
             }
             ticks++;
@@ -99,6 +103,12 @@ public final class VisualClientCheck {
                 player.getInventory().setItem(0,new net.minecraft.world.item.ItemStack(ResidenciasDosAldeoes.EMERALD_CHEST_ITEM.get()));
                 player.inventoryMenu.broadcastChanges();
                 player.teleportTo(level,5.5,-56,14.5,180F,24F);
+                // Discard items inherited from GameTests or dropped while clearing
+                // their containers. Do this once, before spawning the courier;
+                // every item dropped during the actual delivery is still counted.
+                level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                        new net.minecraft.world.phys.AABB(new BlockPos(1,-58,8)).inflate(48.0D))
+                        .forEach(net.minecraft.world.entity.Entity::discard);
             });
         }
         ticks++;
@@ -290,6 +300,7 @@ public final class VisualClientCheck {
             Screenshot.grab(new File("../build"),"visual-steve-opacity-multiple.png",mc.getMainRenderTarget(),message->{});
             multiOpacityCaptured=true;System.out.println("STEVE_MULTI_RESIDENT_OPACITY_CAPTURED");
         }
-        if(ticks==590){if(!depositCaptured||!overlapVerified||!closedCaptured||!opacitySceneCaptured||!multiOpacityCaptured)throw new IllegalStateException("Courier/client opening or Steve opacity checks incomplete");mc.stop();}
+        if(ticks==590){if(!depositCaptured||!overlapVerified||!closedCaptured||!opacitySceneCaptured||!multiOpacityCaptured)throw new IllegalStateException("Courier/client opening or Steve opacity checks incomplete");}
+        if(ticks>=590)br.com.kraftcity.test.FoundationVisualCheck.tick(mc,ticks);
     }
 }
