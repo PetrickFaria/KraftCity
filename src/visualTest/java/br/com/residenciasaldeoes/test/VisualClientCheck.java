@@ -55,6 +55,7 @@ public final class VisualClientCheck {
                     br.com.kraftcity.test.FoundationVisualCheck.verifyRestore(level);
                     br.com.kraftcity.test.EmploymentVisualCheck.verifyRestore(level);
                     br.com.kraftcity.test.IndustryVisualCheck.verifyRestore(level);
+                    br.com.kraftcity.test.CommerceVisualCheck.verifyRestore(level);
                 });
             }
             ticks++;
@@ -62,7 +63,8 @@ public final class VisualClientCheck {
                 if(!(mc.screen instanceof br.com.residenciasaldeoes.client.AnchorScreen))throw new IllegalStateException("Restored anchor GUI did not open");
                 Screenshot.grab(new File("../build"),"visual-anchor-restored.png",mc.getMainRenderTarget(),message->{});
             }
-            if(ticks==150)mc.stop();
+            br.com.kraftcity.test.CommerceVisualCheck.restoredTick(mc,ticks);
+            if(ticks==650)mc.stop();
             return;
         }
         if(!scene){

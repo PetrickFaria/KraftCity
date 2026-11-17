@@ -119,12 +119,19 @@ public final class EmploymentGameTests {
         check(f.station.worker==null&&f.station.profession==null&&f.level.getBlockState(f.pos).is(WorkModule.INDUSTRIAL.get()),"Invalid hire mutated block");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="employment")
-    public static void commercial_price_is_pending_and_cannot_charge_by_default(GameTestHelper h){
-        var f=fixture(h,Profession.Sector.COMMERCIAL);
-        check(EmploymentConfig.cost(Profession.Sector.COMMERCIAL)==-1,"Commercial cost was invented");
-        check(attempt(f,Profession.BAKER).equals("pending"),"Pending commercial hire accepted");
-        check(f.station.getItem(31).getCount()==30&&f.station.worker==null,"Pending commercial charge occurred");h.succeed();
+    public static void commercial_explicit_pause_cannot_charge(GameTestHelper h){
+        var original=net.minecraftforge.fml.config.ConfigTracker.INSTANCE.configSets().get(net.minecraftforge.fml.config.ModConfig.Type.SERVER).stream().filter(c->c.getSpec()==EmploymentConfig.SPEC).findFirst().orElseThrow().getConfigData();
+        EmploymentConfig.SPEC.setConfig(com.electronwill.nightconfig.core.CommentedConfig.inMemory());
+        try{
+            EmploymentConfig.COMMERCIAL_ENABLED.set(false);EmploymentConfig.COMMERCIAL_COST.set(-1);
+            var f=fixture(h,Profession.Sector.COMMERCIAL);
+            check(EmploymentConfig.cost(Profession.Sector.COMMERCIAL)==-1,"Explicit pause ignored");
+            check(attempt(f,Profession.BAKER).equals("pending"),"Paused commercial hire accepted");
+            check(f.station.getItem(31).getCount()==30&&f.station.worker==null,"Paused commercial charge occurred");
+        }finally{EmploymentConfig.SPEC.setConfig(original);}
+        h.succeed();
     }
+
     @GameTest(template="empty",timeoutTicks=40,batch="employment")
     public static void losing_housing_releases_job_but_same_profession_rehire_restores_progress(GameTestHelper h){
         var f=fixture(h,Profession.Sector.INDUSTRIAL);UUID id=f.resident.getUUID();

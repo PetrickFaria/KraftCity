@@ -28,6 +28,7 @@ import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 public final class EmploymentVisualCheck {
     private static final BlockPos HOME=new BlockPos(60,-58,8),POST=new BlockPos(64,-57,10),COMMERCIAL=new BlockPos(68,-57,10),BED=new BlockPos(59,-57,7);
     private static volatile UUID worker;
+    private static com.electronwill.nightconfig.core.CommentedConfig approvedConfig;
     private static volatile boolean hired,shared,portable,pending,rehired;
     private static void check(boolean value,String message){if(!value)throw new IllegalStateException(message);}
     private static EmploymentData.Station station(ServerLevel level,BlockPos pos){return ((WorkBlockEntity)level.getBlockEntity(pos)).station();}
@@ -105,7 +106,9 @@ public final class EmploymentVisualCheck {
         });
         if(ticks==945){check(portable&&mc.player.containerMenu.slots.get(0).getItem().getCount()==13,"Recovered inventory did not sync");capture(mc,"visual-replaced-workstation.png");}
         if(ticks==950)mc.player.closeContainer();
-        if(ticks==955)server.execute(()->{var player=server.getPlayerList().getPlayer(playerId);station(player.getLevel(),COMMERCIAL).setItem(31,new ItemStack(Items.EMERALD,20));open(player,COMMERCIAL);});
+        if(ticks==955)server.execute(()->{
+            approvedConfig=net.minecraftforge.fml.config.ConfigTracker.INSTANCE.configSets().get(net.minecraftforge.fml.config.ModConfig.Type.SERVER).stream().filter(c->c.getSpec()==EmploymentConfig.SPEC).findFirst().orElseThrow().getConfigData();
+            EmploymentConfig.SPEC.setConfig(com.electronwill.nightconfig.core.CommentedConfig.inMemory());EmploymentConfig.COMMERCIAL_ENABLED.set(false);var player=server.getPlayerList().getPlayer(playerId);station(player.getLevel(),COMMERCIAL).setItem(31,new ItemStack(Items.EMERALD,20));open(player,COMMERCIAL);});
         if(ticks==985){
             selectWorker(mc);click(screen(mc),"Padeiro");check(!button(screen(mc),"Contratar").active,"Commercial hire was enabled without a decided price");capture(mc,"visual-commercial-pending.png");
             var menu=(WorkMenu)mc.player.containerMenu;WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Hire(menu.containerId,menu.stationId,worker,Profession.BAKER.ordinal()));
@@ -113,6 +116,7 @@ public final class EmploymentVisualCheck {
         if(ticks==995)mc.player.closeContainer();
         if(ticks==1000)server.execute(()->{
             var level=server.overworld();var s=station(level,COMMERCIAL);check(s.worker==null&&s.getItem(31).getCount()==20,"Forged commercial request charged emeralds");
+            EmploymentConfig.SPEC.setConfig(approvedConfig);approvedConfig=null;
             pending=true;System.out.println("COMMERCIAL_PENDING_NO_CHARGE_PASSED");station(level,POST).setItem(31,new ItemStack(Items.EMERALD,10));open(server.getPlayerList().getPlayer(playerId),POST);
         });
         if(ticks==1020)click(screen(mc),"Contratar");

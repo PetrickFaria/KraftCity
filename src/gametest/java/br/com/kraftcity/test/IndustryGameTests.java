@@ -226,7 +226,7 @@ public final class IndustryGameTests {
         // Lv5 permits a smaller 5x5? Source is unemployed: place its barrel inside its 5x5 area.
         barrel=farmer.north();f.l.setBlock(barrel,Blocks.BARREL.defaultBlockState(),3);source.industry.putLong("discard",barrel.asLong());
         var chest=(BarrelBlockEntity)f.l.getBlockEntity(barrel);chest.setItem(0,new ItemStack(Items.WHEAT,20));chest.setItem(1,new ItemStack(Items.CARROT,20));
-        step(f,1);check(f.s.getItem(28).is(Items.WHEAT)&&f.s.getItem(28).getCount()==5&&chest.getItem(0).getCount()==15,"dawn transfer not exactly five");
+        step(f,1);check(f.s.getItem(28).is(Items.WHEAT)&&f.s.getItem(28).getCount()==5&&chest.getItem(0).getCount()==15,"dawn transfer not exactly five: slot="+f.s.getItem(28)+" source="+chest.getItem(0));
         step(f,1);check(f.s.getItem(28).getCount()==5&&chest.getItem(0).getCount()==15&&chest.getItem(1).getCount()==20,"repeat dawn or wrong item");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")

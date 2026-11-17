@@ -97,7 +97,7 @@ public final class IndustryVisualCheck {
             l.setDayTime(13001);EmploymentVisualCheck.restoreNightFixture(l);
             for(var id:ids.values()){var s=EmploymentData.get(l).station(id);s.industry.putString("visual_test","six_jobs_passed");s.setChanged();}
         });
-        if(elapsed==450)mc.stop();
+        if(elapsed>=450)CommerceVisualCheck.tick(mc,ticks);
     }
     public static void verifyRestore(ServerLevel l){
         for(int i=0;i<6;i++){
