@@ -1,6 +1,12 @@
-# Mod de Residências dos Aldeões 1.0.23
+# KraftCity
 
 Minecraft Java 1.19.2 · Forge 43.5.0 · Java 17.
+
+O Bloco Residencial é o primeiro subsistema do KraftCity. A etapa 01 preserva
+o namespace `residenciasaldeoes` e o comportamento da linha 1.0.94; prepara
+dados de trabalhadores e pontos de extensão sem ativar novas profissões.
+Consulte [arquitetura, inventário e matriz de regressão da etapa 01](docs/KRAFTCITY-ETAPA-01.md).
+As seções de versões abaixo são histórico do subsistema residencial.
 
 ## Skins PNG para o aldeão vanilla
 
@@ -45,7 +51,7 @@ O manipulador de desconexão agora é registrado no barramento Forge. Os eventos
 
 ## Compilação
 
-Com Java 17, execute `./gradlew clean build`. O JAR fica em `build/libs/residencias-dos-aldeoes-1.0.23.jar`.
+Com Java 17, execute `./gradlew clean build`. O JAR fica em `build/libs/kraftcity-<mod_version>.jar` (versão em `gradle.properties`).
 
 
 ## Personalização em camadas (1.0.19)
