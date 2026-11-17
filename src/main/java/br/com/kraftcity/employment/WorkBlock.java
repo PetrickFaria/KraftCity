@@ -25,7 +25,11 @@ public final class WorkBlock extends BaseEntityBlock {
     @Override public PushReaction getPistonPushReaction(BlockState state){return PushReaction.BLOCK;}
     @Override public InteractionResult use(BlockState state,Level level,BlockPos pos,Player player,InteractionHand hand,BlockHitResult hit){
         if(player instanceof ServerPlayer server&&level.getBlockEntity(pos) instanceof WorkBlockEntity be){
-            var s=be.station();if(s!=null)open(server,s);
+            var s=be.station();
+            if(server.isShiftKeyDown()){
+                server.getPersistentData().remove("KCRegisterAnimal");server.getPersistentData().remove("KCBindDiscard");
+                server.sendSystemMessage(Component.literal("Modo de associação encerrado."));
+            }else if(s!=null)open(server,s);
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }

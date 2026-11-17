@@ -29,9 +29,11 @@ public final class WorkModule {
     public static final RegistryObject<MenuType<WorkMenu>> MENU=MENUS.register("workstation",()->IForgeMenuType.create(WorkMenu::new));
     public static void initialize(IEventBus bus){
         br.com.kraftcity.api.ResidentialWorkIndicator.register(Employment::indicator);
+        br.com.kraftcity.industry.IndustrialTools.register(bus);
         BLOCKS.register(bus);ITEMS.register(bus);ENTITIES.register(bus);MENUS.register(bus);
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER,EmploymentConfig.SPEC,"kraftcity-employment-server.toml");
-        MinecraftForge.EVENT_BUS.register(new EmploymentEvents());WorkNetwork.register();
+        MinecraftForge.EVENT_BUS.register(new br.com.kraftcity.industry.IndustrialEvents());
+        MinecraftForge.EVENT_BUS.register(new EmploymentEvents());WorkNetwork.register();br.com.kraftcity.industry.IndustryNetwork.register();
     }
     private WorkModule(){}
 }

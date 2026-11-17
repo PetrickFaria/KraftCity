@@ -1,0 +1,47 @@
+package br.com.kraftcity.industry;
+
+import br.com.kraftcity.employment.*;
+import java.util.*;
+import java.util.function.Supplier;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
+import net.minecraftforge.network.*;
+
+public final class IndustryNetwork {
+    public record Options(int menu,UUID station,int size,int command){
+        public void encode(FriendlyByteBuf b){b.writeInt(menu);b.writeUUID(station);b.writeInt(size);b.writeInt(command);}
+        public static Options decode(FriendlyByteBuf b){return new Options(b.readInt(),b.readUUID(),b.readInt(),b.readInt());}
+        public void handle(Supplier<NetworkEvent.Context> c){var p=c.get().getSender();
+            if(p!=null&&p.containerMenu instanceof WorkMenu m&&m.containerId==menu&&m.stationId.equals(station)&&!m.hiring&&m.stillValid(p)){
+                var s=m.station();if(s!=null&&s.sector==Profession.Sector.INDUSTRIAL){
+                    if(command==0)IndustrialRules.selectSize(p.getLevel(),s,size);
+                    else if(command==1){s.industry.putBoolean("preview",!s.industry.getBoolean("preview"));s.setChanged();sendBounds(p);}
+                    else if(command==2){p.getPersistentData().putUUID("KCBindDiscard",station);p.closeContainer();p.sendSystemMessage(Component.literal("Clique em um baú/barril dentro da área para associar o descarte."));}
+                    else if(command==3&&s.profession==Profession.BUTCHER){p.getPersistentData().putUUID("KCRegisterAnimal",station);p.closeContainer();p.sendSystemMessage(Component.literal("Clique nos animais que você colocou na área. Agache e clique no posto para encerrar."));}
+                    m.sync(p);
+                }
+            }c.get().setPacketHandled(true);
+        }
+    }
+    public record Bound(ResourceLocation dimension,BlockPos pos,int size){}
+    public record Bounds(List<Bound> entries){
+        public void encode(FriendlyByteBuf b){b.writeVarInt(entries.size());for(var e:entries){b.writeResourceLocation(e.dimension);b.writeBlockPos(e.pos);b.writeVarInt(e.size);}}
+        public static Bounds decode(FriendlyByteBuf b){int n=b.readVarInt();if(n<0||n>4096)throw new IllegalArgumentException("bounds");var out=new ArrayList<Bound>();for(int i=0;i<n;i++)out.add(new Bound(b.readResourceLocation(),b.readBlockPos(),b.readVarInt()));return new Bounds(List.copyOf(out));}
+        public void handle(Supplier<NetworkEvent.Context> c){DistExecutor.unsafeRunWhenOn(Dist.CLIENT,()->()->br.com.kraftcity.industry.client.WorkPreview.set(entries));c.get().setPacketHandled(true);}
+    }
+    public static void register(){
+        WorkNetwork.CHANNEL.messageBuilder(Options.class,2,NetworkDirection.PLAY_TO_SERVER).encoder(Options::encode).decoder(Options::decode).consumerMainThread(Options::handle).add();
+        WorkNetwork.CHANNEL.messageBuilder(Bounds.class,3,NetworkDirection.PLAY_TO_CLIENT).encoder(Bounds::encode).decoder(Bounds::decode).consumerMainThread(Bounds::handle).add();
+    }
+    public static void sendBounds(ServerPlayer p){
+        var list=new ArrayList<Bound>();for(var s:EmploymentData.get(p.getLevel()).stations())if(s.active&&s.profession!=null&&s.sector==Profession.Sector.INDUSTRIAL&&s.dimension.equals(p.level.dimension())&&s.industry.getBoolean("preview")&&p.distanceToSqr(s.pos.getX(),s.pos.getY(),s.pos.getZ())<65536&&list.size()<4096)
+            list.add(new Bound(s.dimension.location(),s.pos,IndustrialRules.size(p.getLevel(),s)));
+        WorkNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(()->p),new Bounds(List.copyOf(list)));
+    }
+    private IndustryNetwork(){}
+}

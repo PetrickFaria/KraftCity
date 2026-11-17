@@ -33,7 +33,7 @@ public final class WorkMenu extends AbstractContainerMenu {
         this.viaWorker=worker;this.player=inv.player;this.inventory=container==null?new SimpleContainer(EmploymentData.SLOTS):container;
         if(!hiring){
             for(int row=0;row<3;row++)for(int col=0;col<9;col++)addSlot(new Slot(inventory,row*9+col,94+col*18,26+row*18));
-            for(int i=0;i<4;i++)addSlot(new Slot(inventory,27+i,94+i*36,101));
+            for(int i=0;i<4;i++)addSlot(new Slot(inventory,27+i,profession==br.com.kraftcity.employment.Profession.FARMER.ordinal()&&i==3?274:94+i*36,profession==br.com.kraftcity.employment.Profession.FARMER.ordinal()&&i==3?26:101));
         }
         addSlot(new Slot(inventory,EmploymentData.PAYMENT,hiring?187:274,hiring?158:101){
             @Override public boolean mayPlace(ItemStack stack){return stack.is(Items.EMERALD);}

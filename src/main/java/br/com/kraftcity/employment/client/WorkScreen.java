@@ -28,6 +28,16 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     @Override protected void init(){super.init();buttons();}
     private void buttons(){
         clearWidgets();if(!menu.hiring){
+            if(menu.sector==Profession.Sector.INDUSTRIAL){
+                for(int i=0;i<5;i++){
+                    final int size=5+2*i;
+                    var button=addRenderableWidget(new Button(leftPos+8+i*36,topPos+165,34,18,Component.literal(size+"×"+size),b->option(size,0)));
+                    button.active=menu.snapshot!=null&&(menu.snapshot.level()>=5||size==br.com.kraftcity.industry.IndustrialRules.maximumSize(menu.snapshot.level()));
+                }
+                addRenderableWidget(new Button(leftPos+191,topPos+165,70,18,Component.literal("Limites"),b->option(0,1)));
+                addRenderableWidget(new Button(leftPos+265,topPos+165,77,18,Component.literal("Vincular baú"),b->option(0,2)));
+                if(menu.profession==Profession.BUTCHER)addRenderableWidget(new Button(leftPos+8,topPos+115,110,18,Component.literal("Cadastrar animais"),b->option(0,3)));
+            }
             if(menu.snapshot!=null&&!menu.snapshot.employed())
                 addRenderableWidget(new Button(leftPos+218,topPos+150,124,20,Component.literal("Contratar"),b->WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Hire(menu.containerId,menu.stationId,new UUID(0,0),-2))));
             return;
@@ -50,6 +60,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         }));
         hire.active=snapshot!=null&&snapshot.cost()>=0&&selected!=null&&profession!=null;
     }
+    private void option(int size,int command){WorkNetwork.CHANNEL.sendToServer(new br.com.kraftcity.industry.IndustryNetwork.Options(menu.containerId,menu.stationId,size,command));}
     @Override protected void renderBg(PoseStack pose,float partial,int mx,int my){
         fill(pose,leftPos,topPos,leftPos+imageWidth,topPos+imageHeight,0xFF30271F);
         fill(pose,leftPos+3,topPos+3,leftPos+imageWidth-3,topPos+imageHeight-3,0xFF66513A);
@@ -67,10 +78,18 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
             if(s!=null&&!s.status().isEmpty())font.draw(pose,font.plainSubstrByWidth(s.status(),164),8,176,0xFFFFCC66);
         }else{
             font.draw(pose,"Inventário comum (3 × 9)",94,16,0xFFFFFF);
-            String[] labels={"Ferr.","Ins.1","Ins.2","Equip."};for(int i=0;i<4;i++)font.draw(pose,labels[i],94+i*36,91,0xFFFFFF);
+            String[] labels=switch(menu.profession){
+                case FARMER->new String[]{"Enx.","F.osso","Reserva","Água"};
+                case BUTCHER->new String[]{"Mach.","Alim.1","Alim.2","Alim.3"};
+                case SHEPHERD->new String[]{"Tes.","Trigo","Reserva","Equip."};
+                case FISHERMAN->new String[]{"Vara","Reserva","Reserva","Equip."};
+                case BREEDER->new String[]{"Ferr.","Osso","Carne","Equip."};
+                case BEEKEEPER->new String[]{"Coleta","Flores","Reserva","Equip."};
+                default->new String[]{"Ferr.","Ins.1","Ins.2","Equip."};
+            };for(int i=0;i<4;i++)font.draw(pose,labels[i],menu.profession==Profession.FARMER&&i==3?274:94+i*36,menu.profession==Profession.FARMER&&i==3?16:91,0xFFFFFF);
             font.draw(pose,"Esmer.",270,91,0xFFFFFF);
-            if(s!=null){font.draw(pose,"Trabalhador: "+font.plainSubstrByWidth(s.worker(),240),8,142,0xFFFFFF);font.draw(pose,"Nível: "+s.level()+"   XP: "+s.xp(),8,155,0xFFFFFF);}
-            font.draw(pose,"Produção indisponível nesta versão.",8,173,0xFFFFCC66);
+            if(s!=null){font.draw(pose,"Trabalhador: "+font.plainSubstrByWidth(s.worker(),240),8,142,0xFFFFFF);font.draw(pose,"Nível: "+s.level()+"   XP: "+s.xp()+(menu.sector==Profession.Sector.INDUSTRIAL?"   Área: "+s.size()+"×"+s.size():""),8,155,0xFFFFFF);}
+            if(menu.sector==Profession.Sector.COMMERCIAL)font.draw(pose,"Produção indisponível nesta versão.",8,173,0xFFFFCC66);
         }
     }
     @Override public void render(PoseStack pose,int mx,int my,float partial){renderBackground(pose);super.render(pose,mx,my,partial);renderTooltip(pose,mx,my);}
