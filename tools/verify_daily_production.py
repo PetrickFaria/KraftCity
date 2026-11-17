@@ -50,7 +50,7 @@ assert 'int fragments=1;' in events and 'fragments=Math.min(5,fragments);' in ev
 assert 'boolean hasWorkstation=workstations>0' in events
 assert 'boolean hasChest=chests>0' in events
 assert 'allocateDailyProduction(ids,resources,d::residentIsBaby)' in menu
-assert 'Employment.indicator(l,id,benefits.workstation()),benefits.chest()' in menu
+assert 'ResidentialWorkIndicator.resolve(l,id,benefits.workstation()),benefits.chest()' in menu
 assert 'idx<resources[1]' not in menu and 'idx<resources[2]' not in menu
 assert 'residentBabyStates' in data and 'resident_is_baby' in data
 assert 'level.hasChunkAt(home.pos)' in events and 'pendingProduction' in events
