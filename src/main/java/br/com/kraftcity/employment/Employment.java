@@ -51,6 +51,7 @@ public final class Employment {
     }
     public static void release(ServerLevel level,UUID worker){
         var data=EmploymentData.get(level);
+        for(ServerLevel world:level.getServer().getAllLevels())if(world.getEntity(worker) instanceof Villager v)br.com.kraftcity.industry.IndustrialWork.restoreHand(v);
         for(var s:data.stations())if(worker.equals(s.worker)){s.worker=null;s.setChanged();}
         var workforce=WorkforceData.get(level);var old=workforce.worker(worker).orElse(null);
         if(old!=null&&old.workstation().isPresent()){

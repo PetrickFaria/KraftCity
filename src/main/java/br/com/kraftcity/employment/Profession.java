@@ -3,7 +3,7 @@ package br.com.kraftcity.employment;
 import java.util.Arrays;
 import net.minecraft.resources.ResourceLocation;
 
-/** Operational identities only. Production/XP rewards belong to later stages. */
+/** Stable operational identities shared by employment and profession implementations. */
 public enum Profession {
     FARMER("farmer", "Fazendeiro", Sector.INDUSTRIAL),
     BUTCHER("butcher", "Açougueiro", Sector.INDUSTRIAL),

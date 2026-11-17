@@ -1,0 +1,33 @@
+package br.com.kraftcity.industry;
+
+import br.com.kraftcity.employment.*;
+import br.com.kraftcity.workforce.*;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.*;
+
+public final class IndustrialRules {
+    public static int level(ServerLevel l,EmploymentData.Station s){return s.worker==null||s.profession==null?1:Math.min(5,Math.max(1,WorkforceData.get(l).progress(s.worker,s.profession.id()).level()));}
+    public static int maximumSize(int level){return 3+2*Math.min(5,Math.max(1,level));}
+    public static int size(ServerLevel l,EmploymentData.Station s){int max=maximumSize(level(l,s));int selected=s.industry.getInt("size");return level(l,s)==5&&selected>=5&&selected<=max&&selected%2==1?selected:max;}
+    public static boolean selectSize(ServerLevel l,EmploymentData.Station s,int size){if(size<5||size%2!=1||size>maximumSize(level(l,s))||(level(l,s)<5&&size!=maximumSize(level(l,s))))return false;s.industry.putInt("size",size);s.industry.remove("cursor");s.setChanged();return true;}
+    public static int capacity(int level){return 2*Math.min(5,Math.max(1,level));}
+    /** A completed action is one unit; cumulative thresholds are 25/50/75/100. */
+    public static void progress(ServerLevel l,EmploymentData.Station s){
+        if(s.worker==null||s.profession==null)return;var data=WorkforceData.get(l);var old=data.progress(s.worker,s.profession.id());
+        long xp=old.xp()+1;int step=s.profession==Profession.FARMER||s.profession==Profession.SHEPHERD?25:EmploymentConfig.OTHER_LEVEL_ACTIONS.get();
+        int level=Math.min(5,Math.max(old.level(),1+(int)Math.min(4,xp/step)));
+        data.setProgress(s.worker,s.profession.id(),level,xp);s.setChanged();
+    }
+    /** Quarter durability units survive saves. Per-tool fractions travel with the tool item. */
+    public static void wear(ServerLevel l,EmploymentData.Station s,ItemStack tool){
+        if(!tool.isDamageableItem())return;
+        int units=7-level(l,s); // Lv1..5 -> 6,5,4,3,2 quarter units.
+        int amount=tool.getOrCreateTag().getInt("KraftCityWearQuarters")+units;
+        tool.getOrCreateTag().putInt("KraftCityWearQuarters",amount%4);
+        tool.hurtAndBreak(amount/4,(net.minecraft.world.entity.LivingEntity)l.getEntity(s.worker),v->v.broadcastBreakEvent(net.minecraft.world.InteractionHand.MAIN_HAND));
+        s.setChanged();
+    }
+    /** '50% slower' means duration*1.5, '50% faster' means duration*0.5. */
+    public static int fishingTicks(int base,int level){return Math.max(1,(base*(7-Math.min(5,Math.max(1,level)))+3)/4);}
+    private IndustrialRules(){}
+}
