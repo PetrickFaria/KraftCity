@@ -18,6 +18,7 @@ public final class IndustrialTools {
         public int getLevel(){return 2;}public int getEnchantmentValue(){return 18;}
         public Ingredient getRepairIngredient(){return Ingredient.of(Items.EMERALD);}
     };
+    static {net.minecraftforge.common.TierSortingRegistry.registerTier(EMERALD,new net.minecraft.resources.ResourceLocation(KraftCity.MOD_ID,"emerald"),List.of(Tiers.IRON),List.of(Tiers.DIAMOND));}
     public static final RegistryObject<Item> HOE=ITEMS.register("emerald_hoe",()->new HoeItem(EMERALD,-2,-1,new Item.Properties().tab(TAB)));
     public static final RegistryObject<Item> AXE=ITEMS.register("emerald_axe",()->new AxeItem(EMERALD,6,-3.1F,new Item.Properties().tab(TAB)));
     public static final RegistryObject<Item> SWORD=ITEMS.register("emerald_sword",()->new SwordItem(EMERALD,3,-2.4F,new Item.Properties().tab(TAB)));
@@ -29,8 +30,14 @@ public final class IndustrialTools {
         if(i!=1)SHEARS.put(i,ITEMS.register(NAMES[i]+"_shears",()->new TierShears(tier)));
         if(i!=0)RODS.put(i,ITEMS.register(NAMES[i]+"_fishing_rod",()->new TierRod(tier)));
     }}
-    public static class TierShears extends ShearsItem {public final int tier;TierShears(int t){super(new Item.Properties().tab(TAB).durability(USES[t]));tier=t;}}
-    public static class TierRod extends FishingRodItem {public final int tier;TierRod(int t){super(new Item.Properties().tab(TAB).durability(t==1?250:USES[t]));tier=t;}}
+    private static Item.Properties properties(int tier,int durability){var p=new Item.Properties().tab(TAB).durability(durability);return tier==5?p.fireResistant():p;}
+    private static boolean repair(int tier,ItemStack material){return switch(tier){case 0->material.is(net.minecraft.tags.ItemTags.PLANKS);case 1->material.is(Items.IRON_INGOT);case 2->material.is(Items.GOLD_INGOT);case 3->material.is(Items.EMERALD);case 4->material.is(Items.DIAMOND);default->material.is(Items.NETHERITE_INGOT);};}
+    public static class TierShears extends ShearsItem {public final int tier;TierShears(int t){super(properties(t,USES[t]));tier=t;}
+        @Override public boolean isValidRepairItem(ItemStack tool,ItemStack material){return repair(tier,material)||super.isValidRepairItem(tool,material);}}
+
+    public static class TierRod extends FishingRodItem {public final int tier;TierRod(int t){super(properties(t,t==1?250:USES[t]));tier=t;}
+        @Override public boolean isValidRepairItem(ItemStack tool,ItemStack material){return repair(tier,material)||super.isValidRepairItem(tool,material);}}
+
     public static int tier(ItemStack stack){
         Item item=stack.getItem();if(item instanceof TierShears t)return t.tier;if(item instanceof TierRod t)return t.tier;
         if(item instanceof ShearsItem)return 1;if(item instanceof FishingRodItem)return 0;
