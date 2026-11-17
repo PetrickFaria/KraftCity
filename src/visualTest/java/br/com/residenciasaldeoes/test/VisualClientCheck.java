@@ -33,6 +33,10 @@ public final class VisualClientCheck {
         if(!requested&&mc.screen instanceof TitleScreen){requested=true;mc.createWorldOpenFlows().loadLevel(new TitleScreen(),"visual-check");}
         if(mc.player==null||mc.getSingleplayerServer()==null)return;
         if(!scene&&mc.screen!=null)return;
+        if(Boolean.getBoolean("kraftcity.militaryVisualOnly")&&!Boolean.getBoolean("residencias.visualRestore")){
+            if(!scene){scene=true;ticks=-2;mc.getSingleplayerServer().execute(()->mc.getSingleplayerServer().overworld().setDayTime(13001));}
+            ticks++;if(ticks>=0)br.com.kraftcity.test.MilitaryVisualCheck.tick(mc,ticks);return;
+        }
         if(Boolean.getBoolean("residencias.visualRestore")){
             if(!scene){
                 scene=true;var server=mc.getSingleplayerServer();var uuid=mc.player.getUUID();
