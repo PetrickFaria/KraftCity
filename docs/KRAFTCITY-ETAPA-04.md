@@ -231,7 +231,7 @@ Não houve sessão adicional com dois clientes humanos nem combinação com
 EMF/ETF/Fresh Animations; concorrência foi testada automaticamente no servidor.
 Os runners só aceitam o encerramento tardio conhecido do daemon Gradle depois
 de confirmarem todos os marcadores obrigatórios de sucesso do Minecraft.
-Commit/CI/JAR/hash finais serão registrados após a validação remota.
+A validação remota final e a identidade do JAR constam abaixo.
 
 A primeira execução remota, `44131546970`, aprovou build, 12 verificadores e
 117 GameTests, mas interrompeu o teste gráfico residencial: a câmera se
@@ -241,3 +241,25 @@ aguarda conservação, abertura simultânea e fechamento, com relógio de
 polling independente e timeout limitado. Nenhuma regra residencial foi
 alterada nem asserção removida. O cliente completo e a reabertura passaram
 localmente após esse ajuste, antes de publicar a correção.
+
+## Entrega validada 1.0.98
+
+- Branch: `feature/kraftcity-commerce`.
+- Commit exato validado: `3ea9d2a8548e27a9bf1e8f17aed3de3b8a19dad8`.
+- [GitHub Actions 44134517115 — sucesso](https://github.com/PetrickFaria/KraftCity/actions/runs/44134517115).
+- [Artefato kraftcity-1.0.98](https://github.com/PetrickFaria/KraftCity/actions/runs/44134517115/artifacts/14351468768).
+- JAR dentro do ZIP: `build/libs/kraftcity-1.0.98.jar`, 484295 bytes.
+- SHA-256: `7a2de9bad5cf469ec9fed7c23b98da13ecd2bc963e9ff6cf0ae652f23e0618df`.
+
+O artefato foi baixado e verificado: **117/117 GameTests**, **12/12 verificadores**,
+cliente gráfico com as seis profissões industriais e as três cadeias comerciais,
+seis marcadores de recarga e 37 PNGs válidos de 1600×900. As quatro telas comerciais
+remotas foram inspecionadas. Não há exceção de tarefa nem erro não tratado nos logs
+finais do cliente. A cópia em `artifact-output/kraftcity-1.0.98.jar` é idêntica ao
+JAR em `build/libs`; instalar **apenas uma cópia**, igual no cliente e servidor.
+O ZIP também contém fonte completo, relatórios, capturas e SHA256SUMS.
+
+Para retomar: partir deste commit de código ou de seu descendente documental
+com `[skip ci]`; auditar novos commits/Actions antes de alterar arquivos.
+Não voltar à `main` desatualizada nem refazer emprego/indústria/comércio.
+O commit documental desta seção não altera o JAR validado e não inicia novo CI.
