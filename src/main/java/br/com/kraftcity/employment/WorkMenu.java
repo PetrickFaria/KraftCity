@@ -38,8 +38,8 @@ public final class WorkMenu extends AbstractContainerMenu {
         addSlot(new Slot(inventory,EmploymentData.PAYMENT,hiring?187:274,hiring?158:101){
             @Override public boolean mayPlace(ItemStack stack){return stack.is(Items.EMERALD);}
         });
-        for(int row=0;row<3;row++)for(int col=0;col<9;col++)addSlot(new Slot(inv,9+row*9+col,94+col*18,198+row*18));
-        for(int col=0;col<9;col++)addSlot(new Slot(inv,col,94+col*18,256));
+        for(int row=0;row<3;row++)for(int col=0;col<9;col++)addSlot(new Slot(inv,9+row*9+col,94+col*18,198+row*18+(!hiring&&sector==Profession.Sector.COMMERCIAL?16:0)));
+        for(int col=0;col<9;col++)addSlot(new Slot(inv,col,94+col*18,256+(!hiring&&sector==Profession.Sector.COMMERCIAL?16:0)));
     }
     public EmploymentData.Station station(){return player.level instanceof ServerLevel l?EmploymentData.get(l).station(stationId):null;}
     @Override public boolean stillValid(Player p){

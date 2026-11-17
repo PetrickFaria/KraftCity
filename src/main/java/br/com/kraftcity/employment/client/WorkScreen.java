@@ -18,7 +18,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     private UUID selected;
     private Profession profession;
     private int page;
-    public WorkScreen(WorkMenu menu,Inventory inventory,Component title){super(menu,inventory,title);imageWidth=350;imageHeight=280;inventoryLabelX=94;inventoryLabelY=187;titleLabelY=6;}
+    public WorkScreen(WorkMenu menu,Inventory inventory,Component title){super(menu,inventory,title);imageWidth=350;imageHeight=!menu.hiring&&menu.sector==Profession.Sector.COMMERCIAL?296:280;inventoryLabelX=94;inventoryLabelY=!menu.hiring&&menu.sector==Profession.Sector.COMMERCIAL?203:187;titleLabelY=6;}
     @SubscribeEvent public static void setup(FMLClientSetupEvent event){event.enqueueWork(()->net.minecraft.client.gui.screens.MenuScreens.register(WorkModule.MENU.get(),WorkScreen::new));}
     public static void receive(WorkNetwork.Snapshot snapshot){
         var mc=Minecraft.getInstance();if(mc.player!=null&&mc.player.containerMenu instanceof WorkMenu m&&m.containerId==snapshot.menu()&&m.stationId.equals(snapshot.station())){
@@ -28,7 +28,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     @Override protected void init(){super.init();buttons();}
     private void buttons(){
         clearWidgets();if(!menu.hiring){
-            if(menu.sector==Profession.Sector.INDUSTRIAL){
+            if(menu.profession!=null){
                 for(int i=0;i<5;i++){
                     final int size=5+2*i;
                     var button=addRenderableWidget(new Button(leftPos+8+i*36,topPos+165,34,18,Component.literal(size+"×"+size),b->option(size,0)));
@@ -36,10 +36,11 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
                 }
                 addRenderableWidget(new Button(leftPos+191,topPos+165,70,18,Component.literal("Limites"),b->option(0,1)));
                 addRenderableWidget(new Button(leftPos+265,topPos+165,77,18,Component.literal("Vincular baú"),b->option(0,2)));
+                if(menu.sector==Profession.Sector.COMMERCIAL)addRenderableWidget(new Button(leftPos+8,topPos+121,96,16,Component.literal("Cancelar operação"),b->option(0,4)));
                 if(menu.profession==Profession.BUTCHER)addRenderableWidget(new Button(leftPos+8,topPos+115,110,18,Component.literal("Cadastrar animais"),b->option(0,3)));
             }
             if(menu.snapshot!=null&&!menu.snapshot.employed())
-                addRenderableWidget(new Button(leftPos+218,topPos+150,124,20,Component.literal("Contratar"),b->WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Hire(menu.containerId,menu.stationId,new UUID(0,0),-2))));
+                addRenderableWidget(new Button(leftPos+218,topPos+121,124,16,Component.literal("Contratar"),b->WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Hire(menu.containerId,menu.stationId,new UUID(0,0),-2))));
             return;
         }
         var snapshot=menu.snapshot;var candidates=snapshot==null?List.<WorkNetwork.Candidate>of():snapshot.candidates();
@@ -85,11 +86,20 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
                 case FISHERMAN->new String[]{"Vara","Ins.1","Ins.2","Equip."};
                 case BREEDER->new String[]{"Ferr.","Osso","Carne","Equip."};
                 case BEEKEEPER->new String[]{"Coleta","Flores","Ins.2","Equip."};
+                case BAKER->new String[]{"Ferr.","Trigo","Ins.2","Equip."};
+                case CONFECTIONER->new String[]{"Ferr.","Cana","Ins.2","Equip."};
+                case GRILL_COOK->new String[]{"Ferr.","Carne","Ins.2","Comb."};
                 default->new String[]{"Ferr.","Ins.1","Ins.2","Equip."};
             };for(int i=0;i<4;i++)font.draw(pose,labels[i],menu.profession==Profession.FARMER&&i==3?274:94+i*36,menu.profession==Profession.FARMER&&i==3?16:91,0xFFFFFF);
             font.draw(pose,"Esmer.",270,91,0xFFFFFF);
-            if(s!=null){font.draw(pose,"Trabalhador: "+font.plainSubstrByWidth(s.worker(),240),8,142,0xFFFFFF);font.draw(pose,"Nível: "+s.level()+"   XP: "+s.xp()+(menu.sector==Profession.Sector.INDUSTRIAL?"   Área: "+s.size()+"×"+s.size():""),8,155,0xFFFFFF);}
-            if(menu.sector==Profession.Sector.COMMERCIAL)font.draw(pose,"Produção indisponível nesta versão.",8,173,0xFFFFCC66);
+            if(s!=null){font.draw(pose,"Trabalhador: "+font.plainSubstrByWidth(s.worker(),240),8,142,0xFFFFFF);font.draw(pose,"Nível: "+s.level()+"   XP: "+s.xp()+"   Área: "+s.size()+"×"+s.size(),8,155,0xFFFFFF);}
+            if(menu.sector==Profession.Sector.COMMERCIAL&&s!=null){
+                if(s.employed()){
+                    font.draw(pose,"Operação: "+s.elapsed()/20+" / "+s.duration()/20+" s",110,125,0xFFFFFF);
+                    fill(pose,110,135,342,137,0xFF30271F);fill(pose,110,135,110+232*Math.min(s.elapsed(),s.duration())/Math.max(1,s.duration()),137,0xFF55CC77);
+                }else font.draw(pose,"Pausa: "+s.elapsed()/20+" s",110,125,0xFFFFCC66);
+                font.draw(pose,font.plainSubstrByWidth(s.operationStatus(),334),8,187,0xFFFFCC66);
+            }
         }
     }
     @Override public void render(PoseStack pose,int mx,int my,float partial){renderBackground(pose);super.render(pose,mx,my,partial);renderTooltip(pose,mx,my);}

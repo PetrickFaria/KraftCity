@@ -32,10 +32,10 @@ public final class IndustrialEvents {
         var id=p.getPersistentData().getUUID("KCBindDiscard");p.getPersistentData().remove("KCBindDiscard");
         var s=EmploymentData.get(p.getLevel()).station(id);BlockPos pos=e.getPos();
         if(s!=null&&s.active&&s.dimension.equals(p.level.dimension())&&p.distanceToSqr(Vec3.atCenterOf(s.pos))<4096
-                &&IndustrialWork.area(p.getLevel(),s).contains(Vec3.atCenterOf(pos))
+                &&br.com.kraftcity.logistics.DiscardChests.inRange(IndustrialWork.area(p.getLevel(),s),pos)
                 &&(p.level.getBlockEntity(pos) instanceof ChestBlockEntity||p.level.getBlockEntity(pos) instanceof BarrelBlockEntity)){
-            s.industry.putLong("discard",pos.asLong());s.setChanged();p.sendSystemMessage(net.minecraft.network.chat.Component.literal("Baú de Descarte associado ao posto."));
-        }else p.sendSystemMessage(net.minecraft.network.chat.Component.literal("Associação recusada: escolha baú ou barril dentro da área do posto."));
+            s.industry.putLong("discard",pos.asLong());s.industry.putString("discard_dimension",s.dimension.location().toString());br.com.kraftcity.logistics.DiscardChests.invalidate(p.getLevel());s.setChanged();p.sendSystemMessage(net.minecraft.network.chat.Component.literal("Baú de Descarte associado ao posto."));
+        }else p.sendSystemMessage(net.minecraft.network.chat.Component.literal("Associação recusada: escolha baú ou barril a até cinco blocos do limite da área do posto."));
         e.setCanceled(true);e.setCancellationResult(InteractionResult.SUCCESS);
     }
     @SubscribeEvent public void animal(PlayerInteractEvent.EntityInteract e){
