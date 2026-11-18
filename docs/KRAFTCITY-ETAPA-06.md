@@ -67,7 +67,7 @@ Alertas se destinam ao autor da obra e são limitados a um por obra a cada 300 t
 
 ## Validação e entrega
 
-A bateria local ampliada passou nos 190 GameTests (152 anteriores + 38 do construtor), além dos 12 verificadores estáticos. A validação gráfica completa e o empacotamento final estão em andamento; a versão só deve ser considerada entregue após o relatório de CI e hash anexos ao artefato final. O runner exige todos os testes anotados, sem reduzir contagem ou omitir falhas.
+A bateria local ampliada passou nos 190 GameTests na primeira bateria ampliada; a bateria final acrescenta a regressão de tempo ocioso (152 anteriores + 39 do construtor), além dos 12 verificadores estáticos. A validação gráfica completa e o empacotamento final estão em andamento; a versão só deve ser considerada entregue após o relatório de CI e hash anexos ao artefato final. O runner exige todos os testes anotados, sem reduzir contagem ou omitir falhas.
 
 Os testes gráficos acrescentam contratação real via pacote, estoque global em postos distantes 50 blocos, captura nativa com baú privado, lista de materiais, impressão, posicionamento/rotação/espelho, brilho confirmado, quatro trabalhadores, voo/indicador e obra parcial persistida. A segunda JVM deve retomar sem consumo ou XP duplicado, comprovar recolha física de um baú necessário e preservar os 117/152 testes históricos e as capturas anteriores. Não houve sessão com dois clientes humanos nem compatibilidade exaustiva com todos os mods; concorrência tem verificação automatizada de duas autoridades de menu sobre o mesmo estoque.
 
