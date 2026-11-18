@@ -31,7 +31,7 @@ public final class CommerceVisualCheck {
     private static volatile UUID worker;
     private static volatile boolean done,nightReady;
     private static volatile String problem="";
-    private static int stage=-1,ticks,readyTicks;
+    private static int stage=-1,ticks,readyTicks;private static boolean builderReturned;
     private static final long[] began=new long[3];
     private static final boolean[] visited=new boolean[3];
     private static BlockPos post(int i){return new BlockPos(100+18*i,-57,40);}
@@ -94,7 +94,7 @@ public final class CommerceVisualCheck {
     }
     public static void tick(Minecraft mc,int global){
         if(stage<0){stage=0;ticks=0;done=false;mc.getSingleplayerServer().execute(()->setup(mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()),0));}
-        check(problem.isEmpty(),problem);if(stage==3&&!BuilderVisualCheck.done()){BuilderVisualCheck.tick(mc,0);return;}ticks++;
+        check(problem.isEmpty(),problem);if(stage==3&&!BuilderVisualCheck.done()){BuilderVisualCheck.tick(mc,0);return;}if(stage==3&&!builderReturned){builderReturned=true;mc.getSingleplayerServer().execute(()->{var p=mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());p.teleportTo(p.getLevel(),120.5,-57,43.5,180,20);});return;}ticks++;
         if(stage<3){
             int i=stage;
             if(ticks==25){check(mc.screen instanceof WorkScreen,"Commercial hiring screen missing");select(mc);}
