@@ -104,7 +104,7 @@ public final class BuilderWork {
         if((material==Items.WATER_BUCKET||material==Items.LAVA_BUCKET)&&!insert(simulated,new ItemStack(Items.BUCKET),true))return false;
         var snapshot=BlockSnapshot.create(l.dimension(),l,pos);if(!l.setBlock(pos,state,2))return false;
         boolean denied=ForgeEventFactory.onBlockPlace(actor,snapshot,Direction.UP)||!Employment.valid(l,v.getUUID())||!v.getUUID().equals(s.worker)||!matches(l.getBlockState(pos),state)||!has(d.stock,material)||d.charge<=0;
-        if(denied){if(l.getBlockState(pos)==state)snapshot.restore(true,false);j.status="Colocação recusada; recursos preservados.";return false;}
+        if(denied){snapshot.restore(true,false);j.status="Colocação recusada; recursos preservados.";return false;}
         var finalStock=new SimpleContainer(32);for(int k=0;k<32;k++)finalStock.setItem(k,d.stock.getItem(k).copy());if(material!=Items.AIR)finalStock.removeItem(slot(finalStock,material),1);
         boolean room=true;if(water){int n=slot(finalStock,Items.WATER_BUCKET);if(n<0)room=false;else{finalStock.removeItem(n,1);room=insert(finalStock,new ItemStack(Items.BUCKET),true);}}if(material==Items.WATER_BUCKET||material==Items.LAVA_BUCKET)room&=insert(finalStock,new ItemStack(Items.BUCKET),true);
         if(!room){snapshot.restore(true,false);j.status="Sem espaço para remanescente; recursos preservados.";return false;}for(int k=0;k<32;k++)d.stock.setItem(k,finalStock.getItem(k));
