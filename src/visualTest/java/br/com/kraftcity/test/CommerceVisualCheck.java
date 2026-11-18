@@ -25,6 +25,7 @@ import net.minecraft.world.phys.*;
 import net.minecraftforge.common.util.FakePlayerFactory;
 
 /** Real commercial hire packets, navigation, whole-duration timers and process restart. */
+@net.minecraftforge.fml.common.Mod.EventBusSubscriber(modid="residenciasaldeoes",value=net.minecraftforge.api.distmarker.Dist.CLIENT)
 public final class CommerceVisualCheck {
     private static final Profession[] JOBS={Profession.BAKER,Profession.CONFECTIONER,Profession.GRILL_COOK};
     private static volatile UUID worker;
@@ -76,6 +77,8 @@ public final class CommerceVisualCheck {
         }click(screen,suffix);click(screen,JOBS[stage].label);
     }
     private static void capture(Minecraft mc,String name){Screenshot.grab(new File("../build"),name,mc.getMainRenderTarget(),message->{});}
+    @net.minecraftforge.eventbus.api.SubscribeEvent(priority=net.minecraftforge.eventbus.api.EventPriority.LOWEST)
+    public static void actualSupply(WorkActionEvent e){if(!e.action.equals("commercial_supply")||!e.station.commerce.contains("visual_stage"))return;int i=e.station.commerce.getInt("visual_stage");if(i<0||i>=3||!e.station.pos.equals(post(i)))return;check(e.worker.distanceToSqr(Vec3.atCenterOf(e.position))<=9,"Commercial supply occurred without physical arrival");var inventory=DiscardChests.at(e.level,e.position);check(inventory!=null,"Commercial supply accessed absent container");visited[i]=true;e.station.commerce.putLong("visual_actual_supply",e.position.asLong());}
     private static void poll(ServerPlayer player,int i){
         var l=player.getLevel();var s=station(l,i);var v=(Villager)l.getEntity(s.worker);var chest=BlockPos.of(s.commerce.getLong("visual_source"));
         if(v!=null&&v.distanceToSqr(Vec3.atCenterOf(chest))<=9)visited[i]=true;
