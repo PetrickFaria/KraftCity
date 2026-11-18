@@ -34,7 +34,7 @@ public final class CommerceVisualCheck {
     private static int stage=-1,ticks,readyTicks;private static boolean builderReturned;
     private static final long[] began=new long[3];
     private static final boolean[] visited=new boolean[3];
-    private static BlockPos post(int i){return new BlockPos(100+18*i,-57,40);}
+    private static BlockPos post(int i){return new BlockPos(100+18*i,-60,40);}
     private static EmploymentData.Station station(ServerLevel l,int i){return ((WorkBlockEntity)l.getBlockEntity(post(i))).station();}
     private static int count(EmploymentData.Station s,Item item){int n=0;for(int i=0;i<27;i++)if(s.getItem(i).is(item))n+=s.getItem(i).getCount();return n;}
     private static void check(boolean value,String message){if(!value)throw new IllegalStateException(message);}
