@@ -16,6 +16,7 @@ for stage in ('01','02','03','04','05','06'):
     shutil.copy2(f'docs/KRAFTCITY-ETAPA-{stage}.md',out/f'KRAFTCITY-ETAPA-{stage}.md')
 shutil.copytree('docs/licenses',out/'licenses',dirs_exist_ok=True)
 sha=os.environ['GITHUB_SHA']
+run_url=f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
 match=re.search(r'All (\d+) required tests passed',Path('gametest-console.log').read_text(errors='replace'))
 assert match, 'GameTest success evidence missing'
 digest=hashlib.sha256(jar.read_bytes()).hexdigest()
@@ -36,7 +37,7 @@ Minecraft Java 1.19.2 / Forge 43.5.0 / Java 17.
 - Pausa, cancelamento e retomada da mesma obra; tarefas parciais e recibos persistentes, sem tempo offline.
 - Braços alternados, voos visuais sem ItemEntities, indicador de progresso limitado a 64 blocos.
 - {match.group(1)} GameTests obrigatórios aprovados, incluindo os 152 anteriores, e 12 verificadores estáticos.
-- Cliente gráfico: todas as cenas anteriores + dez cenas do Construtor; segunda JVM verifica retomada sem duplicação.
+- Cliente gráfico: todas as cenas anteriores + dez cenas do Construtor; segunda JVM conclui a receita comercial e só então retoma a obra, confirma reposição pelo excedente a 13/14 e encerra a 14/14 com débito e XP únicos.
 - Namespace e schemas anteriores preservados; novo kraftcity_builder schema 1; emprego v5 e builder v1.
 - Receitas de fabricação não especificadas: itens/blocos disponíveis no Criativo/comandos, sem ingredientes arbitrários.
 - Limites, privacidade de NBT, casos não suportados e decisões detalhados em KRAFTCITY-ETAPA-06.md.
@@ -44,6 +45,7 @@ Minecraft Java 1.19.2 / Forge 43.5.0 / Java 17.
 - Código-fonte, seis relatórios, licença de referência, logs e capturas acompanham este artefato.
 
 Commit validado: {sha}.
+GitHub Actions: {run_url}.
 SHA-256 JAR: {digest}.
 """,encoding='utf-8')
 print('Delivery prepared:',jar.name,'commit',sha,'SHA-256',digest)

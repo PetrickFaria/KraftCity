@@ -75,7 +75,13 @@ jobs:
               base="$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -n 1)"
             fi
             IFS='.' read -r major minor patch <<< "$base"
-            version="$major.$minor.$((patch + 1))"
+            patch="$((10#$patch + 1))"
+            minor="$((10#$minor))"
+            if (( patch == 100 )); then
+              ((minor += 1))
+              patch=0
+            fi
+            printf -v version '%d.%d.%02d' "$major" "$minor" "$patch"
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "repair=false" >> "$GITHUB_OUTPUT"

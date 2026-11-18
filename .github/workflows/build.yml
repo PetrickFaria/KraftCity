@@ -10,6 +10,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      release: ${{ steps.version.outputs.release }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,7 +50,14 @@ jobs:
           if [[ "$subject" =~ ^chore\(release\):[[:space:]]prepare[[:space:]]([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             prepared="${BASH_REMATCH[1]}"
             if [[ "$previous" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-              expected="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+              major="${BASH_REMATCH[1]}"
+              minor="$((10#${BASH_REMATCH[2]}))"
+              patch="$((10#${BASH_REMATCH[3]} + 1))"
+              if (( patch == 100 )); then
+                ((minor += 1))
+                patch=0
+              fi
+              printf -v expected '%d.%d.%02d' "$major" "$minor" "$patch"
             else
               echo "Invalid previous mod_version: $previous" >&2
               exit 1
@@ -62,7 +72,12 @@ jobs:
           fi
       - name: Read project version
         id: version
-        run: echo "value=$(sed -n 's/^mod_version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+        run: |
+          version="$(sed -n 's/^mod_version=//p' gradle.properties)"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == "1.1.00" ]]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Verify output and preserved behavior
         run: |
           python3 tools/verify_daily_production.py
@@ -106,3 +121,35 @@ jobs:
             client-restore-console.log
             artifact-output/
           if-no-files-found: warn
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/kraftcity-builder' && needs.verify.outputs.release == 'true'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kraftcity-${{ needs.verify.outputs.version }}
+          path: delivery
+      - name: Publish validated JAR and report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          remote="https://github.com/$GITHUB_REPOSITORY.git"
+          branch_head="$(git ls-remote "$remote" "$GITHUB_REF" | cut -f1)"
+          if [[ "$branch_head" != "$GITHUB_SHA" ]]; then
+            echo "The branch advanced during validation. The newer run owns publication."
+            exit 0
+          fi
+          if [[ -n "$(git ls-remote "$remote" "refs/tags/v$VERSION")" ]]; then
+            echo "Tag v$VERSION already exists."
+            exit 0
+          fi
+          cd delivery/artifact-output
+          sha256sum --check SHA256SUMS.txt
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "KraftCity $VERSION" --notes-file "relatorio-$VERSION.md" \
+            "kraftcity-$VERSION.jar" SHA256SUMS.txt "relatorio-$VERSION.md"
