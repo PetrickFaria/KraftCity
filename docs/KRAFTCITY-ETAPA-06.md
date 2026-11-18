@@ -88,6 +88,6 @@ A identificação final do código, Actions, artefato e SHA-256 constará no reg
 | Equipe | Seis mais próximos, raio 150, primeiro grupo de quatro em lados distintos, um trabalhador fora de duas obras |
 | Persistência | Tarefa parcial/pausa, histórico após recontratação, token sem cópia global, cancelamento/retomada e conflito de sobreposição |
 | Logística | Recipiente trancado intacto, estoque cheio/balde, obra descarregada sem forçar chunk; coleta física necessária na prova gráfica |
-| Cliente Construtor | Nove imagens: contratação, estoque, outro posto a 50 blocos, captura, materiais, impressão, holograma, equipe e voo |
+| Cliente Construtor | Dez imagens: contratação, estoque, outro posto a 50 blocos, captura, materiais, impressão, holograma, equipe, voo e progresso após recarga |
 
 Os tempos finais dos cenários gráficos incluem deslocamento real e retorno de patrulha/cama. O terreno de teste cobre todo o raio de patrulha e remove criaturas hostis remanescentes dos GameTests, sem tornar os Construtores invulneráveis ou modificar o comportamento de produção.

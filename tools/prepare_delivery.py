@@ -36,7 +36,7 @@ Minecraft Java 1.19.2 / Forge 43.5.0 / Java 17.
 - Pausa, cancelamento e retomada da mesma obra; tarefas parciais e recibos persistentes, sem tempo offline.
 - Braços alternados, voos visuais sem ItemEntities, indicador de progresso limitado a 64 blocos.
 - {match.group(1)} GameTests obrigatórios aprovados, incluindo os 152 anteriores, e 12 verificadores estáticos.
-- Cliente gráfico: todas as cenas anteriores + nove cenas do Construtor; segunda JVM verifica retomada sem duplicação.
+- Cliente gráfico: todas as cenas anteriores + dez cenas do Construtor; segunda JVM verifica retomada sem duplicação.
 - Namespace e schemas anteriores preservados; novo kraftcity_builder schema 1; emprego v5 e builder v1.
 - Receitas de fabricação não especificadas: itens/blocos disponíveis no Criativo/comandos, sem ingredientes arbitrários.
 - Limites, privacidade de NBT, casos não suportados e decisões detalhados em KRAFTCITY-ETAPA-06.md.

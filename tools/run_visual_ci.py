@@ -74,3 +74,9 @@ if restored.returncode and 'Gradle build daemon disappeared unexpectedly' not in
 p=Path('build/screenshots/visual-anchor-restored.png')
 if not p.exists() or p.stat().st_mtime < restore_started:sys.exit('Fresh restored anchor screenshot missing.')
 print('Fresh Minecraft process verified all ten stored stacks after reopening the saved world.')
+
+p=Path('build/screenshots/visual-builder-progress-restored.png')
+if not p.exists() or p.stat().st_mtime < restore_started:sys.exit('Fresh builder progress screenshot missing.')
+data=p.read_bytes()
+if data[:8]!=bytes.fromhex('89504e470d0a1a0a') or struct.unpack('>II',data[16:24])!=(1600,900):sys.exit('Invalid restored builder screenshot.')
+if 'BUILDER_PROGRESS_SCREEN_PASSED' not in restored_text:sys.exit('Builder progress selection did not pass.')
