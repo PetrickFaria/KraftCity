@@ -43,8 +43,9 @@ public final class WorkBlock extends BaseEntityBlock {
         open(player,s,viaWorker,s.profession==null);
     }
     public static void open(ServerPlayer player,EmploymentData.Station s,java.util.UUID viaWorker,boolean hiring){
+        if(s.sector==Profession.Sector.BUILDER&&s.profession!=null&&!hiring){br.com.kraftcity.builder.BuilderMenu.open(player,s,viaWorker);return;}
         if(s.sector==Profession.Sector.MILITARY&&s.profession!=null&&!hiring){br.com.kraftcity.military.SoldierMenu.open(player,s,viaWorker);return;}
-        var provider=new SimpleMenuProvider((id,inventory,p)->new WorkMenu(id,inventory,s,hiring,viaWorker),Component.literal(s.profession==null?s.sector==Profession.Sector.INDUSTRIAL?"Bloco Industrial":s.sector==Profession.Sector.MILITARY?"Bloco Militar":"Bloco Comercial":s.profession.label));
+        var provider=new SimpleMenuProvider((id,inventory,p)->new WorkMenu(id,inventory,s,hiring,viaWorker),Component.literal(s.profession==null?s.sector==Profession.Sector.INDUSTRIAL?"Bloco Industrial":s.sector==Profession.Sector.MILITARY?"Bloco Militar":s.sector==Profession.Sector.BUILDER?"Bloco do Construtor":"Bloco Comercial":s.profession.label));
         NetworkHooks.openScreen(player,provider,buffer->{buffer.writeBlockPos(s.pos);buffer.writeUUID(s.id);buffer.writeBoolean(hiring);buffer.writeEnum(s.sector);buffer.writeInt(s.profession==null?-1:s.profession.ordinal());buffer.writeBoolean(viaWorker!=null);if(viaWorker!=null)buffer.writeUUID(viaWorker);});
     }
     @Override public void setPlacedBy(Level level,BlockPos pos,BlockState state,LivingEntity placer,ItemStack stack){

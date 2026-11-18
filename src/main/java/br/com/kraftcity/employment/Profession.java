@@ -14,9 +14,10 @@ public enum Profession {
     BAKER("baker", "Padeiro", Sector.COMMERCIAL),
     CONFECTIONER("confectioner", "Confeiteiro", Sector.COMMERCIAL),
     GRILL_COOK("grill_cook", "Churrasqueiro", Sector.COMMERCIAL),
-    SOLDIER("soldier", "Soldado", Sector.MILITARY);
+    SOLDIER("soldier", "Soldado", Sector.MILITARY),
+    BUILDER("builder", "Construtor", Sector.BUILDER);
 
-    public enum Sector { INDUSTRIAL, COMMERCIAL, MILITARY }
+    public enum Sector { INDUSTRIAL, COMMERCIAL, MILITARY, BUILDER }
     public final String path, label;
     public final Sector sector;
     Profession(String path, String label, Sector sector) { this.path=path; this.label=label; this.sector=sector; }

@@ -8,7 +8,7 @@ public enum CityModule {
     INDUSTRIAL("industrial", true),
     COMMERCIAL("commercial", true),
     MILITARY("military", true),
-    BUILDER("builder", false);
+    BUILDER("builder", true);
 
     private final ResourceLocation id;
     private final boolean implemented;

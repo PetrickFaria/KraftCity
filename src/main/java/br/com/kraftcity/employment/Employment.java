@@ -50,6 +50,7 @@ public final class Employment {
         else if(s.worker!=null)valid(level,s.worker);
     }
     public static void release(ServerLevel level,UUID worker){
+        br.com.kraftcity.builder.BuilderWork.release(level,worker);
         br.com.kraftcity.military.Military.release(level,worker);
         var data=EmploymentData.get(level);
         for(ServerLevel world:level.getServer().getAllLevels())if(world.getEntity(worker) instanceof Villager v)br.com.kraftcity.industry.IndustrialWork.restoreHand(v);
@@ -106,6 +107,7 @@ public final class Employment {
         // The custom block is the workstation. Never assign a conflicting vanilla career/POI.
         villager.releasePoi(MemoryModuleType.JOB_SITE);villager.releasePoi(MemoryModuleType.POTENTIAL_JOB_SITE);
         villager.getBrain().eraseMemory(MemoryModuleType.JOB_SITE);villager.getBrain().eraseMemory(MemoryModuleType.POTENTIAL_JOB_SITE);
+        if(profession==Profession.BUILDER)workforce.setProgress(worker,profession.id(),br.com.kraftcity.builder.BuilderWork.level(progress.xp()),progress.xp());
         payment.shrink(price);s.setChanged();if(profession==Profession.SOLDIER)br.com.kraftcity.military.Military.trained(level,s,villager,player);return "ok";
     }
 }

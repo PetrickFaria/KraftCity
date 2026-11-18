@@ -1,0 +1,70 @@
+package br.com.kraftcity.builder;
+
+import br.com.kraftcity.employment.*;
+import java.util.*;
+import java.util.function.Supplier;
+import net.minecraft.core.*;
+import net.minecraft.nbt.*;
+import net.minecraft.network.*;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.*;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.network.*;
+import net.minecraftforge.network.simple.SimpleChannel;
+import net.minecraftforge.fml.DistExecutor;
+import net.minecraftforge.api.distmarker.Dist;
+
+public final class BuilderNetwork {
+    public static final SimpleChannel CHANNEL=NetworkRegistry.newSimpleChannel(new ResourceLocation("residenciasaldeoes","builder"),()->"1","1"::equals,"1"::equals);
+    public record Command(int menu,UUID station,int op,String value){
+        void encode(FriendlyByteBuf b){b.writeInt(menu);b.writeUUID(station);b.writeInt(op);b.writeUtf(value,256);}
+        static Command decode(FriendlyByteBuf b){return new Command(b.readInt(),b.readUUID(),b.readInt(),b.readUtf(256));}
+        void handle(Supplier<NetworkEvent.Context> c){var p=c.get().getSender();if(p!=null){if(op>=100)editorCommand(p,op,value);else if(p.containerMenu instanceof BuilderMenu m&&m.containerId==menu&&m.stationId.equals(station)&&m.stillValid(p))menuCommand(p,m,op,value);}c.get().setPacketHandled(true);}
+    }
+    public record Message(CompoundTag data){void encode(FriendlyByteBuf b){b.writeNbt(data);}static Message decode(FriendlyByteBuf b){var t=b.readNbt();if(t==null)throw new IllegalArgumentException("Empty builder packet");return new Message(t);}void handle(Supplier<NetworkEvent.Context> c){DistExecutor.unsafeRunWhenOn(Dist.CLIENT,()->()->br.com.kraftcity.builder.client.BuilderClient.receive(data));c.get().setPacketHandled(true);}}
+    private record Preview(UUID player,UUID schema,int cursor){}
+    private static final Map<UUID,Preview> PREVIEWS=new LinkedHashMap<>();
+    public static void register(){CHANNEL.messageBuilder(Command.class,0,NetworkDirection.PLAY_TO_SERVER).encoder(Command::encode).decoder(Command::decode).consumerMainThread(Command::handle).add();CHANNEL.messageBuilder(Message.class,1,NetworkDirection.PLAY_TO_CLIENT).encoder(Message::encode).decoder(Message::decode).consumerMainThread(Message::handle).add();}
+    public static void message(ServerPlayer p,CompoundTag t){CHANNEL.send(PacketDistributor.PLAYER.with(()->p),new Message(t));}
+    public static void notice(ServerPlayer p,String text){p.sendSystemMessage(Component.literal("[KraftCity] "+text));}
+    public static void menuCommand(ServerPlayer p,BuilderMenu m,int op,String value){var d=BuilderData.get(p.getLevel());try{switch(op){
+        case 0->{var id=UUID.fromString(value);if(d.library.containsKey(id))m.selectedSchema=id;}
+        case 1->{if(m.selectedSchema!=null&&!d.print(m.selectedSchema,p.getUUID()))notice(p,"Insira papel vazio, tinta suficiente e libere a saída.");}
+        case 2->BlueprintLibrary.refresh(p.getLevel());
+        case 3->{var stack=d.stock.getItem(BuilderData.PLAN);if(stack.is(BuilderModule.PAPER.get())&&stack.hasTag()&&stack.getTag().hasUUID("KraftCityPaper")){var id=stack.getTag().getUUID("KraftCityPaper");var paper=d.papers.get(id);if(paper!=null&&paper.owner.equals(p.getUUID())){notice(p,d.start(id,m.replace));if(paper.job!=null)m.selectedJob=paper.job;}}}
+        case 4->{var id=UUID.fromString(value);if(d.jobs.containsKey(id))m.selectedJob=id;}
+        case 5->{var j=d.jobs.get(m.selectedJob);if(j!=null&&j.owner.equals(p.getUUID())){if(j.cancelled)notice(p,d.resume(j));else{j.paused=!j.paused;d.setDirty();}}}
+        case 6->{var j=d.jobs.get(m.selectedJob);if(j!=null&&j.owner.equals(p.getUUID())){j.cancelled=true;j.workers.clear();j.tasks.clear();j.status="Cancelada; blocos já construídos preservados.";d.setDirty();}}
+        case 7->m.replace=!m.replace;
+        case 8->{var s=m.station();if(s.worker==null){p.closeContainer();WorkBlock.open(p,s,null,true);return;}}
+        case 9->{sendMaterials(p,m,value.equals("job"));return;}
+        default->{return;}}
+    }catch(IllegalArgumentException ignored){}m.sync(p);}
+    public static void send(ServerPlayer p,BuilderMenu m,boolean library){var d=BuilderData.get(p.getLevel());var t=new CompoundTag();t.putString("type","menu");t.putInt("menu",m.containerId);t.putUUID("station",m.stationId);t.putInt("ink",d.ink);t.putInt("charge",d.charge);t.putInt("print",d.printTicks);t.putInt("reservedInk",d.printPaid);t.putBoolean("printing",d.printing!=null);t.putBoolean("replace",m.replace);t.putLong("inkAvailable",d.inkAvailable());var plan=d.stock.getItem(BuilderData.PLAN);var planPaper=plan.hasTag()&&plan.getTag().hasUUID("KraftCityPaper")?d.papers.get(plan.getTag().getUUID("KraftCityPaper")):null;t.putBoolean("planValid",plan.is(BuilderModule.PAPER.get())&&planPaper!=null&&planPaper.owner.equals(p.getUUID())&&planPaper.confirmed&&planPaper.issued&&planPaper.job==null);t.putBoolean("employed",m.station().worker!=null);t.putString("status",d.libraryStatus);if(m.selectedSchema!=null)t.putUUID("selectedSchema",m.selectedSchema);if(m.selectedJob!=null)t.putUUID("selectedJob",m.selectedJob);
+        if(library){var list=new ListTag();for(var b:d.library.values()){var e=new CompoundTag();e.putUUID("id",b.id);e.putString("name",b.name);e.putLong("size",b.size.asLong());e.putInt("blocks",b.cells.size());e.putString("problem",b.problems.isEmpty()?"":b.problems.get(0));list.add(e);}t.put("library",list);}
+        var jobs=new ListTag();for(var j:d.jobs.values()){var paper=d.papers.get(j.paper);var b=d.library.get(paper.schema);var e=new CompoundTag();e.putUUID("id",j.id);e.putString("name",b.name);e.putString("status",j.status);e.putInt("done",j.done.cardinality());e.putInt("placed",j.placed);e.putInt("total",b.cells.size());var level=p.getServer().getLevel(j.dimension);e.putInt("workers",level==null||j.paused?0:(int)j.tasks.values().stream().filter(task->task.lastActive>=level.getGameTime()-12&&level.getEntity(task.worker) instanceof net.minecraft.world.entity.npc.Villager v&&BuilderWork.ownsNavigation(v)).map(task->task.worker).distinct().count());e.putBoolean("paused",j.paused);e.putBoolean("cancelled",j.cancelled);jobs.add(e);}t.put("jobs",jobs);message(p,t);
+    }
+    public static void sendMaterials(ServerPlayer p,BuilderMenu m,boolean pending){var d=BuilderData.get(p.getLevel());var j=pending?d.jobs.get(m.selectedJob):null;var b=j!=null?d.library.get(d.papers.get(j.paper).schema):d.library.get(m.selectedSchema);var t=new CompoundTag();t.putString("type","materials");t.putInt("menu",m.containerId);t.putUUID("station",m.stationId);t.putString("name",b==null?"Selecione um esquema":b.name);var counts=new LinkedHashMap<net.minecraft.world.item.Item,Integer>();
+        if(b!=null){if(j==null)counts.putAll(b.materials);else counts.putAll(BuilderWork.requirements(p.getServer().getLevel(j.dimension),j,b));}
+        var rows=new ListTag();for(var e:counts.entrySet()){int have=0;for(int i=0;i<27;i++)if(d.stock.getItem(i).is(e.getKey()))have+=d.stock.getItem(i).getCount();var row=new CompoundTag();row.putString("item",e.getKey().getDescriptionId());row.putInt("total",e.getValue());row.putInt("stock",have);row.putInt("missing",Math.max(0,e.getValue()-have));rows.add(row);}t.put("rows",rows);message(p,t);
+    }
+    public static void editor(ServerPlayer p,String mode,UUID paper){var t=new CompoundTag();t.putString("type","editor");t.putString("mode",mode);if(paper!=null)t.putUUID("paper",paper);message(p,t);}
+    public static void selection(ServerPlayer p,BlockPos a,BlockPos b){var t=new CompoundTag();t.putString("type","selection");t.putLong("a",a.asLong());t.putLong("b",b.asLong());message(p,t);}
+    public static void preview(ServerPlayer p,BuilderData.Paper paper){var d=BuilderData.get(p.getLevel());var b=d.library.get(paper.schema);if(b==null)return;meta(p,paper,b);PREVIEWS.put(p.getUUID(),new Preview(p.getUUID(),b.id,0));}
+    private static void meta(ServerPlayer p,BuilderData.Paper paper,Blueprint b){var pd=p.getPersistentData();var t=new CompoundTag();t.putString("type","preview");t.putUUID("schema",b.id);t.putString("name",b.name);t.putString("dimension",pd.getString("KCPreviewDim"));t.putLong("size",b.size.asLong());t.putInt("total",b.cells.size());t.putLong("origin",pd.getLong("KCPreviewOrigin"));t.putInt("rotation",pd.getInt("KCPreviewRotation"));t.putInt("mirror",pd.getInt("KCPreviewMirror"));message(p,t);}
+    public static void pump(net.minecraft.server.MinecraftServer server){int budget=1024;for(var request:List.copyOf(PREVIEWS.values())){if(budget<=0)break;var p=server.getPlayerList().getPlayer(request.player);if(p==null){PREVIEWS.remove(request.player);continue;}var b=BuilderData.get(p.getLevel()).library.get(request.schema);if(b==null){PREVIEWS.remove(request.player);continue;}int count=Math.min(512,Math.min(b.cells.size()-request.cursor,budget));var t=new CompoundTag();t.putString("type","cells");t.putUUID("schema",b.id);t.putInt("start",request.cursor);var pos=new long[count];var states=new int[count];for(int i=0;i<count;i++){var c=b.cells.get(request.cursor+i);pos[i]=c.pos().asLong();states[i]=Block.getId(c.state());}t.putLongArray("positions",pos);t.putIntArray("states",states);message(p,t);budget-=count;if(request.cursor+count>=b.cells.size())PREVIEWS.remove(request.player);else PREVIEWS.put(request.player,new Preview(request.player,request.schema,request.cursor+count));}}
+    public static void editorCommand(ServerPlayer p,int op,String value){var hand=p.getMainHandItem();var pd=p.getPersistentData();if(op==100||op==101){if(!hand.is(BuilderModule.ENGINEER.get()))return;if(op==101){pd.remove("KCEngineerA");pd.remove("KCEngineerB");BlueprintLibrary.cancel(p.getUUID());var t=new CompoundTag();t.putString("type","clear");message(p,t);return;}if(!pd.contains("KCEngineerA")||!pd.contains("KCEngineerB")||!pd.getString("KCEngineerDim").equals(p.level.dimension().location().toString())){notice(p,"Selecione os dois cantos primeiro.");return;}notice(p,BlueprintLibrary.capture(p,BlockPos.of(pd.getLong("KCEngineerA")),BlockPos.of(pd.getLong("KCEngineerB")),value));return;}
+        if(!hand.is(BuilderModule.PAPER.get())||!hand.hasTag()||!hand.getTag().hasUUID("KraftCityPaper")||!pd.hasUUID("KCPreviewPaper"))return;var id=hand.getTag().getUUID("KraftCityPaper");if(!id.equals(pd.getUUID("KCPreviewPaper")))return;var d=BuilderData.get(p.getLevel());var paper=d.papers.get(id);if(paper==null||!paper.issued||paper.job!=null||!paper.owner.equals(p.getUUID())||!pd.getString("KCPreviewDim").equals(p.level.dimension().location().toString()))return;var b=d.library.get(paper.schema);if(b==null)return;
+        var origin=BlockPos.of(pd.getLong("KCPreviewOrigin"));int turns=pd.getInt("KCPreviewRotation"),mirror=pd.getInt("KCPreviewMirror");
+        switch(op){case 110->{switch(value){case "x+"->origin=origin.east();case "x-"->origin=origin.west();case "z+"->origin=origin.south();case "z-"->origin=origin.north();case "y+"->origin=origin.above();case "y-"->origin=origin.below();default->{return;}}}case 111->turns=(turns+1)%4;case 112->mirror=(mirror+1)%3;
+            case 113->{if(origin.distSqr(p.blockPosition())>16384||!p.getLevel().getWorldBorder().isWithinBounds(origin)||p.getLevel().isOutsideBuildHeight(origin)||p.getLevel().isOutsideBuildHeight(origin.above(b.size.getY()-1))||!p.mayBuild()||!p.getLevel().mayInteract(p,origin)){notice(p,"Posição fora do alcance/permissão.");return;}paper.confirmed=true;paper.dimension=p.level.dimension();paper.origin=origin;paper.rotation=turns;paper.mirror=mirror;hand.getOrCreateTag().putBoolean("Confirmed",true);d.setDirty();notice(p,"Posição confirmada; leve o papel a um posto e use Construir.");pd.remove("KCPreviewPaper");var t=new CompoundTag();t.putString("type","clear");message(p,t);return;}
+            case 114->{pd.remove("KCPreviewPaper");var t=new CompoundTag();t.putString("type","clear");message(p,t);return;}default->{return;}}
+        if(origin.distSqr(p.blockPosition())>16384)return;pd.putLong("KCPreviewOrigin",origin.asLong());pd.putInt("KCPreviewRotation",turns);pd.putInt("KCPreviewMirror",mirror);meta(p,paper,b);
+    }
+    public static void flight(ServerLevel l,net.minecraft.world.entity.npc.Villager v,BlockPos to,net.minecraft.world.level.block.state.BlockState state,int duration){var t=new CompoundTag();t.putString("type","flight");t.putInt("entity",v.getId());t.putInt("state",Block.getId(state));t.putLong("target",to.asLong());t.putDouble("x",v.getX());t.putDouble("y",v.getY()+1.25);t.putDouble("z",v.getZ());t.putInt("duration",Math.max(1,duration));t.putLong("time",l.getGameTime());for(var p:l.players())if(p.distanceToSqr(v)<=16384)message(p,t);}
+    public static void works(ServerLevel l){var d=BuilderData.get(l);for(var p:l.players()){var t=new CompoundTag();t.putString("type","works");var list=new ListTag();for(var j:d.jobs.values())if(j.dimension.equals(l.dimension())&&!j.cancelled&&p.distanceToSqr(Vec3.atCenterOf(j.origin))<=16384){var b=d.library.get(d.papers.get(j.paper).schema);var e=new CompoundTag();e.putUUID("id",j.id);e.putString("name",b.name);e.putLong("origin",j.origin.above(b.size.getY()+2).asLong());e.putInt("done",j.done.cardinality());e.putInt("total",b.cells.size());var workers=new ListTag();for(var task:j.tasks.values())if(l.getEntity(task.worker) instanceof net.minecraft.world.entity.npc.Villager v){var w=new CompoundTag();w.putInt("entity",v.getId());w.putBoolean("working",!j.paused&&task.lastActive>=l.getGameTime()-12&&BuilderWork.ownsNavigation(v));workers.add(w);}e.put("workers",workers);list.add(e);}t.put("jobs",list);message(p,t);}}
+    public static void stop(){PREVIEWS.clear();}
+}

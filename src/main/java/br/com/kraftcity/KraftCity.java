@@ -24,6 +24,10 @@ public final class KraftCity {
             items.add(new ItemStack(br.com.kraftcity.employment.WorkModule.INDUSTRIAL.get()));
             items.add(new ItemStack(br.com.kraftcity.employment.WorkModule.COMMERCIAL.get()));
             items.add(new ItemStack(br.com.kraftcity.employment.WorkModule.MILITARY.get()));
+            items.add(new ItemStack(br.com.kraftcity.employment.WorkModule.BUILDER.get()));
+            items.add(new ItemStack(br.com.kraftcity.builder.BuilderModule.BLANK.get()));
+            items.add(new ItemStack(br.com.kraftcity.builder.BuilderModule.PAPER.get()));
+            items.add(new ItemStack(br.com.kraftcity.builder.BuilderModule.ENGINEER.get()));
         }
     };
 

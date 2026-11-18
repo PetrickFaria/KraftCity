@@ -38,5 +38,10 @@
   "itemGroup.kraftcity_tools": "KraftCity — Ferramentas",
   "block.residenciasaldeoes.military": "Military Block",
   "entity.residenciasaldeoes.soldier_zombie": "Zombie Soldier",
-  "block.residenciasaldeoes.work_soldier": "Soldier Block"
+  "block.residenciasaldeoes.work_soldier": "Soldier Block",
+  "block.residenciasaldeoes.builder": "Builder Block",
+  "block.residenciasaldeoes.work_builder": "Professional Builder Block",
+  "item.residenciasaldeoes.empty_blueprint": "Empty Blueprint Paper",
+  "item.residenciasaldeoes.blueprint": "Blueprint Paper",
+  "item.residenciasaldeoes.engineer_paper": "Engineer Paper"
 }

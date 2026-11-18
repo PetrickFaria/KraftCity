@@ -10,7 +10,9 @@
     "LivingEntityRendererOpacityMixin",
     "ResidentSteveModelMixin",
     "RenderTypeOpacityMixin",
-    "ModelPartOpacityMixin"
+    "ModelPartOpacityMixin",
+    "BuilderVillagerArmsMixin",
+    "BuilderSteveArmsMixin"
   ],
   "injectors": {
     "defaultRequire": 1

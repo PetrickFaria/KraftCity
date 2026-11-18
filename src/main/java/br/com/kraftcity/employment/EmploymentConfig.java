@@ -26,7 +26,7 @@ public final class EmploymentConfig {
         b.pop(); SPEC=b.build();
     }
     public static int cost(Profession.Sector sector) {
-        return sector==Profession.Sector.MILITARY?15:sector==Profession.Sector.INDUSTRIAL?INDUSTRIAL_COST:
+        return sector==Profession.Sector.BUILDER?10:sector==Profession.Sector.MILITARY?15:sector==Profession.Sector.INDUSTRIAL?INDUSTRIAL_COST:
                 COMMERCIAL_ENABLED.get()&&COMMERCIAL_COST.get()>=0?COMMERCIAL_COST.get():-1;
     }
     private EmploymentConfig() {}
