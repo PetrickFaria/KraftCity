@@ -42,6 +42,8 @@ public final class CommerceVisualCheck {
         var l=player.getLevel();var p=post(i);l.setDayTime(1000);l.setWeatherParameters(10000,0,false,false);l.setRainLevel(0F);
         player.teleportTo(l,p.getX()+.5,p.getY(),p.getZ()+2.5,180,20);
         l.getEntitiesOfClass(net.minecraft.world.entity.Mob.class,new AABB(p).inflate(7)).forEach(Entity::discard);
+        // Solid terrain throughout the residential influence area; no walkable cavity beneath the test platform.
+        for(int x=-10;x<=18;x++)for(int z=-10;z<=10;z++)for(int y=-3;y<=-1;y++)l.setBlock(p.offset(x,y,z),Blocks.STONE.defaultBlockState(),3);
         for(int x=-5;x<=13;x++)for(int z=-5;z<=5;z++){l.setBlock(p.offset(x,-1,z),Blocks.STONE.defaultBlockState(),3);for(int y=0;y<5;y++)l.setBlock(p.offset(x,y,z),Blocks.AIR.defaultBlockState(),3);}
         l.setBlock(p.offset(-2,0,-2),ResidenciasDosAldeoes.EMERALD_CHEST.get().defaultBlockState().setValue(ChestBlock.FACING,Direction.SOUTH),3);
         var home=p.offset(-3,-1,0);l.setBlock(home.below(),Blocks.STONE.defaultBlockState(),3);ResidenceData.get(l).unlinkAll(l,l.dimension(),home);l.setBlock(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)l.getBlockEntity(home)).setSize(11);

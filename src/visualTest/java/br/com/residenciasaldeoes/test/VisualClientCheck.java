@@ -33,6 +33,12 @@ public final class VisualClientCheck {
         if(!requested&&mc.screen instanceof TitleScreen){requested=true;mc.createWorldOpenFlows().loadLevel(new TitleScreen(),"visual-check");}
         if(mc.player==null||mc.getSingleplayerServer()==null)return;
         if(!scene&&mc.screen!=null)return;
+        if(Boolean.getBoolean("kraftcity.commerceVisualOnly")){
+            if(Boolean.getBoolean("residencias.visualRestore")){
+                if(!scene){scene=true;mc.getSingleplayerServer().execute(()->{var l=mc.getSingleplayerServer().overworld();br.com.kraftcity.test.CommerceVisualCheck.verifyRestore(l);br.com.kraftcity.test.MilitaryVisualCheck.verifyRestore(l);br.com.kraftcity.test.BuilderVisualCheck.verifyRestore(l);});}
+                ticks++;br.com.kraftcity.test.CommerceVisualCheck.restoredTick(mc,ticks);br.com.kraftcity.test.BuilderVisualCheck.restoredTick(mc,ticks);if(ticks==1160)mc.stop();
+            }else{if(!scene){scene=true;mc.getSingleplayerServer().execute(()->{var l=mc.getSingleplayerServer().overworld();l.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_DOMOBSPAWNING).set(false,l.getServer());mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()).setGameMode(net.minecraft.world.level.GameType.CREATIVE);});}br.com.kraftcity.test.CommerceVisualCheck.tick(mc,0);}return;
+        }
         if(Boolean.getBoolean("kraftcity.builderVisualOnly")){if(Boolean.getBoolean("residencias.visualRestore")){if(!scene){scene=true;mc.getSingleplayerServer().execute(()->br.com.kraftcity.test.BuilderVisualCheck.verifyRestore(mc.getSingleplayerServer().overworld()));}ticks++;br.com.kraftcity.test.BuilderVisualCheck.restoredTick(mc,ticks);if(ticks==1160)mc.stop();}else{if(!scene){scene=true;}br.com.kraftcity.test.BuilderVisualCheck.tick(mc,0);if(br.com.kraftcity.test.BuilderVisualCheck.done())mc.stop();}return;}
         if(Boolean.getBoolean("kraftcity.militaryVisualOnly")&&!Boolean.getBoolean("residencias.visualRestore")){
             if(!scene){scene=true;ticks=-2;mc.getSingleplayerServer().execute(()->mc.getSingleplayerServer().overworld().setDayTime(13001));}
