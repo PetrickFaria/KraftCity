@@ -44,7 +44,7 @@ public final class CommerceVisualCheck {
         l.getEntitiesOfClass(net.minecraft.world.entity.Mob.class,new AABB(p).inflate(7)).forEach(Entity::discard);
         for(int x=-5;x<=13;x++)for(int z=-5;z<=5;z++){l.setBlock(p.offset(x,-1,z),Blocks.STONE.defaultBlockState(),3);for(int y=0;y<5;y++)l.setBlock(p.offset(x,y,z),Blocks.AIR.defaultBlockState(),3);}
         l.setBlock(p.offset(-2,0,-2),ResidenciasDosAldeoes.EMERALD_CHEST.get().defaultBlockState().setValue(ChestBlock.FACING,Direction.SOUTH),3);
-        var home=p.offset(-3,-1,0);ResidenceData.get(l).unlinkAll(l,l.dimension(),home);l.setBlock(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)l.getBlockEntity(home)).setSize(11);
+        var home=p.offset(-3,-1,0);l.setBlock(home.below(),Blocks.STONE.defaultBlockState(),3);ResidenceData.get(l).unlinkAll(l,l.dimension(),home);l.setBlock(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)l.getBlockEntity(home)).setSize(11);
         Villager v=EntityType.VILLAGER.create(l);v.setAge(0);v.setNoAi(true);v.setInvulnerable(true);v.setPos(home.getX()+1.5,p.getY(),home.getZ()+.5);l.addFreshEntity(v);
         check(ResidenceData.get(l).link(l,home,v).equals("ok"),"Commercial visual residence");ResidenceData.get(l).renameResident(v.getUUID(),"Comerciante "+JOBS[i].label);worker=v.getUUID();v.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
         l.setBlock(p,WorkModule.COMMERCIAL.get().defaultBlockState(),3);var s=station(l,i);s.setItem(31,new ItemStack(Items.EMERALD,30));
