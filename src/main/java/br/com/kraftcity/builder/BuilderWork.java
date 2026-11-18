@@ -39,7 +39,14 @@ public final class BuilderWork {
     public static void tick(ServerLevel origin){var d=BuilderData.get(origin);d.printTick();int budget=BuilderModule.SCAN_BUDGET.get();
         for(var j:d.jobs.values()){
             var p=d.papers.get(j.paper);var b=p==null?null:d.library.get(p.schema);var l=origin.getServer().getLevel(j.dimension);if(b==null||l==null||j.cancelled){j.workers.clear();j.tasks.clear();continue;}if(j.paused){for(UUID id:j.workers.keySet())CLOCKS.remove(id);continue;}
-            if(j.done.cardinality()>=b.cells.size()){j.status="Concluída.";j.workers.clear();j.tasks.clear();continue;}
+            if(j.done.cardinality()>=b.cells.size()){
+                j.status="Concluída.";
+                if(!j.workers.isEmpty()||!j.tasks.isEmpty()){
+                    j.workers.keySet().forEach(id->returnToPost(l,id));
+                    j.workers.clear();j.tasks.clear();d.setDirty();
+                }
+                continue;
+            }
             if(!l.hasChunkAt(j.origin)){for(UUID id:j.workers.keySet())CLOCKS.remove(id);j.status="Pausa: chunk da obra descarregado.";continue;}
             reconcile(l,d,j);recruit(l,d,j,b);
             int active=0;for(var entry:List.copyOf(j.workers.entrySet())){
@@ -47,7 +54,31 @@ public final class BuilderWork {
                 var old=CLOCKS.put(v.getUUID(),new Sample(l.getGameTime(),v.tickCount));int delta=old==null||l.getGameTime()-old.time!=1?0:Math.max(0,Math.min(1,v.tickCount-old.age));
                 if(v.isNoAi()||!ownsNavigation(v))continue;
                 String fetch=s.industry.getString("builder_fetch");if(!fetch.isEmpty()){var key=net.minecraft.resources.ResourceLocation.tryParse(fetch);var item=key==null?Items.AIR:net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(key);if(item!=null&&item!=Items.AIR&&!has(d.stock,item)&&supply(l,d,j,s,v,item))continue;s.industry.remove("builder_fetch");s.setChanged();}
-                int role=entry.getValue();if(role<0){var spot=spot(l,b,j,0,v);if(spot==null){j.status="Sem acesso à posição de trabalho.";continue;}if(!reach(v,spot,1.15)){if(v.getNavigation().isDone()&&STALLED.merge(v.getUUID(),1,Integer::sum)>=40){j.workers.remove(v.getUUID());s.industry.putLong("builder_retry",l.getGameTime()+200);s.setChanged();STALLED.remove(v.getUUID());}continue;}STALLED.remove(v.getUUID());var occupied=new HashSet<>(j.workers.values());role=0;while(role<4&&occupied.contains(role))role++;if(role>=4){j.workers.remove(v.getUUID());returnToPost(l,v.getUUID());continue;}j.workers.put(v.getUUID(),role);if(j.workers.values().stream().filter(r->r>=0).count()>=4){for(var extra:List.copyOf(j.workers.entrySet()))if(extra.getValue()<0){returnToPost(l,extra.getKey());j.workers.remove(extra.getKey());}}d.setDirty();}
+                int role=entry.getValue();
+                if(role<0){
+                    var occupied=new HashSet<>(j.workers.values());
+                    role=0;
+                    while(role<4&&occupied.contains(role))role++;
+                    if(role==4){
+                        supplyFromReserve(l,d,j,b,s,v);
+                        continue;
+                    }
+                    var front=spot(l,b,j,0,v);
+                    if(front==null){j.status="Sem acesso à posição de trabalho.";continue;}
+                    if(!reach(v,front,1.15)){
+                        if(v.getNavigation().isDone()&&STALLED.merge(v.getUUID(),1,Integer::sum)>=40){
+                            j.workers.remove(v.getUUID());
+                            s.industry.putLong("builder_retry",l.getGameTime()+200);
+                            s.setChanged();
+                            STALLED.remove(v.getUUID());
+                            d.setDirty();
+                        }
+                        continue;
+                    }
+                    STALLED.remove(v.getUUID());
+                    j.workers.put(v.getUUID(),role);
+                    d.setDirty();
+                }
                 var spot=spot(l,b,j,role,v);if(spot==null||!reach(v,spot,1.05))continue;active++;
                 var task=j.tasks.values().stream().filter(t->t.worker.equals(v.getUUID())).findFirst().orElse(null);
                 if(task==null){boolean fetching=false;for(var blocked:j.tasks.values()){var material=cost(b,j,blocked.index);if(material!=Items.AIR&&!has(d.stock,material)&&supply(l,d,j,s,v,material)){s.industry.putString("builder_fetch",net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(material).toString());s.setChanged();fetching=true;break;}}if(fetching)continue;}
@@ -63,8 +94,7 @@ public final class BuilderWork {
     }
     private static void returnToPost(ServerLevel l,UUID worker){var s=EmploymentData.get(l).assigned(worker);if(builder(s)){s.industry.putBoolean("builder_return",true);s.setChanged();}}
     private static void reconcile(ServerLevel l,BuilderData d,BuilderData.Job j){for(UUID id:List.copyOf(j.workers.keySet())){var s=EmploymentData.get(l).assigned(id);if(!builder(s)||!s.dimension.equals(l.dimension())||!Employment.valid(l,id)){j.workers.remove(id);j.tasks.values().removeIf(t->t.worker.equals(id));d.setDirty();continue;}if(l.getEntity(id)==null){int n=MISSING.merge(id,1,Integer::sum);if(n>=200){j.workers.remove(id);j.tasks.values().removeIf(t->t.worker.equals(id));MISSING.remove(id);d.setDirty();}}else MISSING.remove(id);}}
-    public static void recruit(ServerLevel l,BuilderData d,BuilderData.Job j,Blueprint b){if(j.workers.size()>=6||j.workers.values().stream().filter(i->i>=0).count()>=4||!IndustrialWork.day(l))return;
-        var center=Vec3.atCenterOf(j.origin.offset(b.transformedSize(j.rotation).getX()/2,0,b.transformedSize(j.rotation).getZ()/2));
+    public static void recruit(ServerLevel l,BuilderData d,BuilderData.Job j,Blueprint b){if(j.workers.size()>=6||!IndustrialWork.day(l))return;
         EmploymentData.get(l).stations().stream().filter(s->s.active&&s.profession==Profession.BUILDER&&s.worker!=null&&s.dimension.equals(l.dimension())&&s.pos.distSqr(j.origin)<=22500&&s.industry.getLong("builder_retry")<=l.getGameTime()&&d.assigned(s.worker)==null&&l.getEntity(s.worker) instanceof Villager v&&v.isAlive()&&!v.isSleeping()&&!v.isNoAi()&&Employment.valid(l,s.worker)).sorted(Comparator.<EmploymentData.Station>comparingDouble(s->s.pos.distSqr(j.origin)).thenComparing(s->s.id.toString())).limit(6-j.workers.size()).forEach(s->{j.workers.put(s.worker,-1);d.setDirty();});
     }
     public static BlockPos spot(ServerLevel l,Blueprint b,BuilderData.Job j,int role,Villager v){var size=b.transformedSize(j.rotation);int front=Math.floorMod(j.rotation,4);int[][] directions={{0,-1},{-1,0},{1,0},{0,1}};int dx=directions[role][0],dz=directions[role][1];if(j.mirror==1)dx=-dx;if(j.mirror==2)dz=-dz;for(int i=0;i<front;i++){int old=dx;dx=-dz;dz=old;}int x=dx<0?-2:dx>0?size.getX()+1:size.getX()/2,z=dz<0?-2:dz>0?size.getZ()+1:size.getZ()/2;
@@ -77,7 +107,7 @@ public final class BuilderWork {
         if(matches(l.getBlockState(pos),state)){j.done.set(i);j.tasks.remove(i);d.setDirty();return;}
         var old=l.getBlockState(pos);if(l.getBlockEntity(pos)!=null||old.getDestroySpeed(l,pos)<0||!j.replace&&!available(old,state)){j.status="Conflito: posição preservada "+pos.toShortString();alert(l,j,"conflict",j.status);return;}
         if(!ready(l,pos,state)){j.status="Aguardando suporte/parte anterior em "+pos.toShortString();return;}
-        var wanted=cost(b,j,i);boolean waterNeeded=state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED)&&state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED)&&!(l.getFluidState(pos).is(Fluids.WATER)&&l.getFluidState(pos).isSource());if(waterNeeded&&!has(d.stock,Items.WATER_BUCKET)){s.industry.putString("builder_fetch","minecraft:water_bucket");s.setChanged();if(supply(l,d,j,s,v,Items.WATER_BUCKET))return;j.status="Falta balde de água para bloco alagado.";alert(l,j,"material",j.status);return;}if(!has(d.stock,wanted)){s.industry.putString("builder_fetch",net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(wanted).toString());s.setChanged();if(supply(l,d,j,s,v,wanted))return;j.status="Faltam materiais: "+wanted.getDescription().getString();if(l.getGameTime()-j.alertAt>=300)alert(l,j,"material",missing(l,d,j,b,wanted));return;}
+        var wanted=cost(b,j,i);boolean waterNeeded=needsWater(l,pos,state);if(waterNeeded&&!has(d.stock,Items.WATER_BUCKET)){s.industry.putString("builder_fetch","minecraft:water_bucket");s.setChanged();if(supply(l,d,j,s,v,Items.WATER_BUCKET))return;j.status="Falta balde de água para bloco alagado.";alert(l,j,"material",j.status);return;}if(!has(d.stock,wanted)){s.industry.putString("builder_fetch",net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(wanted).toString());s.setChanged();if(supply(l,d,j,s,v,wanted))return;j.status="Faltam materiais: "+wanted.getDescription().getString();if(l.getGameTime()-j.alertAt>=300)alert(l,j,"material",missing(l,d,j,b,wanted));return;}
         if(d.charge<=0){j.status="Faltam esmeraldas/carga de construção.";alert(l,j,"charge",j.status);return;}
         v.getLookControl().setLookAt(pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,30F,30F);var progress=WorkforceData.get(l).progress(v.getUUID(),Profession.BUILDER.id());int duration=duration(progress.xp());if(ticks>0)task.lastActive=l.getGameTime();task.elapsed=Math.min(duration,task.elapsed+ticks);j.status="Construindo "+b.name+".";d.setDirty();
         if(task.elapsed>=Math.max(0,duration-20)&&(task.flightAt<0||l.getGameTime()-task.flightAt>40)){task.flightAt=l.getGameTime();BuilderNetwork.flight(l,v,pos,state,Math.max(1,duration-task.elapsed));}
@@ -100,7 +130,7 @@ public final class BuilderWork {
         var actor=net.minecraftforge.common.util.FakePlayerFactory.get(l,owner.getGameProfile());actor.setPos(v.position());
         if(!old.isAir()&&MinecraftForge.EVENT_BUS.post(new BlockEvent.BreakEvent(l,pos,old,actor)))return false;
         if(!Employment.valid(l,v.getUUID())||!v.getUUID().equals(s.worker)||!has(d.stock,material)||d.charge<=0)return false;
-        boolean water=state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED)&&state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED)&&!(l.getFluidState(pos).is(Fluids.WATER)&&l.getFluidState(pos).isSource());
+        boolean water=needsWater(l,pos,state);
         var simulated=new SimpleContainer(32);for(int k=0;k<32;k++)simulated.setItem(k,d.stock.getItem(k).copy());if(material!=Items.AIR)simulated.removeItem(slot(simulated,material),1);if(water){int waterSlot=slot(simulated,Items.WATER_BUCKET);if(waterSlot<0){j.status="Falta balde de água para bloco alagado.";return false;}simulated.removeItem(waterSlot,1);if(!insert(simulated,new ItemStack(Items.BUCKET),true))return false;}
         if((material==Items.WATER_BUCKET||material==Items.LAVA_BUCKET)&&!insert(simulated,new ItemStack(Items.BUCKET),true))return false;
         var snapshot=BlockSnapshot.create(l.dimension(),l,pos);if(!l.setBlock(pos,state,2))return false;
@@ -112,6 +142,23 @@ public final class BuilderWork {
         d.charge--;d.refill();l.sendBlockUpdated(pos,old,state,3);l.updateNeighborsAt(pos,state.getBlock());return true;
     }
     public static boolean insert(Container c,ItemStack incoming,boolean commit){var stack=incoming.copy();for(int pass=0;pass<2;pass++)for(int i=0;i<27&&!stack.isEmpty();i++){var at=c.getItem(i);if(pass==0&&ItemStack.isSameItemSameTags(at,stack)&&!at.isEmpty()){int n=Math.min(stack.getCount(),Math.min(c.getMaxStackSize(),at.getMaxStackSize())-at.getCount());if(n>0){if(commit){at.grow(n);c.setChanged();}stack.shrink(n);}}else if(pass==1&&at.isEmpty()){int n=Math.min(stack.getCount(),stack.getMaxStackSize());if(commit){var copy=stack.copy();copy.setCount(n);c.setItem(i,copy);}stack.shrink(n);}}return stack.isEmpty();}
+    private static void supplyFromReserve(ServerLevel l,BuilderData d,BuilderData.Job j,Blueprint b,EmploymentData.Station s,Villager v){
+        for(var task:j.tasks.values()){
+            var pos=target(b,j,task.index);
+            if(!l.hasChunkAt(pos))continue;
+            var state=expected(b,j,task.index);
+            if(matches(l.getBlockState(pos),state)||!ready(l,pos,state))continue;
+            if(needsWater(l,pos,state)&&!has(d.stock,Items.WATER_BUCKET)&&supply(l,d,j,s,v,Items.WATER_BUCKET))return;
+            var material=cost(b,j,task.index);
+            if(!has(d.stock,material)&&supply(l,d,j,s,v,material))return;
+        }
+        if(l.hasChunkAt(s.pos)&&v.distanceToSqr(Vec3.atBottomCenterOf(s.pos.above()))>2.25)reach(v,s.pos.above(),.9);
+    }
+    private static boolean needsWater(ServerLevel l,BlockPos pos,BlockState state){
+        var waterlogged=net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED;
+        var fluid=l.getFluidState(pos);
+        return state.hasProperty(waterlogged)&&state.getValue(waterlogged)&&!(fluid.is(Fluids.WATER)&&fluid.isSource());
+    }
     private static boolean supply(ServerLevel l,BuilderData d,BuilderData.Job j,EmploymentData.Station s,Villager v,Item item){
         if(item==Items.AIR)return false;var candidates=DiscardChests.around(l,s,new AABB(s.pos)).stream().filter(c->c.pos().distSqr(s.pos)<=25&&DiscardChests.canOpen(l,c.pos(),IndustrialWork.actor(l,s,v))).toList();
         for(var c:candidates){int n=slotAny(c.inventory(),item);if(n<0)continue;if(!reach(v,c.pos(),.85)){j.status="Buscando material no baú do posto.";return true;}if(!IndustrialWork.allowed(l,s,v,c.pos(),null,"builder_supply")||!Employment.valid(l,v.getUUID()))return true;var live=DiscardChests.at(l,c.pos());if(live==null)return true;n=slotAny(live,item);if(n<0)return true;var blueprint=d.library.get(d.papers.get(j.paper).schema);int needed=requirements(l,j,blueprint).getOrDefault(item,0);int amount=Math.min(needed,Math.min(live.getItem(n).getCount(),item.getMaxStackSize()));while(amount>0&&!insert(d.stock,new ItemStack(item,amount),false))amount--;if(amount<=0){j.status="Estoque global cheio.";return true;}var removed=live.removeItem(n,amount);if(removed.getCount()==amount){insert(d.stock,removed,true);live.setChanged();d.setDirty();}return true;

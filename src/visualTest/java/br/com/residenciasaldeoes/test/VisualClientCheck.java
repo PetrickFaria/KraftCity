@@ -26,7 +26,16 @@ public final class VisualClientCheck {
     private static volatile int opacityVillagerEntityId=-1;
     private static volatile int[] multiOpacityVillagerIds=new int[0];
     private static final int[] MULTI_OPACITY_PERCENTAGES={0,25,75,100};
-    private static int ticks,clientTicks,courierWaitTicks;
+    private static int ticks,clientTicks,courierWaitTicks,builderRestoreTicks;
+    private static void restoreOperations(Minecraft mc){
+        if(!br.com.kraftcity.test.CommerceVisualCheck.restoreComplete()){
+            br.com.kraftcity.test.CommerceVisualCheck.restoredTick(mc,ticks);
+            return;
+        }
+        br.com.kraftcity.test.BuilderVisualCheck.restoredTick(mc,++builderRestoreTicks);
+        if(builderRestoreTicks==1160)mc.stop();
+    }
+
     @SubscribeEvent public static void tick(TickEvent.ClientTickEvent event){
         if(event.phase!=TickEvent.Phase.END||!Boolean.getBoolean("residencias.visualCheck"))return;
         Minecraft mc=Minecraft.getInstance();
@@ -36,7 +45,8 @@ public final class VisualClientCheck {
         if(Boolean.getBoolean("kraftcity.commerceVisualOnly")){
             if(Boolean.getBoolean("residencias.visualRestore")){
                 if(!scene){scene=true;mc.getSingleplayerServer().execute(()->{var l=mc.getSingleplayerServer().overworld();br.com.kraftcity.test.CommerceVisualCheck.verifyRestore(l);br.com.kraftcity.test.MilitaryVisualCheck.verifyRestore(l);br.com.kraftcity.test.BuilderVisualCheck.verifyRestore(l);});}
-                ticks++;br.com.kraftcity.test.CommerceVisualCheck.restoredTick(mc,ticks);br.com.kraftcity.test.BuilderVisualCheck.restoredTick(mc,ticks);if(ticks==1160)mc.stop();
+                ticks++;
+                restoreOperations(mc);
             }else{if(!scene){scene=true;mc.getSingleplayerServer().execute(()->{var l=mc.getSingleplayerServer().overworld();l.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_DOMOBSPAWNING).set(false,l.getServer());mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()).setGameMode(net.minecraft.world.level.GameType.CREATIVE);});}br.com.kraftcity.test.CommerceVisualCheck.tick(mc,0);}return;
         }
         if(Boolean.getBoolean("kraftcity.builderVisualOnly")){if(Boolean.getBoolean("residencias.visualRestore")){if(!scene){scene=true;mc.getSingleplayerServer().execute(()->br.com.kraftcity.test.BuilderVisualCheck.verifyRestore(mc.getSingleplayerServer().overworld()));}ticks++;br.com.kraftcity.test.BuilderVisualCheck.restoredTick(mc,ticks);if(ticks==1160)mc.stop();}else{if(!scene){scene=true;}br.com.kraftcity.test.BuilderVisualCheck.tick(mc,0);if(br.com.kraftcity.test.BuilderVisualCheck.done())mc.stop();}return;}
@@ -76,9 +86,7 @@ public final class VisualClientCheck {
                 if(!(mc.screen instanceof br.com.residenciasaldeoes.client.AnchorScreen))throw new IllegalStateException("Restored anchor GUI did not open");
                 Screenshot.grab(new File("../build"),"visual-anchor-restored.png",mc.getMainRenderTarget(),message->{});
             }
-            br.com.kraftcity.test.CommerceVisualCheck.restoredTick(mc,ticks);
-            br.com.kraftcity.test.BuilderVisualCheck.restoredTick(mc,ticks);
-            if(ticks==1160)mc.stop();
+            restoreOperations(mc);
             return;
         }
         if(!scene){

@@ -29,7 +29,7 @@ import net.minecraftforge.common.util.FakePlayerFactory;
 public final class CommerceVisualCheck {
     private static final Profession[] JOBS={Profession.BAKER,Profession.CONFECTIONER,Profession.GRILL_COOK};
     private static volatile UUID worker;
-    private static volatile boolean done,nightReady;
+    private static volatile boolean done,nightReady,restoreComplete;
     private static volatile String problem="";
     private static int stage=-1,ticks,readyTicks;private static boolean builderReturned;
     private static final long[] began=new long[3];
@@ -138,13 +138,39 @@ public final class CommerceVisualCheck {
         check(station(l,2).commerce.getLong("heat")==1400,"Vanilla fuel credit not persistent");
         System.out.println("COMMERCE_THREE_CHAINS_WORLD_RESTART_PASSED");
     }
+    public static boolean restoreComplete(){return restoreComplete;}
+
     public static void restoredTick(Minecraft mc,int tick){
-        if(tick==160)mc.getSingleplayerServer().execute(()->mc.getSingleplayerServer().overworld().setDayTime(1000));
-        if(tick==580)mc.getSingleplayerServer().execute(()->{
+        if(tick==160){
+            mc.player.closeContainer();
+            var server=mc.getSingleplayerServer();
+            var playerId=mc.player.getUUID();
+            server.execute(()->{
+                var l=server.overworld();
+                var p=post(0);
+                server.getPlayerList().getPlayer(playerId).teleportTo(l,p.getX()+.5,p.getY(),p.getZ()+3.5,180,20);
+                l.setDayTime(1000);
+            });
+        }
+        if(tick<=160||tick%20!=0||restoreComplete)return;
+        mc.getSingleplayerServer().execute(()->{
             var l=mc.getSingleplayerServer().overworld();var s=station(l,0);
-            check(count(s,Items.BREAD)==s.commerce.getInt("visual_bread_before")+1&&CommercialWork.count(s,Items.WHEAT)==0,"Resumed recipe duplicated/lost output after JVM restart");
-            check(WorkforceData.get(l).progress(s.worker,Profession.BAKER.id()).xp()==s.commerce.getLong("visual_xp_before")+1,"Reloaded recipe XP duplicated");
-            System.out.println("COMMERCE_PARTIAL_RECIPE_RESUMED_ONCE_PASSED");
+            int bread=count(s,Items.BREAD),before=s.commerce.getInt("visual_bread_before");
+            int wheat=CommercialWork.count(s,Items.WHEAT);
+            long xp=WorkforceData.get(l).progress(s.worker,Profession.BAKER.id()).xp();
+            long beforeXp=s.commerce.getLong("visual_xp_before");
+            if(bread==before&&!restoreComplete){
+                check(xp==beforeXp&&wheat>=3,"Partial recipe consumed materials or granted XP early");
+                check(tick<800,"Reloaded baker did not finish: "+s.commerce.getString("status"));
+                return;
+            }
+            check(bread==before+1&&wheat==0,"Resumed recipe duplicated/lost output after JVM restart");
+            check(xp==beforeXp+1,"Reloaded recipe XP duplicated");
+            check(station(l,2).commerce.getLong("heat")==1400,"Unrelated fuel credit changed during baker recovery");
+            if(!restoreComplete){
+                System.out.println("COMMERCE_PARTIAL_RECIPE_RESUMED_ONCE_PASSED");
+                restoreComplete=true;
+            }
         });
     }
     private CommerceVisualCheck(){}

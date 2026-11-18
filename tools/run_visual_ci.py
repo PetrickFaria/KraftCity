@@ -17,7 +17,7 @@ if visual_world.exists():shutil.rmtree(visual_world)
 shutil.copytree(source,visual_world)
 # Inspect the unchanged Portuguese UI labels instead of untranslated English keys.
 Path('run').mkdir(exist_ok=True)
-Path('run/options.txt').write_text('lang:pt_br\nguiScale:3\n')
+Path('run/options.txt').write_text('lang:pt_br\nguiScale:3\nsimulationDistance:8\n')
 log=Path('client-console.log')
 started=time.time()
 with log.open('w') as out:
@@ -67,7 +67,7 @@ if 'INDUSTRY_SIX_JOBS_WORLD_RESTART_PASSED' not in restored_text:
 if 'MILITARY_WORLD_RESTART_PASSED' not in restored_text:sys.exit('Military did not survive JVM restart.')
 for marker in ('COMMERCE_THREE_CHAINS_WORLD_RESTART_PASSED','COMMERCE_PARTIAL_RECIPE_RESUMED_ONCE_PASSED'):
     if marker not in restored_text:sys.exit('Commercial restart missing '+marker)
-for marker in ('BUILDER_WORLD_RESTART_PASSED','BUILDER_RESUMED_ONCE_PASSED'):
+for marker in ('BUILDER_WORLD_RESTART_PASSED','BUILDER_13_BLOCKS_RESERVE_RESUPPLY_PASSED','BUILDER_RESUMED_ONCE_PASSED'):
     if marker not in restored_text:sys.exit('Builder restart missing '+marker)
 if restored.returncode and 'Gradle build daemon disappeared unexpectedly' not in restored_text:
     sys.exit(restored.returncode)
