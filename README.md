@@ -1,11 +1,10 @@
-# KraftCity — Etapa 05: sistema militar
+# KraftCity — Etapa 06: Construtor cooperativo
 
-Sistema militar integrado: Bloco Militar → Soldado, contratação por 15 esmeraldas,
-modos Livre/Guarda/Seguir, Blacklist por criatura, equipamentos e turnos persistentes,
-progressão acumulada e transformação reversível em Soldado Zumbi.
-[Relatório técnico e continuidade da Etapa 05](docs/KRAFTCITY-ETAPA-05.md).
+Construtor residente por 10 esmeraldas, estoque global, captura/importação de schematics,
+impressão com tinta, holograma transformável e obras com até quatro trabalhadores.
+[Uso, decisões, persistência e continuidade da Etapa 06](docs/KRAFTCITY-ETAPA-06.md).
 
-## Base preservada das etapas 01–04
+## Base preservada das etapas 01–05
 
 Minecraft Java 1.19.2 · Forge 43.5.0 · Java 17.
 
@@ -21,9 +20,10 @@ e operações parciais são persistentes e compartilhados entre bloco/trabalhado
 - [Etapa 02: contratos, inventários e vínculos preservados](docs/KRAFTCITY-ETAPA-02.md).
 - [Etapa 03: seis profissões industriais, ferramentas, uso e regras configuráveis](docs/KRAFTCITY-ETAPA-03.md).
 - [Etapa 04: profissões comerciais, combustível, logística e atualização de saves](docs/KRAFTCITY-ETAPA-04.md).
+- [Etapa 05: soldados, equipamentos, Blacklist e turnos](docs/KRAFTCITY-ETAPA-05.md).
 - Novos blocos genéricos: aba KraftCity do Criativo ou
   `/give @s residenciasaldeoes:industrial`, `/give @s residenciasaldeoes:commercial`
-  e `/give @s residenciasaldeoes:military`.
+  `/give @s residenciasaldeoes:military` e `/give @s residenciasaldeoes:builder`.
   Ingredientes/receitas dos novos blocos ainda precisam ser especificados.
 
 As seções de versões abaixo são histórico do subsistema residencial.
