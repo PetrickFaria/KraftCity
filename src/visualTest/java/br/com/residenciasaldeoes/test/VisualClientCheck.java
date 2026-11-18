@@ -33,6 +33,7 @@ public final class VisualClientCheck {
         if(!requested&&mc.screen instanceof TitleScreen){requested=true;mc.createWorldOpenFlows().loadLevel(new TitleScreen(),"visual-check");}
         if(mc.player==null||mc.getSingleplayerServer()==null)return;
         if(!scene&&mc.screen!=null)return;
+        if(Boolean.getBoolean("kraftcity.builderVisualOnly")){if(Boolean.getBoolean("residencias.visualRestore")){if(!scene){scene=true;mc.getSingleplayerServer().execute(()->br.com.kraftcity.test.BuilderVisualCheck.verifyRestore(mc.getSingleplayerServer().overworld()));}ticks++;br.com.kraftcity.test.BuilderVisualCheck.restoredTick(mc,ticks);if(ticks==1160)mc.stop();}else{if(!scene){scene=true;}br.com.kraftcity.test.BuilderVisualCheck.tick(mc,0);if(br.com.kraftcity.test.BuilderVisualCheck.done())mc.stop();}return;}
         if(Boolean.getBoolean("kraftcity.militaryVisualOnly")&&!Boolean.getBoolean("residencias.visualRestore")){
             if(!scene){scene=true;ticks=-2;mc.getSingleplayerServer().execute(()->mc.getSingleplayerServer().overworld().setDayTime(13001));}
             ticks++;if(ticks>=0)br.com.kraftcity.test.MilitaryVisualCheck.tick(mc,ticks);return;
@@ -61,6 +62,7 @@ public final class VisualClientCheck {
                     br.com.kraftcity.test.IndustryVisualCheck.verifyRestore(level);
                     br.com.kraftcity.test.CommerceVisualCheck.verifyRestore(level);
                     br.com.kraftcity.test.MilitaryVisualCheck.verifyRestore(level);
+                    br.com.kraftcity.test.BuilderVisualCheck.verifyRestore(level);
                 });
             }
             ticks++;
@@ -69,7 +71,8 @@ public final class VisualClientCheck {
                 Screenshot.grab(new File("../build"),"visual-anchor-restored.png",mc.getMainRenderTarget(),message->{});
             }
             br.com.kraftcity.test.CommerceVisualCheck.restoredTick(mc,ticks);
-            if(ticks==650)mc.stop();
+            br.com.kraftcity.test.BuilderVisualCheck.restoredTick(mc,ticks);
+            if(ticks==1160)mc.stop();
             return;
         }
         if(!scene){

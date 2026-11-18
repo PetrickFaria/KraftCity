@@ -91,7 +91,7 @@ public final class CommerceVisualCheck {
     }
     public static void tick(Minecraft mc,int global){
         if(stage<0){stage=0;ticks=0;done=false;mc.getSingleplayerServer().execute(()->setup(mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()),0));}
-        check(problem.isEmpty(),problem);ticks++;
+        check(problem.isEmpty(),problem);if(stage==3&&!BuilderVisualCheck.done()){BuilderVisualCheck.tick(mc,0);return;}ticks++;
         if(stage<3){
             int i=stage;
             if(ticks==25){check(mc.screen instanceof WorkScreen,"Commercial hiring screen missing");select(mc);}

@@ -2,7 +2,9 @@ from pathlib import Path
 import os, hashlib, subprocess, shutil, re
 
 version=dict(line.split('=',1) for line in Path('gradle.properties').read_text().splitlines() if '=' in line)['mod_version']
-out=Path('artifact-output');out.mkdir(exist_ok=True)
+out=Path('artifact-output')
+if out.exists():shutil.rmtree(out)
+out.mkdir()
 jar=Path(f'build/libs/kraftcity-{version}.jar')
 shutil.copy2(jar,out/jar.name)
 subprocess.run(['git','archive','--format=zip','--output='+str(out/f'kraftcity-{version}-source.zip'),'HEAD'],check=True)
@@ -10,35 +12,36 @@ for name in ['gametest-console.log','client-console.log','client-restore-console
     p=Path(name)
     if p.exists():shutil.copy2(p,out/name)
 if Path('build/screenshots').exists():shutil.copytree('build/screenshots',out/'screenshots',dirs_exist_ok=True)
-for stage in ('01','02','03','04','05'):
+for stage in ('01','02','03','04','05','06'):
     shutil.copy2(f'docs/KRAFTCITY-ETAPA-{stage}.md',out/f'KRAFTCITY-ETAPA-{stage}.md')
+shutil.copytree('docs/licenses',out/'licenses',dirs_exist_ok=True)
 sha=os.environ['GITHUB_SHA']
 match=re.search(r'All (\d+) required tests passed',Path('gametest-console.log').read_text(errors='replace'))
 assert match, 'GameTest success evidence missing'
 digest=hashlib.sha256(jar.read_bytes()).hexdigest()
 (out/'SHA256SUMS.txt').write_text(f'{digest}  {jar.name}\n')
-(out/f'relatorio-{version}.md').write_text(f"""# KraftCity {version} — etapa 05
+(out/f'relatorio-{version}.md').write_text(f"""# KraftCity {version} — etapa 06
 
 Minecraft Java 1.19.2 / Forge 43.5.0 / Java 17.
 
-- Base aprovada 1.0.98, 3ea9d2a8548e27a9bf1e8f17aed3de3b8a19dad8; branch feature/kraftcity-military.
-- Sistemas residenciais, seis profissões industriais e três comerciais preservados.
-- Militar funcional: 15 esmeraldas, um soldado por posto, bloco físico profissional.
-- Livre/Guarda/Seguir; Seguir exige ataque real do jogador e seleção da criatura.
-- Blacklist categorizada, Minecraft/Mods e busca, Creeper desmarcado por padrão.
-- Inventário de 32 slots preservado + seis equipamentos militares; schema 1 aditivo.
-- Combate, munição, durabilidade, encantamentos, XP compartilhado e turnos/cama.
-- Lv1..5 em 0/75/150/225/300 XP: 5/6/7/8/9 corações; XP em milésimos para preservar frações.
-- Soldado Zumbi com UUID/posto/itens/histórico preservados; Fraqueza/Maçã Dourada e cura vanilla.
-- Morte definitiva respeita doMobLoot/Maldição do Desaparecimento, sem duplicar inventário.
-- {match.group(1)} GameTests obrigatórios aprovados e 12 verificadores estáticos.
-- Cliente gráfico: regressões anteriores e contratos/equipamentos/Blacklist/combate/retorno/cura militares.
-- Nova JVM confirma inventário, XP, vínculos, modos e turnos militares, além dos marcadores anteriores.
-- Provisórios configuráveis: cura normal 200 ticks, contribuição/ordens 1200 ticks, alcance operacional 48.
-- Sem receita arbitrária do Militar genérico; Criativo/comandos. Construtor fora do escopo.
-- Não houve sessão com dois clientes humanos nem testes de todos os mods de criaturas; concorrência automatizada.
-- Regras e retomada: KRAFTCITY-ETAPA-05.md; cliente e servidor com o mesmo JAR, emprego v4/militar v1.
-- Código-fonte, documentação, logs e capturas acompanham o artefato.
+- Base 1.0.99: código 674e55e69446a2bfbefed6249113b303658a5150, documentação b53a8992f9091efa202e53e478c8b5c10e0baa48; branch feature/kraftcity-builder.
+- Sistemas residenciais, industriais, comerciais e militares preservados.
+- Contratação por 10 esmeraldas, posto profissional, vínculos e progressão existentes.
+- Estoque global 3×9, tinta 1000, carga 500, papéis/biblioteca/obras compartilhados entre postos e dimensões.
+- Captura sanitizada e arquivos StructureTemplate NBT compatíveis com Create 0.5.0.i, sem dependência do Create/Flywheel.
+- Gravação em 100 ticks, tinta proporcional, prévia de modelos semitransparente, posição/rotação/espelho confirmados no servidor.
+- Cooperação: seis convocados até 150 blocos, quatro posições, navegação física, coleta em baús/barris até cinco blocos do posto.
+- Preservar padrão, Substituir com proteções, materiais/carga/XP somente por colocação aceita.
+- Níveis cumulativos 0/50/150/300/500 blocos; 100/80/60/40/20 ticks por bloco.
+- Pausa, cancelamento e retomada da mesma obra; tarefas parciais e recibos persistentes, sem tempo offline.
+- Braços alternados, voos visuais sem ItemEntities, indicador de progresso limitado a 64 blocos.
+- {match.group(1)} GameTests obrigatórios aprovados, incluindo os 152 anteriores, e 12 verificadores estáticos.
+- Cliente gráfico: todas as cenas anteriores + nove cenas do Construtor; segunda JVM verifica retomada sem duplicação.
+- Namespace e schemas anteriores preservados; novo kraftcity_builder schema 1; emprego v5 e builder v1.
+- Receitas de fabricação não especificadas: itens/blocos disponíveis no Criativo/comandos, sem ingredientes arbitrários.
+- Limites, privacidade de NBT, casos não suportados e decisões detalhados em KRAFTCITY-ETAPA-06.md.
+- Não houve sessão com dois clientes humanos nem validação exaustiva de todos os mods; concorrência é automatizada.
+- Código-fonte, seis relatórios, licença de referência, logs e capturas acompanham este artefato.
 
 Commit validado: {sha}.
 SHA-256 JAR: {digest}.
