@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  actions: read
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -23,25 +22,6 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
-      - name: Recover graphical failure evidence
-        uses: actions/download-artifact@v4
-        with:
-          name: kraftcity-1.1.01
-          run-id: 44440379451
-          github-token: ${{ github.token }}
-          path: previous-validation
-      - name: Annotate previous client failure
-        run: |
-          python3 - <<'PYCODE'
-          from pathlib import Path
-          for path in Path('previous-validation').rglob('client*-console.log'):
-              lines=path.read_text(errors='replace').splitlines()
-              errors=[line for line in lines if any(term in line for term in (
-                  'Exception', 'Caused by:', 'Error:', 'FAILED', 'FARMER_', 'INDUSTRY_'
-              ))]
-              for line in errors[-18:]:
-                  print('::warning title=Previous graphical validation::'+line.replace('%','%25')[:450])
-          PYCODE
       - name: Enforce sequential release versioning
         env:
           EVENT_NAME: ${{ github.event_name }}

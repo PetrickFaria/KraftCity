@@ -33,7 +33,7 @@ public final class FarmerVisualCheck {
     private static volatile int stage;
     private static UUID worker;
     private static int ticks;
-    private static int capturedStage=-1;
+    private static int capturedStage=-1,visibleStage=-1,stageTicks;
     private FarmerVisualCheck(){}
 
     private static EmploymentData.Station station(ServerLevel l){
@@ -89,6 +89,8 @@ public final class FarmerVisualCheck {
                 previous=planted;
             }
             if(!previous)return;
+            l.setBlock(CANE.below(2),Blocks.STONE.defaultBlockState(),3);
+            l.setBlock(CANE.below(2).east(),Blocks.STONE.defaultBlockState(),3);
             l.setBlock(CANE.below(),Blocks.SAND.defaultBlockState(),3);
             l.setBlock(CANE.below().east(),Blocks.WATER.defaultBlockState(),3);
             for(int height=0;height<3;height++)l.setBlock(CANE.above(height),Blocks.SUGAR_CANE.defaultBlockState(),3);
@@ -99,11 +101,13 @@ public final class FarmerVisualCheck {
             stage=2;
         }else if(stage==2){
             if(!l.getBlockState(CANE.above()).isAir()||!l.getBlockState(FRUIT).isAir())return;
-            check(l.getBlockState(CANE).is(Blocks.SUGAR_CANE)&&l.getBlockState(STEM).is(Blocks.PUMPKIN_STEM),"roots removed");
+            check(l.getBlockState(CANE).is(Blocks.SUGAR_CANE),"cane base was removed: "+l.getBlockState(CANE));
+            check(l.getBlockState(STEM).is(Blocks.PUMPKIN_STEM),"pumpkin stem was removed: "+l.getBlockState(STEM));
             l.setBlock(CHEST,Blocks.BARREL.defaultBlockState(),3);
             s.industry.putLong("discard",CHEST.asLong());
             s.setItem(8,new ItemStack(Items.COBBLESTONE,6));
             l.setDayTime(13001);
+            p.teleportTo(l,CHEST.getX()+2.5,CHEST.getY()+.5,CHEST.getZ()+4.5,150,20);
             stage=3;
         }else if(stage==3){
             var barrel=(BarrelBlockEntity)l.getBlockEntity(CHEST);
@@ -113,6 +117,8 @@ public final class FarmerVisualCheck {
             s.industry.putBoolean("visual_farmer_night",true);
             s.setChanged();
             System.out.println("FARMER_SPIRAL_HARVEST_DISCARD_AND_SLEEP_PASSED");
+            var bed=v.getSleepingPos().orElseThrow();
+            p.teleportTo(l,bed.getX()+.5,bed.getY()+.5,bed.getZ()+3.5,180,20);
             stage=4;
         }
     }
@@ -123,12 +129,14 @@ public final class FarmerVisualCheck {
         ticks++;
         if(ticks==1)server.execute(()->setup(server.getPlayerList().getPlayer(player)));
         if(ticks%5==0&&stage>0&&stage<4)server.execute(()->progress(server.getPlayerList().getPlayer(player)));
-        if(stage>=2&&stage!=capturedStage){
+        if(stage!=visibleStage){visibleStage=stage;stageTicks=0;}
+        stageTicks++;
+        if(stage>=2&&stage!=capturedStage&&stageTicks>=8){
             capturedStage=stage;
             Screenshot.grab(new File("../build"),"visual-farmer-field-"+stage+".png",mc.getMainRenderTarget(),m->{});
         }
         check(ticks<1200,"field or sleep sequence timed out at stage "+stage);
-        return stage==4;
+        return stage==4&&capturedStage==4;
     }
 
     static void verifyRestore(ServerLevel l){
