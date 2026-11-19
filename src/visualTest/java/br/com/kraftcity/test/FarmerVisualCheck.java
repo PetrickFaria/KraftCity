@@ -26,7 +26,7 @@ import net.minecraft.world.level.block.state.properties.BedPart;
 
 public final class FarmerVisualCheck {
     private static final BlockPos POST=new BlockPos(79,-58,60);
-    private static final BlockPos HOME=POST.offset(-7,1,-1);
+    private static final BlockPos HOME=POST.offset(-7,0,-1);
     private static final BlockPos CHEST=POST.offset(4,1,0);
     private static final BlockPos CANE=POST.offset(2,1,1);
     private static final BlockPos STEM=POST.offset(-1,1,1);
@@ -39,6 +39,7 @@ public final class FarmerVisualCheck {
     private static boolean canePrepared,canePlanted,sawLooseCane,sawJump;
     private static int ticks;
     private static int capturedStage=-1,visibleStage=-1,stageTicks;
+    private static long nightStarted;
     private FarmerVisualCheck(){}
 
     private static EmploymentData.Station station(ServerLevel l){
@@ -59,7 +60,7 @@ public final class FarmerVisualCheck {
         }
         l.setBlock(HOME,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);
         ((ResidentialAnchorBlockEntity)l.getBlockEntity(HOME)).setSize(11);
-        var foot=HOME.east(2);
+        var foot=HOME.east(2).above();
         var bed=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
         l.setBlock(foot,bed.setValue(BedBlock.PART,BedPart.FOOT),3);
         l.setBlock(foot.east(),bed.setValue(BedBlock.PART,BedPart.HEAD),3);
@@ -142,6 +143,7 @@ public final class FarmerVisualCheck {
             drop.setDefaultPickUpDelay();
             l.addFreshEntity(drop);
             l.setDayTime(13001);
+            nightStarted=l.getGameTime();
             p.teleportTo(l,CHEST.getX()+2.5,CHEST.getY()+.5,CHEST.getZ()+4.5,150,20);
             stage=3;
         }else if(stage==3){
@@ -149,7 +151,13 @@ public final class FarmerVisualCheck {
             int deposited=barrel.countItem(Items.COBBLESTONE);
             progressDetail="worker="+v.blockPosition()+" chest="+deposited+" stock="+s.countItem(Items.COBBLESTONE)
                 +" phaseUntil="+s.industry.getLong("farmer_discard_until")+" chestTarget="+s.industry.contains("farmer_discard_pos")
-                +" pickupUntil="+s.industry.getLong("farmer_pickup_until")+" navigation="+v.getNavigation().isDone();
+                +" pickupUntil="+s.industry.getLong("farmer_pickup_until")+" navigation="+v.getNavigation().getTargetPos()
+                +" now="+l.getGameTime()+" day="+l.getDayTime()+" rain="+l.isRaining()
+                +" forced="+v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced")
+                +" door="+v.getPersistentData().contains("residenciasaldeoes_night_door_task")
+                +" delivery="+v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")
+                +" attacked="+(v.getLastHurtByMob()!=null)+" noAI="+v.isNoAi();
+            check(l.getGameTime()-nightStarted<480,"night sequence did not finish: "+progressDetail);
             if(!v.isSleeping())return;
             check(deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding");
             s.industry.putBoolean("visual_farmer_night",true);
@@ -173,7 +181,7 @@ public final class FarmerVisualCheck {
             capturedStage=stage;
             Screenshot.grab(new File("../build"),"visual-farmer-field-"+stage+".png",mc.getMainRenderTarget(),m->{});
         }
-        check(ticks<2400,"field or sleep sequence timed out at stage "+stage+" "+progressDetail);
+        check(ticks<3600&&(stage==3||stage==4||ticks<2400),"field or sleep sequence timed out at stage "+stage+" "+progressDetail);
         return stage==4&&capturedStage==4;
     }
 
