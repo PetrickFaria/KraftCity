@@ -35,17 +35,18 @@ public final class IndustrialWork {
     public static boolean ownsNavigation(Villager v){
         if(!(v.level instanceof ServerLevel l))return false;
         var s=EmploymentData.get(l).assigned(v.getUUID());
-        return s!=null&&industrial(s)&&day(l)&&!v.isSleeping()&&!l.isRaining()
+        return s!=null&&industrial(s)&&(day(l)||s.profession==Profession.FARMER&&FarmerLogistics.ending(v))&&!v.isSleeping()&&!l.isRaining()
             &&!v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced")
             &&!v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")
             &&!v.getPersistentData().contains("residenciasaldeoes_night_door_task");
     }
     public static boolean day(ServerLevel l){long t=Math.floorMod(l.getDayTime(),24000);return t<12000||t>=23000;}
-    public static AABB area(ServerLevel l,EmploymentData.Station s){int r=IndustrialRules.size(l,s)/2;return new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
+    public static AABB area(ServerLevel l,EmploymentData.Station s){int r=IndustrialRules.size(l,s)/2;return s.profession==Profession.FARMER ? new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,6,r+1)) : new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
     public static void tick(ServerLevel l,EmploymentData.Station s){
         if(!industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
         if(!day(l)||l.isRaining()||v.isSleeping()){
             s.industry.remove("fish_elapsed");
+            if(!day(l)&&s.profession==Profession.FARMER)return;
             if(!day(l)){
                 if(s.industry.getLong("deposited_day")!=Math.floorDiv(l.getDayTime(),24000)+1){
                     deposit(l,s,v);s.industry.putLong("deposited_day",Math.floorDiv(l.getDayTime(),24000)+1);s.setChanged();
@@ -65,7 +66,7 @@ public final class IndustrialWork {
         replenish(s);showTool(v,s);
         if(!ForgeEventFactory.getMobGriefingEvent(l,v)){alert(l,s,"protection","Trabalho bloqueado pela proteção/mobGriefing.");return;}
         switch(s.profession){
-            case FARMER->farm(l,s,v);
+            case FARMER->{if(!FarmerLogistics.collect(l,s,v))FarmerWork.tick(l,s,v);}
             case BUTCHER->animals(l,s,v,Profession.BUTCHER);
             case SHEPHERD->animals(l,s,v,Profession.SHEPHERD);
             case FISHERMAN->fish(l,s,v);
@@ -99,12 +100,20 @@ public final class IndustrialWork {
     }
     private static void showTool(Villager v,EmploymentData.Station s){
         if(!v.getPersistentData().contains("KCOriginalHand"))v.getPersistentData().put("KCOriginalHand",v.getMainHandItem().save(new CompoundTag()));
-        ItemStack view=s.getItem(27).copy();if(!ItemStack.matches(v.getMainHandItem(),view)){
+        if(s.profession==Profession.FARMER&&!v.getPersistentData().contains("KCFarmerOriginalPickup")){
+            v.getPersistentData().putBoolean("KCFarmerOriginalPickup",v.canPickUpLoot());
+            v.setCanPickUpLoot(false);
+        }
+        ItemStack view=s.getItem(27).copy();if(s.profession==Profession.FARMER&&view.getItem() instanceof HoeItem)view.getOrCreateTag().putBoolean("KCFarmerDisplay",true);if(!ItemStack.matches(v.getMainHandItem(),view)){
             // A visual mirror, never a second inventory; empty drop chance, restored on release.
             v.setItemSlot(EquipmentSlot.MAINHAND,view);v.setDropChance(EquipmentSlot.MAINHAND,0);
         }
     }
     public static void restoreHand(Villager v){
+        if(v.getPersistentData().contains("KCFarmerOriginalPickup")){
+            v.setCanPickUpLoot(v.getPersistentData().getBoolean("KCFarmerOriginalPickup"));
+            v.getPersistentData().remove("KCFarmerOriginalPickup");
+        }
         if(v.getPersistentData().contains("KCOriginalHand")){v.setItemSlot(EquipmentSlot.MAINHAND,ItemStack.of(v.getPersistentData().getCompound("KCOriginalHand")));v.setDropChance(EquipmentSlot.MAINHAND,.085F);v.getPersistentData().remove("KCOriginalHand");}
     }
     private static void move(EmploymentData.Station s,int slot,Predicate<ItemStack> match){
@@ -155,15 +164,14 @@ public final class IndustrialWork {
         return br.com.kraftcity.logistics.DiscardChests.around(l,s,area(l,s)).stream().findFirst().map(br.com.kraftcity.logistics.DiscardChests.Access::pos).orElse(null);
     }
     public static void deposit(ServerLevel l,EmploymentData.Station s,Villager v){
+        if(s.profession==Profession.FARMER){FarmerLogistics.depositDirect(l,s,v);return;}
         Container chest=chest(l,s);if(chest==null){alert(l,s,"discard","Falta baú de descarte a até cinco blocos do limite; itens continuam no posto.");return;}
         BlockPos p=chestPosition(l,s);if(p==null||!allowed(l,s,v,p,null,"deposit"))return;
-        int reserve=IndustrialRules.size(l,s)*IndustrialRules.size(l,s);
         for(int i=0;i<27;i++){
-            var stack=s.getItem(i);int keep=s.profession==Profession.FARMER&&(plant(stack)!=null||stack.is(Items.SUGAR_CANE))?Math.min(reserve,stack.getCount()):0;
-            if(keep>0)reserve-=keep;
-            int count=stack.getCount()-keep;if(count<=0)continue;
-            ItemStack excess=stack.copy();excess.setCount(count);ItemStack remainder=transfer(chest,excess);
-            stack.shrink(count-remainder.getCount());s.setChanged();
+            var stack=s.getItem(i);
+            if(stack.isEmpty())continue;
+            var remainder=transfer(chest,stack);
+            s.setItem(i,remainder);
         }
     }
     public static ItemStack transfer(Container target,ItemStack source){
@@ -190,83 +198,14 @@ public final class IndustrialWork {
             }
         }
     }
-    // Vanilla crop semantics: seeds are reserved before bonus produce, no second loot invocation.
-    public static BlockState plant(ItemStack item){
-        if(item.getItem() instanceof BlockItem b&&b.getBlock() instanceof CropBlock)return b.getBlock().defaultBlockState();return null;
-    }
-    private static boolean breakAllowed(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos p){
+    static boolean breakAllowed(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos p){
         return allowed(l,s,v,p,null,"harvest")&&!MinecraftForge.EVENT_BUS.post(new BlockEvent.BreakEvent(l,p,l.getBlockState(p),actor(l,s,v)));
     }
-    private static boolean placeAllowed(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos p,BlockState next){
+    static boolean placeAllowed(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos p,BlockState next){
         if(!allowed(l,s,v,p,null,"plant"))return false;
         var snap=BlockSnapshot.create(l.dimension(),l,p);var old=l.getBlockState(p);
         // Place event observes proposed state without publishing updates. Restore before transaction.
         l.setBlock(p,next,16);boolean denied=ForgeEventFactory.onBlockPlace(actor(l,s,v),snap,Direction.UP);l.setBlock(p,old,16);return !denied;
-    }
-    private static void farm(ServerLevel l,EmploymentData.Station s,Villager v){
-        var tool=s.getItem(27);if(!(tool.getItem() instanceof HoeItem)){alert(l,s,"tool","Falta enxada/arador utilizável.");return;}
-        int size=IndustrialRules.size(l,s),total=size*size*5,cursor=s.industry.getInt("cursor");
-        for(int scan=0;scan<32;scan++){
-            int index=Math.floorMod(cursor+scan,total),column=index/5;
-            BlockPos p=s.pos.offset(column%size-size/2,index%5-2,column/size-size/2);
-            if(!l.hasChunkAt(p))continue;BlockState state=l.getBlockState(p);
-            if(state.is(Blocks.SUGAR_CANE)&&l.getBlockState(p.below()).is(Blocks.SUGAR_CANE)&&!l.getBlockState(p.below(2)).is(Blocks.SUGAR_CANE)&&l.hasChunkAt(p.above())&&l.getBlockState(p.above()).is(Blocks.SUGAR_CANE)&&!l.getBlockState(p.above(2)).is(Blocks.SUGAR_CANE)){
-                if(!reach(v,p)){s.industry.putInt("cursor",index);s.setChanged();return;}
-                if(!breakAllowed(l,s,v,p)||!breakAllowed(l,s,v,p.above()))continue;
-                var cane=new ItemStack(Items.SUGAR_CANE,2);if(!insert(s,cane,false)){alert(l,s,"space","Sem espaço para cana; coluna preservada.");return;}
-                l.setBlock(p.above(),Blocks.AIR.defaultBlockState(),2);l.setBlock(p,Blocks.AIR.defaultBlockState(),3);
-                insert(s,cane,true);IndustrialRules.wear(l,s,tool);IndustrialRules.progress(l,s);
-                s.industry.putInt("cursor",(index+1)%total);s.setChanged();return;
-            }
-            if(state.getBlock() instanceof CropBlock crop){
-                if(!crop.isMaxAge(state)){
-                    if(!s.getItem(28).is(Items.BONE_MEAL))continue;
-                    if(!reach(v,p)){s.industry.putInt("cursor",index);s.setChanged();return;}
-                    if(allowed(l,s,v,p,null,"bonemeal")&&crop.isValidBonemealTarget(l,p,state,false)){
-                        if(crop.isBonemealSuccess(l,l.random,p,state))crop.performBonemeal(l,l.random,p,state);
-                        s.getItem(28).shrink(1);s.industry.putInt("cursor",index);s.setChanged();return;
-                    }continue;
-                }
-                if(!reach(v,p)){s.industry.putInt("cursor",index);s.setChanged();return;}
-                if(!breakAllowed(l,s,v,p))continue;
-                Item seed=state.getBlock()==Blocks.WHEAT?Items.WHEAT_SEEDS:state.getBlock()==Blocks.BEETROOTS?Items.BEETROOT_SEEDS:state.getBlock()==Blocks.POTATOES?Items.POTATO:state.getBlock()==Blocks.CARROTS?Items.CARROT:state.getBlock()==Blocks.NETHER_WART?Items.NETHER_WART:null;
-                var loot=new ArrayList<>(Block.getDrops(state,l,p,l.getBlockEntity(p),v,tool));
-                ItemStack reserve=ItemStack.EMPTY;
-                if(seed!=null)for(var drop:loot)if(drop.is(seed)&&!drop.isEmpty()){reserve=drop.split(1);break;}
-                int input=find(s,x->x.getItem()==seed,0,27);
-                boolean fromInventory=reserve.isEmpty();
-                if(reserve.isEmpty()&&input>=0){reserve=s.getItem(input).copy();reserve.setCount(1);}
-                boolean replant=!reserve.isEmpty()&&placeAllowed(l,s,v,p,crop.getStateForAge(0));
-                // If blocked replant, don't consume/reserve a seed or alter this configured bed.
-                if(!replant)continue;
-                Item produce=state.is(Blocks.WHEAT)?Items.WHEAT:state.is(Blocks.BEETROOTS)?Items.BEETROOT:state.is(Blocks.POTATOES)?Items.POTATO:state.is(Blocks.CARROTS)?Items.CARROT:null;
-                if(produce!=null){loot.removeIf(x->x.is(produce));loot.add(new ItemStack(produce,1+l.random.nextInt(IndustrialTools.tier(tool)+1)));}
-                if(!exchange(s,fromInventory?input:-1,1,loot,false)){alert(l,s,"space","Inventário cheio; colheita preservada no terreno.");return;}
-                if(l.setBlock(p,crop.getStateForAge(0),3)){
-                    // A seed taken from storage is used only when loot had none.
-                    exchange(s,fromInventory?input:-1,1,loot,true);IndustrialRules.wear(l,s,tool);IndustrialRules.progress(l,s);
-                }
-                s.industry.putInt("cursor",(index+1)%total);s.setChanged();return;
-            }
-            if(state.isAir()&&l.hasChunkAt(p.below())){
-                int caneSlot=find(s,x->x.is(Items.SUGAR_CANE),0,27);
-                var cane=Blocks.SUGAR_CANE.defaultBlockState();
-                if(caneSlot>=0&&!l.getBlockState(p.below()).is(Blocks.SUGAR_CANE)&&cane.canSurvive(l,p)){
-                    if(!reach(v,p)){s.industry.putInt("cursor",index);s.setChanged();return;}
-                    if(placeAllowed(l,s,v,p,cane)&&l.setBlock(p,cane,3)){s.removeItem(caneSlot,1);s.setChanged();}return;
-                }
-                int input=find(s,x->plant(x)!=null,0,27);if(input<0)continue;
-                BlockState crop=plant(s.getItem(input));BlockState soil=l.getBlockState(p.below());
-                boolean till=soil.is(Blocks.DIRT)||soil.is(Blocks.GRASS_BLOCK)||soil.is(Blocks.DIRT_PATH);
-                if(!soil.is(Blocks.FARMLAND)&&!till)continue;
-                if(!reach(v,p)){s.industry.putInt("cursor",index);s.setChanged();return;}
-                if(!placeAllowed(l,s,v,p,crop))continue;
-                if(till){if(!breakAllowed(l,s,v,p.below())||!placeAllowed(l,s,v,p.below(),Blocks.FARMLAND.defaultBlockState()))continue;if(!l.setBlock(p.below(),Blocks.FARMLAND.defaultBlockState(),3))continue;IndustrialRules.wear(l,s,tool);}
-                if(crop.canSurvive(l,p)&&l.setBlock(p,crop,3)){s.removeItem(input,1);s.setChanged();}
-                s.industry.putInt("cursor",(index+1)%total);return;
-            }
-        }
-        s.industry.putInt("cursor",(cursor+32)%total);s.setChanged();
     }
     private static boolean livestock(Animal a){return a instanceof Cow||a instanceof Pig||a instanceof Sheep||a instanceof Chicken||a instanceof Rabbit;}
     private static void animals(ServerLevel l,EmploymentData.Station s,Villager v,Profession profession){

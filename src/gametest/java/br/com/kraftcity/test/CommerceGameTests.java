@@ -191,16 +191,16 @@ public final class CommerceGameTests {
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void complete_farmer_to_baker_chain_uses_real_mature_crop_and_discard(GameTestHelper h){
         var f=fixture(h,Profession.BAKER);var farm=industrialSource(h,f,Profession.FARMER);var chestPos=farm.p.west();var chest=barrel(f,chestPos);chest.clearContent();
-        farm.s.setItem(27,new ItemStack(Items.NETHERITE_HOE));farm.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,25));var crop=farm.p.east();farm.l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);
-        for(int i=0;i<3&&count(farm,Items.WHEAT)<3;i++){farm.l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);farm.s.industry.putInt("cursor",67);IndustrialWork.tick(farm.l,farm.s);}
+        farm.s.setItem(27,new ItemStack(Items.NETHERITE_HOE));farm.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,25));var crop=farm.p.east().above();farm.l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);
+        for(int i=0;i<3&&count(farm,Items.WHEAT)<3;i++){farm.l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);farm.s.industry.putInt("cursor",65);IndustrialWork.tick(farm.l,farm.s);}
         int produced=count(farm,Items.WHEAT);check(produced>=3,"real farmer wheat production");IndustrialWork.deposit(farm.l,farm.s,farm.v);
         takeAndProduce(f,chestPos);check(count(f,Items.BREAD)==1,"real farmer-baker chain output");int left=0;for(int slot=0;slot<27;slot++)if(chest.getItem(slot).is(Items.WHEAT))left+=chest.getItem(slot).getCount();check(left+3==produced,"wheat conservation");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void complete_farmer_to_confectioner_chain_harvests_mature_cane_leaving_root(GameTestHelper h){
         var f=fixture(h,Profession.CONFECTIONER);var farm=industrialSource(h,f,Profession.FARMER);var chestPos=farm.p.west();var chest=barrel(f,chestPos);chest.clearContent();farm.s.setItem(27,new ItemStack(Items.IRON_HOE));farm.s.setItem(0,new ItemStack(Items.SUGAR_CANE,25));
-        var root=farm.p.east();farm.l.setBlock(root.below(2),Blocks.STONE.defaultBlockState(),3);farm.l.setBlock(root.below(),Blocks.SAND.defaultBlockState(),3);farm.l.setBlock(root.below().south(),Blocks.WATER.defaultBlockState(),3);
-        for(int n=0;n<3;n++)farm.l.setBlock(root.above(n),Blocks.SUGAR_CANE.defaultBlockState(),3);farm.s.industry.putInt("cursor",67);IndustrialWork.tick(farm.l,farm.s);
+        var root=farm.p.east().above();farm.v.setPos(farm.p.getX()+.5,farm.p.getY()+1,farm.p.getZ()+1.5);farm.l.setBlock(root.below(2),Blocks.STONE.defaultBlockState(),3);farm.l.setBlock(root.below(),Blocks.SAND.defaultBlockState(),3);farm.l.setBlock(root.below().south(),Blocks.WATER.defaultBlockState(),3);
+        for(int n=0;n<3;n++)farm.l.setBlock(root.above(n),Blocks.SUGAR_CANE.defaultBlockState(),3);farm.s.industry.putInt("cursor",66);IndustrialWork.tick(farm.l,farm.s);
         check(farm.l.getBlockState(root).is(Blocks.SUGAR_CANE)&&farm.l.getBlockState(root.above()).isAir()&&count(farm,Items.SUGAR_CANE)==27,"cane maturity/root conservation");
         IndustrialWork.deposit(farm.l,farm.s,farm.v);takeAndProduce(f,chestPos);check(count(f,Items.SUGAR)==1&&farm.s.getItem(0).getCount()==25,"real farmer-confectioner chain/reserve");h.succeed();
     }
@@ -239,13 +239,13 @@ public final class CommerceGameTests {
 
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void farmer_cane_waits_for_natural_three_high_and_does_not_build_or_break_oversized_columns(GameTestHelper h){
-        var f=fixture(h,Profession.CONFECTIONER);var farm=industrialSource(h,f,Profession.FARMER);farm.s.setItem(27,new ItemStack(Items.IRON_HOE));farm.s.setItem(0,new ItemStack(Items.SUGAR_CANE,25));var root=farm.p.east();
+        var f=fixture(h,Profession.CONFECTIONER);var farm=industrialSource(h,f,Profession.FARMER);farm.s.setItem(27,new ItemStack(Items.IRON_HOE));farm.s.setItem(0,new ItemStack(Items.SUGAR_CANE,25));var root=farm.p.east().above();farm.v.setPos(farm.p.getX()+.5,farm.p.getY()+1,farm.p.getZ()+1.5);
         farm.l.setBlock(root.below(2),Blocks.STONE.defaultBlockState(),3);farm.l.setBlock(root.below(),Blocks.SAND.defaultBlockState(),3);farm.l.setBlock(root.below().south(),Blocks.WATER.defaultBlockState(),3);
-        farm.l.setBlock(root,Blocks.SUGAR_CANE.defaultBlockState(),3);farm.l.setBlock(root.above(),Blocks.SUGAR_CANE.defaultBlockState(),3);farm.s.industry.putInt("cursor",67);IndustrialWork.tick(farm.l,farm.s);
+        farm.l.setBlock(root,Blocks.SUGAR_CANE.defaultBlockState(),3);farm.l.setBlock(root.above(),Blocks.SUGAR_CANE.defaultBlockState(),3);farm.s.industry.putInt("cursor",66);IndustrialWork.tick(farm.l,farm.s);
         check(farm.l.getBlockState(root.above()).is(Blocks.SUGAR_CANE)&&farm.l.getBlockState(root.above(2)).isAir()&&count(farm,Items.SUGAR_CANE)==25,"immature cane harvested or instant maturity planted");
-        farm.l.setBlock(root.above(2),Blocks.SUGAR_CANE.defaultBlockState(),3);farm.l.setBlock(root.above(3),Blocks.SUGAR_CANE.defaultBlockState(),3);farm.s.industry.putInt("cursor",67);IndustrialWork.tick(farm.l,farm.s);
+        farm.l.setBlock(root.above(2),Blocks.SUGAR_CANE.defaultBlockState(),3);farm.l.setBlock(root.above(3),Blocks.SUGAR_CANE.defaultBlockState(),3);farm.s.industry.putInt("cursor",66);IndustrialWork.tick(farm.l,farm.s);
         check(farm.l.getBlockState(root.above(3)).is(Blocks.SUGAR_CANE)&&count(farm,Items.SUGAR_CANE)==25,"oversized column partially destroyed");
-        farm.l.setBlock(root.above(3),Blocks.AIR.defaultBlockState(),3);farm.s.industry.putInt("cursor",67);IndustrialWork.tick(farm.l,farm.s);check(count(farm,Items.SUGAR_CANE)==27&&farm.l.getBlockState(root).is(Blocks.SUGAR_CANE),"mature cane harvest");h.succeed();
+        farm.l.setBlock(root.above(3),Blocks.AIR.defaultBlockState(),3);farm.s.industry.putInt("cursor",66);IndustrialWork.tick(farm.l,farm.s);check(count(farm,Items.SUGAR_CANE)==27&&farm.l.getBlockState(root).is(Blocks.SUGAR_CANE),"mature cane harvest");h.succeed();
     }
 
 }

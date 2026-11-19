@@ -19,6 +19,7 @@ import net.minecraft.world.level.block.*;
 
 /** Six production scenes use the same public server jobs and synchronized menus as real play. */
 public final class IndustryVisualCheck {
+    private static boolean farmerSceneDone;
     private static final Map<Profession,UUID> ids=new EnumMap<>(Profession.class);
     private static void check(boolean value,String message){if(!value)throw new IllegalStateException(message);}
     private static BlockPos post(int i){return new BlockPos(100+i*18,-57,10);}
@@ -43,7 +44,7 @@ public final class IndustryVisualCheck {
         l.setBlock(pos,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);var s=station(l,i);s.setItem(31,new ItemStack(Items.EMERALD,10));check(Employment.hire(p,s,v.getUUID(),profession).equals("ok"),"Industry visual hire");ids.put(profession,s.id);
         var target=pos.east();
         switch(profession){
-            case FARMER->{s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,10));s.setItem(27,new ItemStack(IndustrialTools.HOE.get()));s.setItem(30,new ItemStack(Items.WATER_BUCKET));l.setBlock(target.below(),Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(target,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);s.industry.putInt("cursor",67);}
+            case FARMER->{s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,10));s.setItem(27,new ItemStack(IndustrialTools.HOE.get()));s.setItem(30,new ItemStack(Items.WATER_BUCKET));l.setBlock(target,Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(target.above(),Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);s.industry.putInt("cursor",67);}
             case BUTCHER->{s.setItem(27,new ItemStack(IndustrialTools.AXE.get()));var old=animal(l,s,EntityType.COW);old.getPersistentData().putLong("KCIndustryBorn",-1000000);animal(l,s,EntityType.COW);animal(l,s,EntityType.COW);}
             case SHEPHERD->{s.setItem(27,new ItemStack(IndustrialTools.SHEARS.get(3).get()));animal(l,s,EntityType.SHEEP);}
             case FISHERMAN->{s.setItem(27,new ItemStack(IndustrialTools.RODS.get(3).get()));var water=pos.offset(0,-2,0);for(BlockPos at:BlockPos.betweenClosed(water.offset(-1,-1,-1),water.offset(1,1,1)))l.setBlock(at,Blocks.WATER.defaultBlockState(),3);s.industry.putLong("water",water.asLong());s.industry.putInt("fish_elapsed",IndustrialRules.fishingTicks(EmploymentConfig.FISH_TICKS.get(),1));}
@@ -52,7 +53,8 @@ public final class IndustryVisualCheck {
             default->throw new IllegalStateException();
         }
         // Cursor at (x=+1,z=0,y=0) for the initial 5x5 area.
-        if(profession==Profession.FARMER||profession==Profession.BEEKEEPER)s.industry.putInt("cursor",67);
+        if(profession==Profession.FARMER)s.industry.putInt("cursor",65);
+        if(profession==Profession.BEEKEEPER)s.industry.putInt("cursor",67);
         IndustrialWork.tick(l,s);
         boolean worked=switch(profession){
             case FARMER->count(s,Items.WHEAT)>0;
@@ -81,10 +83,11 @@ public final class IndustryVisualCheck {
             if(phase==0)mc.getSingleplayerServer().execute(()->setup(mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()),i));
             if(phase==45){check(mc.screen instanceof WorkScreen,"Industry menu missing");check(mc.player.containerMenu instanceof WorkMenu m&&m.slots.size()==68&&m.snapshot!=null,"Industry menu not synchronized");}
             if(phase==50)Screenshot.grab(new File("../build"),"visual-industry-"+Profession.values()[i].path+".png",mc.getMainRenderTarget(),message->{});
-            if(i==0&&phase==53){check(bounds().stream().anyMatch(b->b.pos().equals(post(0))&&b.size()==5),"Blue bounds not synchronized");toggle(mc);}
+            if(i==0&&phase==53){check(bounds().stream().anyMatch(b->b.pos().equals(post(0))&&b.size()==5&&b.farmer()),"Blue bounds not synchronized");toggle(mc);}
             if(i==0&&phase==56){check(bounds().stream().noneMatch(b->b.pos().equals(post(0))),"Blue toggle off left ghost");toggle(mc);}
             if(phase==60)mc.player.closeContainer();
-            if(i==0&&phase==61)mc.getSingleplayerServer().execute(()->{
+            if(i==0&&phase==61)Screenshot.grab(new File("../build"),"visual-farmer-hoe.png",mc.getMainRenderTarget(),message->{});
+            if(i==0&&phase==62)mc.getSingleplayerServer().execute(()->{
                 var player=mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());var pos=post(0);
                 player.teleportTo(player.getLevel(),pos.getX()+7.5,pos.getY()+4,pos.getZ()+7.5,135F,35F);
             });
@@ -97,7 +100,10 @@ public final class IndustryVisualCheck {
             l.setDayTime(13001);EmploymentVisualCheck.restoreNightFixture(l);
             for(var id:ids.values()){var s=EmploymentData.get(l).station(id);s.industry.putString("visual_test","six_jobs_passed");s.setChanged();}
         });
-        if(elapsed>=450)CommerceVisualCheck.tick(mc,ticks);
+        if(elapsed>=450){
+            if(!farmerSceneDone){farmerSceneDone=FarmerVisualCheck.tick(mc);return;}
+            CommerceVisualCheck.tick(mc,ticks);
+        }
     }
     public static void verifyRestore(ServerLevel l){
         for(int i=0;i<6;i++){
@@ -108,7 +114,9 @@ public final class IndustryVisualCheck {
             if(i==2)check(count(s,Items.WHITE_WOOL)>0,"Shepherd output lost");
             if(i==3)check(count(s,Items.COD)+count(s,Items.SALMON)+count(s,Items.TROPICAL_FISH)+count(s,Items.PUFFERFISH)>0,"Fish output lost");
             if(i==5)check(count(s,Items.HONEY_BOTTLE)>0,"Honey output lost");
-        }System.out.println("INDUSTRY_SIX_JOBS_WORLD_RESTART_PASSED");
+        }
+        FarmerVisualCheck.verifyRestore(l);
+        System.out.println("INDUSTRY_SIX_JOBS_WORLD_RESTART_PASSED");
     }
     private IndustryVisualCheck(){}
 }

@@ -33,10 +33,17 @@ public final class IndustrialEvents {
         var s=EmploymentData.get(p.getLevel()).station(id);BlockPos pos=e.getPos();
         if(s!=null&&s.active&&s.dimension.equals(p.level.dimension())&&p.distanceToSqr(Vec3.atCenterOf(s.pos))<4096
                 &&br.com.kraftcity.logistics.DiscardChests.inRange(IndustrialWork.area(p.getLevel(),s),pos)
-                &&(p.level.getBlockEntity(pos) instanceof ChestBlockEntity||p.level.getBlockEntity(pos) instanceof BarrelBlockEntity)){
+                &&(p.level.getBlockEntity(pos) instanceof ChestBlockEntity||p.level.getBlockEntity(pos) instanceof BarrelBlockEntity
+                    ||s.profession==Profession.FARMER&&FarmerLogistics.supports(p.getLevel(),pos))){
             s.industry.putLong("discard",pos.asLong());s.industry.putString("discard_dimension",s.dimension.location().toString());br.com.kraftcity.logistics.DiscardChests.invalidate(p.getLevel());s.setChanged();p.sendSystemMessage(net.minecraft.network.chat.Component.literal("Baú de Descarte associado ao posto."));
         }else p.sendSystemMessage(net.minecraft.network.chat.Component.literal("Associação recusada: escolha baú ou barril a até cinco blocos do limite da área do posto."));
         e.setCanceled(true);e.setCancellationResult(InteractionResult.SUCCESS);
+    }
+    @SubscribeEvent public void trample(net.minecraftforge.event.level.BlockEvent.FarmlandTrampleEvent e){
+        if(e.getEntity() instanceof Villager v&&v.level instanceof ServerLevel l){
+            var station=EmploymentData.get(l).assigned(v.getUUID());
+            if(station!=null&&station.profession==Profession.FARMER)e.setCanceled(true);
+        }
     }
     @SubscribeEvent public void animal(PlayerInteractEvent.EntityInteract e){
         if(!(e.getEntity() instanceof ServerPlayer p)||!(e.getTarget() instanceof Animal a)||!p.getPersistentData().hasUUID("KCRegisterAnimal"))return;

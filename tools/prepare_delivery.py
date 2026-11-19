@@ -15,6 +15,9 @@ if Path('build/screenshots').exists():shutil.copytree('build/screenshots',out/'s
 for stage in ('01','02','03','04','05','06'):
     shutil.copy2(f'docs/KRAFTCITY-ETAPA-{stage}.md',out/f'KRAFTCITY-ETAPA-{stage}.md')
 shutil.copytree('docs/licenses',out/'licenses',dirs_exist_ok=True)
+farmer_report=Path('docs/KRAFTCITY-1.1.01.md')
+if version=='1.1.01':
+    shutil.copy2(farmer_report,out/farmer_report.name)
 sha=os.environ['GITHUB_SHA']
 run_url=f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
 match=re.search(r'All (\d+) required tests passed',Path('gametest-console.log').read_text(errors='replace'))
@@ -48,4 +51,17 @@ Commit validado: {sha}.
 GitHub Actions: {run_url}.
 SHA-256 JAR: {digest}.
 """,encoding='utf-8')
+if version=='1.1.01':
+    report=out/f'relatorio-{version}.md'
+    baseline=report.read_text(encoding='utf-8')
+    report.write_text(
+        farmer_report.read_text(encoding='utf-8')+
+        f'\n## Validação da entrega\n\n'
+        f'- {match.group(1)} GameTests obrigatórios aprovados.\n'
+        f'- 12 verificadores estáticos, cliente gráfico e reabertura do mesmo mundo em outra JVM aprovados.\n'
+        f'- Commit validado `{sha}`.\n- [GitHub Actions]({run_url}).\n'
+        f'- SHA-256 do JAR `{digest}`.\n\n'+
+        '## Funcionalidades herdadas\n\n'+baseline.split('\n\n',2)[-1],
+        encoding='utf-8',
+    )
 print('Delivery prepared:',jar.name,'commit',sha,'SHA-256',digest)

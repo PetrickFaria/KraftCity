@@ -24,7 +24,7 @@ with log.open('w') as out:
     result=subprocess.run(['xvfb-run','-a','-s','-screen 0 1920x1080x24','bash','gradlew','--no-daemon','-Pvisual_check=true','runClient'],stdout=out,stderr=subprocess.STDOUT)
 text=log.read_text(errors='replace')
 print('\n'.join(text.splitlines()[-35:]))
-for name in ['visual-chests.png','visual-doors.png','visual-anchor-slots.png','visual-reference-door.png','visual-chest-cavity.png','visual-courier-deposit.png','visual-courier-closed.png','visual-steve-opacity-multiple.png','visual-kraftcity-limits-two.png','visual-kraftcity-limits-removed.png','visual-kraftcity-limits-off.png','visual-industrial-hiring.png','visual-farmer-inventory.png','visual-worker-inventory.png','visual-replaced-workstation.png','visual-commercial-pending.png','visual-rehired-progress.png','visual-residential-employed.png','visual-industry-blue-limits.png','visual-military-hiring.png','visual-military-soldier.png','visual-military-blacklist.png','visual-military-guard.png','visual-military-zombie.png','visual-builder-hiring.png','visual-builder-global.png','visual-builder-global-fifty.png','visual-builder-capture.png','visual-builder-materials.png','visual-builder-print.png','visual-builder-hologram.png','visual-builder-cooperative.png','visual-builder-flight.png','visual-commerce-hiring.png','visual-commerce-baker.png','visual-commerce-confectioner.png','visual-commerce-grill_cook.png']+[f'visual-industry-{name}.png' for name in ('farmer','butcher','shepherd','fisherman','breeder','beekeeper')]+[f'visual-steve-opacity-{percent}.png' for percent in (0,10,25,50,75,90,100)]:
+for name in ['visual-chests.png','visual-doors.png','visual-anchor-slots.png','visual-reference-door.png','visual-chest-cavity.png','visual-courier-deposit.png','visual-courier-closed.png','visual-steve-opacity-multiple.png','visual-kraftcity-limits-two.png','visual-kraftcity-limits-removed.png','visual-kraftcity-limits-off.png','visual-industrial-hiring.png','visual-farmer-inventory.png','visual-worker-inventory.png','visual-replaced-workstation.png','visual-commercial-pending.png','visual-rehired-progress.png','visual-residential-employed.png','visual-industry-blue-limits.png','visual-farmer-hoe.png','visual-farmer-field-2.png','visual-farmer-field-3.png','visual-farmer-field-4.png','visual-military-hiring.png','visual-military-soldier.png','visual-military-blacklist.png','visual-military-guard.png','visual-military-zombie.png','visual-builder-hiring.png','visual-builder-global.png','visual-builder-global-fifty.png','visual-builder-capture.png','visual-builder-materials.png','visual-builder-print.png','visual-builder-hologram.png','visual-builder-cooperative.png','visual-builder-flight.png','visual-commerce-hiring.png','visual-commerce-baker.png','visual-commerce-confectioner.png','visual-commerce-grill_cook.png']+[f'visual-industry-{name}.png' for name in ('farmer','butcher','shepherd','fisherman','breeder','beekeeper')]+[f'visual-steve-opacity-{percent}.png' for percent in (0,10,25,50,75,90,100)]:
     path=Path('build/screenshots')/name
     if not path.exists() or path.stat().st_mtime < started:sys.exit('Minecraft did not capture a fresh '+name)
     data=path.read_bytes()
@@ -37,6 +37,8 @@ for marker in ['COURIER_PLAYER_OVERLAP_PASSED','COURIER_CLIENT_OPEN_CLOSE_PASSED
 for marker in ['EMPLOYMENT_GRAPHICAL_CONTRACT_PASSED','EMPLOYMENT_INVENTORY_SHARED_PASSED','EMPLOYMENT_PORTABLE_INVENTORY_PASSED','COMMERCIAL_PENDING_NO_CHARGE_PASSED','EMPLOYMENT_REHIRE_PROGRESS_PASSED','EMPLOYMENT_RESIDENTIAL_INDICATOR_PASSED']:
     if marker not in text:sys.exit('Employment client check missing '+marker)
 if 'INDUSTRY_BLUE_LIMITS_PASSED' not in text:sys.exit('Blue work area toggle was not validated.')
+for marker in ('FARMER_HELD_HOE_RENDERED_AT_DOUBLE_SCALE','FARMER_SPIRAL_HARVEST_DISCARD_AND_SLEEP_PASSED'):
+    if marker not in text:sys.exit('Farmer client check missing '+marker)
 for job in ('FARMER','BUTCHER','SHEPHERD','FISHERMAN','BREEDER','BEEKEEPER'):
     if f'INDUSTRY_{job}_FUNCTIONAL_PASSED' not in text:sys.exit('Industry client check missing '+job)
 for job in ('BAKER','CONFECTIONER','GRILL_COOK'):
@@ -62,6 +64,7 @@ if 'EMPLOYMENT_WORLD_RESTART_PASSED' not in restored_text:
     sys.exit('Employment inventory/progression did not survive process restart.')
 if 'WORKFORCE_WORLD_RESTART_PASSED' not in restored_text:
     sys.exit('Workforce state did not survive a complete Minecraft process restart.')
+if 'FARMER_SAME_WORLD_RESTART_PASSED' not in restored_text:sys.exit('Farmer persistence did not survive process restart.')
 if 'INDUSTRY_SIX_JOBS_WORLD_RESTART_PASSED' not in restored_text:
     sys.exit('Six industrial jobs did not survive process restart.')
 if 'MILITARY_WORLD_RESTART_PASSED' not in restored_text:sys.exit('Military did not survive JVM restart.')

@@ -43,8 +43,8 @@ public final class IndustryGameTests {
     }
     private static void step(F f,int n){for(int i=0;i<n;i++)IndustrialWork.tick(f.l,f.s);}
     private static int count(F f,Item item){int n=0;for(int i=0;i<27;i++)if(f.s.getItem(i).is(item))n+=f.s.getItem(i).getCount();return n;}
-    private static int index(F f,BlockPos p){int size=IndustrialRules.size(f.l,f.s),r=size/2;return ((p.getZ()-f.p.getZ()+r)*size+p.getX()-f.p.getX()+r)*5+p.getY()-f.p.getY()+2;}
-    private static BlockPos crop(F f,BlockState state){BlockPos p=f.p.east();f.l.setBlock(p.below(),Blocks.FARMLAND.defaultBlockState(),3);f.l.setBlock(p,state,3);f.s.industry.putInt("cursor",index(f,p));return p;}
+    private static int index(F f,BlockPos p){int size=IndustrialRules.size(f.l,f.s),r=size/2;return ((p.getZ()-f.p.getZ()+r)*size+p.getX()-f.p.getX()+r)*5+p.getY()-f.p.getY()+(f.s.profession==Profession.FARMER?-1:2);}
+    private static BlockPos crop(F f,BlockState state){BlockPos p=f.p.east().above();f.l.setBlock(p.below(),Blocks.FARMLAND.defaultBlockState(),3);f.l.setBlock(p,state,3);f.s.industry.putInt("cursor",index(f,p));return p;}
     private static void level(F f,int level,long xp){WorkforceData.get(f.l).setProgress(f.v.getUUID(),f.s.profession.id(),level,xp);}
     private static <T extends Animal>T animal(F f,EntityType<T> type,boolean baby){var a=type.create(f.l);a.setPos(f.p.getX()+1.5,f.p.getY(),f.p.getZ()+.5);a.setNoAi(true);a.setAge(baby?-24000:0);a.getPersistentData().putUUID("KCIndustryStation",f.s.id);f.l.addFreshEntity(a);return a;}
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
@@ -65,13 +65,13 @@ public final class IndustryGameTests {
         var p=crop(f,Blocks.WHEAT.defaultBlockState());step(f,1);
         check(f.s.getItem(27).is(Items.IRON_HOE)&&f.s.getItem(28).is(Items.BONE_MEAL)&&f.s.getItem(30).is(Items.WATER_BUCKET),"input migration");
         check(f.s.getItem(28).getCount()==7,"bone meal not consumed exactly once");check(Irrigation.hydrates(f.l,p.below()),"hydration missing");
-        level(f,5,100);check(Irrigation.hydrates(f.l,f.p.offset(4,-1,4))&&!Irrigation.hydrates(f.l,f.p.offset(5,-1,0)),"vanilla four-block water range");
+        level(f,5,100);check(Irrigation.hydrates(f.l,f.p.offset(4,0,4))&&!Irrigation.hydrates(f.l,f.p.offset(5,0,0)),"vanilla four-block water range");
         check(f.l.getFluidState(f.p).isEmpty(),"created water source");
         f.s.setItem(30,ItemStack.EMPTY);check(!Irrigation.hydrates(f.l,p.below()),"ghost irrigation");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void farmer_never_tills_without_seed_and_preserves_full_inventory_harvest(GameTestHelper h){
-        var f=fixture(h,Profession.FARMER);f.s.setItem(27,new ItemStack(Items.IRON_HOE));BlockPos p=f.p.east();f.l.setBlock(p.below(),Blocks.DIRT.defaultBlockState(),3);step(f,30);
+        var f=fixture(h,Profession.FARMER);f.s.setItem(27,new ItemStack(Items.IRON_HOE));BlockPos p=f.p.east().above();f.l.setBlock(p.below(),Blocks.DIRT.defaultBlockState(),3);step(f,30);
         check(f.l.getBlockState(p.below()).is(Blocks.DIRT),"tilled without plantables");
         p=crop(f,Blocks.CARROTS.defaultBlockState().setValue(CropBlock.AGE,7));for(int i=0;i<27;i++)f.s.setItem(i,new ItemStack(Items.STONE,64));
         step(f,1);check(f.l.getBlockState(p).getValue(CropBlock.AGE)==7,"lost crop when full");h.succeed();
@@ -285,4 +285,142 @@ public final class IndustryGameTests {
         }h.succeed();
     }
 
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_spiral_starts_far_and_finishes_at_center(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var worker=net.minecraft.world.phys.Vec3.atCenterOf(f.p.offset(-4,0,4));
+        int corner=FarmerWork.farthestCorner(f.p,5,worker);
+        check(FarmerWork.spiral(f.p,5,corner).get(0).equals(f.p.offset(2,1,-2)),"wrong farthest corner");
+        for(int width:new int[]{5,13}){
+            var path=FarmerWork.spiral(f.p,width,corner);
+            check(path.size()==width*width&&new java.util.HashSet<>(path).size()==path.size(),"repeated or missing spiral cell");
+            check(path.get(path.size()-1).equals(f.p.above()),"spiral missed center");
+            for(int n=1;n<path.size();n++)check(path.get(n).distManhattan(path.get(n-1))==1,"spiral jumped a cell");
+        }
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,1));
+        step(f,1);check(f.s.industry.getInt("spiral_size")==5,"missing saved size");
+        level(f,5,100);step(f,1);
+        check(f.s.industry.getInt("spiral_size")==13,"spiral not invalidated by level growth");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_height_and_single_mature_crop_preserve_manual_neighbors(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var area=IndustrialWork.area(f.l,f.s);
+        check(area.minY==f.p.getY()+1&&area.maxY==f.p.getY()+6,"incorrect farmer height");
+        check(!area.contains(net.minecraft.world.phys.Vec3.atCenterOf(f.p)),"farmer block included");
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,4));
+        var center=crop(f,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7));
+        var near=center.south();
+        f.l.setBlock(near.below(),Blocks.FARMLAND.defaultBlockState(),3);
+        var carrots=Blocks.CARROTS.defaultBlockState().setValue(CropBlock.AGE,2);
+        f.l.setBlock(near,carrots,3);
+        step(f,1);
+        check(f.l.getBlockState(center).is(Blocks.WHEAT)&&f.l.getBlockState(center).getValue(CropBlock.AGE)==0,"iron hoe did not replant wheat");
+        check(f.l.getBlockState(near)==carrots,"manual adjacent crop damaged");
+        check(count(f,Items.WHEAT)>=1&&count(f,Items.WHEAT)<=2,"incorrect iron hoe yield");
+        check(f.l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,new net.minecraft.world.phys.AABB(center).inflate(1)).isEmpty(),"duplicate world drops");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_collects_mod_agnostic_ground_items_at_border(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var at=f.p.east(5).above();
+        f.v.setPos(at.getX()+.5,at.getY(),at.getZ()+.5);
+        var inside=new net.minecraft.world.entity.item.ItemEntity(f.l,at.getX()+.5,at.getY(),at.getZ()+.5,new ItemStack(Items.COBBLESTONE,3));
+        var outside=new net.minecraft.world.entity.item.ItemEntity(f.l,at.getX()+1.5,at.getY(),at.getZ()+.5,new ItemStack(Items.GOLD_INGOT));
+        f.l.addFreshEntity(inside);f.l.addFreshEntity(outside);
+        step(f,1);
+        check(!inside.isAlive()&&count(f,Items.COBBLESTONE)==3&&outside.isAlive(),"wrong pickup boundary or conservation");
+        outside.discard();
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_virtual_cane_and_fruit_keeps_roots_and_neighbor(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));f.s.setItem(30,new ItemStack(Items.WATER_BUCKET));
+        var root=f.p.east().above();
+        f.l.setBlock(root.below(),Blocks.SAND.defaultBlockState(),3);
+        check(Blocks.SUGAR_CANE.defaultBlockState().canSurvive(f.l,root),"bucket did not support adjoining cane");
+        check(f.l.getFluidState(f.p).isEmpty(),"virtual irrigation placed water");
+        var fruit=f.p.west().above();
+        var stem=fruit.north();
+        f.l.setBlock(stem.below(),Blocks.FARMLAND.defaultBlockState(),3);
+        f.l.setBlock(fruit.below(),Blocks.DIRT.defaultBlockState(),3);
+        f.l.setBlock(fruit,Blocks.PUMPKIN.defaultBlockState(),3);
+        f.l.setBlock(stem,Blocks.ATTACHED_PUMPKIN_STEM.defaultBlockState().setValue(AttachedStemBlock.FACING,Direction.SOUTH),3);
+        f.v.setPos(fruit.getX()+.5,fruit.getY(),fruit.getZ()+1.5);
+        f.s.industry.putInt("cursor",index(f,fruit));
+        step(f,1);
+        check(f.l.getBlockState(fruit).isAir()&&count(f,Items.PUMPKIN)==1,"fruit did not go to shared inventory");
+        check(f.l.getBlockState(stem).is(Blocks.PUMPKIN_STEM),"fruit harvest destroyed its stem");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_night_jump_attempts_one_discard_and_keeps_each_seed_type(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var at=f.p.south().west();
+        f.l.setBlock(at,Blocks.BARREL.defaultBlockState(),3);
+        var barrel=(BarrelBlockEntity)f.l.getBlockEntity(at);
+        f.s.industry.putLong("discard",at.asLong());
+        f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,40));
+        f.s.setItem(1,new ItemStack(Items.MELON_SEEDS,2));
+        f.s.setItem(2,new ItemStack(Items.STICK,7));
+        f.l.setDayTime(13001);f.v.setNoAi(false);
+        FarmerLogistics.beforeHome(f.l,f.v);
+        check(count(f,Items.WHEAT_SEEDS)==25&&count(f,Items.MELON_SEEDS)==2&&count(f,Items.STICK)==0,"night transfer/reserve");
+        f.s.setItem(2,new ItemStack(Items.STICK,3));
+        f.l.setDayTime(1000);f.l.setDayTime(13001);
+        FarmerLogistics.beforeHome(f.l,f.v);
+        check(count(f,Items.STICK)==3&&!barrel.isEmpty(),"night jump repeated the same discard");
+        f.v.setNoAi(true);f.l.setDayTime(1000);
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_discards_to_forge_inventory_and_keeps_rejected_items(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var at=f.p.south().west();
+        f.l.setBlock(at,Blocks.HOPPER.defaultBlockState(),3);
+        var hopper=(HopperBlockEntity)f.l.getBlockEntity(at);
+        check(FarmerLogistics.supports(f.l,at),"missing Forge item capability");
+        f.s.industry.putLong("discard",at.asLong());
+        f.s.setItem(0,new ItemStack(Items.APPLE,5));
+        IndustrialWork.deposit(f.l,f.s,f.v);
+        check(hopper.countItem(Items.APPLE)==5&&count(f,Items.APPLE)==0,"Forge transfer failed");
+        for(int i=0;i<hopper.getContainerSize();i++)hopper.setItem(i,new ItemStack(Items.STONE,64));
+        f.s.setItem(0,new ItemStack(Items.APPLE,3));
+        IndustrialWork.deposit(f.l,f.s,f.v);
+        check(count(f,Items.APPLE)==3&&hopper.countItem(Items.STONE)==320,"full Forge inventory lost items");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_reserves_the_only_lateral_fruit_cell(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var stem=f.p.east().south().above();
+        var fruit=stem.east();
+        f.l.setBlock(stem.below(),Blocks.FARMLAND.defaultBlockState(),3);
+        f.l.setBlock(fruit.below(),Blocks.DIRT.defaultBlockState(),3);
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        f.s.setItem(0,new ItemStack(Items.MELON_SEEDS,1));
+        // Seed an initial orientation/cursor at the stem cell. Position the
+        // worker adjacent so the assertions exercise the real placement step.
+        var route=FarmerWork.spiral(f.p,5,0);
+        f.s.industry.putInt("spiral_size",5);
+        f.s.industry.putInt("spiral_cursor",route.indexOf(stem)*5);
+        step(f,1);
+        check(f.l.getBlockState(stem).is(Blocks.MELON_STEM),"failed to plant melon seed");
+        f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,5));
+        f.s.industry.putInt("spiral_cursor",route.indexOf(fruit)*5);
+        step(f,1);
+        check(f.l.getBlockState(fruit).isAir()&&f.l.getBlockState(fruit.below()).is(Blocks.DIRT),"tilled the reserved fruit cell");
+        h.succeed();
+    }
 }

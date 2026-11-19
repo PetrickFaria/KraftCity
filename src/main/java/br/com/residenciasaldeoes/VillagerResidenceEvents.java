@@ -1034,6 +1034,7 @@ public class VillagerResidenceEvents {
             ResidenceData.get(level).updateResidentAge(villager);
         if(villager.getPersistentData().contains(EMERALD_TRANSFER)){tickEmeraldTransfer(level,villager);return;}
         if(villager.getPersistentData().contains(NIGHT_DOOR_TASK)){tickNightDoorClosure(level,villager);return;}
+        if(br.com.kraftcity.industry.FarmerLogistics.beforeHome(level,villager))return;
         boolean weather=level.isRaining();var entityData=villager.getPersistentData();
         boolean doorResume=entityData.getBoolean(NIGHT_DOOR_RESUME);if(doorResume)entityData.remove(NIGHT_DOOR_RESUME);
         boolean forced=entityData.getBoolean(RETURN_FORCED);

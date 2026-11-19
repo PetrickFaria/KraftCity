@@ -25,5 +25,19 @@ public final class Irrigation {
             &&soil.getY()>=s.pos.getY()-1&&soil.getY()<=s.pos.getY()&&l.getBlockEntity(s.pos) instanceof WorkBlockEntity be&&s.id.equals(be.identity()))return true;
         return false;
     }
+    public static boolean supportsCane(LevelReader reader,BlockPos pos){
+        if(!(reader instanceof ServerLevel level))return false;
+        var soil=pos.below();
+        var ground=level.getBlockState(soil);
+        if(!ground.is(net.minecraft.tags.BlockTags.DIRT)&&!ground.is(net.minecraft.tags.BlockTags.SAND))return false;
+        for(var side:net.minecraft.core.Direction.Plane.HORIZONTAL){
+            var at=soil.relative(side);
+            if(!level.hasChunkAt(at)||!(level.getBlockEntity(at) instanceof WorkBlockEntity be))continue;
+            var station=be.station();
+            if(station!=null&&station.active&&at.equals(station.pos)&&station.profession==Profession.FARMER
+                &&station.getItem(30).is(Items.WATER_BUCKET))return true;
+        }
+        return false;
+    }
     private Irrigation(){}
 }
