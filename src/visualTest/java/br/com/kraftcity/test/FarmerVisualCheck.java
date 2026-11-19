@@ -12,9 +12,12 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.entity.npc.Villager;
@@ -28,6 +31,7 @@ import net.minecraft.world.level.block.state.properties.BedPart;
 public final class FarmerVisualCheck {
     private static final BlockPos POST=new BlockPos(79,-58,60);
     private static final BlockPos HOME=POST.offset(-7,0,-1);
+    private static final BlockPos BED=HOME.east(3).above();
     private static final BlockPos CHEST=POST.offset(-5,1,2);
     private static final BlockPos CANE=POST.offset(2,1,1);
     private static final BlockPos STEM=POST.offset(-1,1,1);
@@ -59,9 +63,11 @@ public final class FarmerVisualCheck {
             for(int y=-4;y<=0;y++)l.setBlock(POST.offset(x,y,z),Blocks.STONE.defaultBlockState(),3);
             for(int y=1;y<=4;y++)l.setBlock(POST.offset(x,y,z),Blocks.AIR.defaultBlockState(),3);
         }
+        ResidenceData.get(l).unlinkAll(l,l.dimension(),HOME);
+        l.getEntitiesOfClass(Villager.class,new AABB(HOME).inflate(7)).forEach(Villager::discard);
         l.setBlock(HOME,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);
-        ((ResidentialAnchorBlockEntity)l.getBlockEntity(HOME)).setSize(11);
-        var foot=HOME.east(2).above();
+        check(((ResidentialAnchorBlockEntity)l.getBlockEntity(HOME)).setSize(11),"home size configuration");
+        var foot=BED.west();
         var bed=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
         l.setBlock(foot,bed.setValue(BedBlock.PART,BedPart.FOOT),3);
         l.setBlock(foot.east(),bed.setValue(BedBlock.PART,BedPart.HEAD),3);
@@ -147,6 +153,15 @@ public final class FarmerVisualCheck {
             var drop=new ItemEntity(l,JUMP.getX()+.5,JUMP.getY()+.1,JUMP.getZ()+.5,new ItemStack(Items.COBBLESTONE,6));
             drop.setDefaultPickUpDelay();
             l.addFreshEntity(drop);
+            // Start with an explicitly assigned, registered HOME bed as in a
+            // resident's established save. The worker still walks and sleeps itself.
+            var homes=ResidenceData.get(l);
+            check(homes.reserveBed(worker,l.dimension(),HOME,BED),"fixture bed reservation");
+            var remembered=v.getBrain().getMemory(MemoryModuleType.HOME);
+            if(remembered.filter(home->home.pos().equals(BED)&&home.dimension().equals(l.dimension())).isEmpty()){
+                check(l.getPoiManager().take(type->type.is(PoiTypes.HOME),(type,pos)->pos.equals(BED),BED,1).isPresent(),"fixture HOME POI unavailable");
+                v.getBrain().setMemory(MemoryModuleType.HOME,GlobalPos.of(l.dimension(),BED));
+            }
             l.setDayTime(13001);
             nightStarted=l.getGameTime();
             p.teleportTo(l,CHEST.getX()+2.5,CHEST.getY()+.5,CHEST.getZ()+4.5,150,20);
@@ -161,7 +176,9 @@ public final class FarmerVisualCheck {
                 +" forced="+v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced")
                 +" door="+v.getPersistentData().contains("residenciasaldeoes_night_door_task")
                 +" delivery="+v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")
-                +" attacked="+(v.getLastHurtByMob()!=null)+" noAI="+v.isNoAi();
+                +" attacked="+(v.getLastHurtByMob()!=null)+" noAI="+v.isNoAi()
+                +" bed="+l.getBlockState(BED)+" claimed="+(ResidenceData.get(l).bedClaim(worker)!=null)
+                +" memory="+v.getBrain().getMemory(MemoryModuleType.HOME)+" tick="+v.tickCount;
             check(l.getGameTime()-nightStarted<480,"night sequence did not finish: "+progressDetail);
             if(!v.isSleeping())return;
             check(seenPhysicalDeposit&&deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding");
