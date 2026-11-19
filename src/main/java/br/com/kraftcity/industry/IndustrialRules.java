@@ -6,6 +6,18 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.*;
 
 public final class IndustrialRules {
+    public static final int FARMER_XP_PER_LEVEL=25;
+    public static final int MAX_LEVEL=5;
+
+    public static int farmerXpIntoLevel(int level,long xp){
+        if(level>=MAX_LEVEL)return FARMER_XP_PER_LEVEL;
+        long earned=xp-(long)(Math.max(1,level)-1)*FARMER_XP_PER_LEVEL;
+        return (int)Math.min(FARMER_XP_PER_LEVEL,Math.max(0,earned));
+    }
+
+    public static int farmerXpBarWidth(int level,long xp,int width){
+        return farmerXpIntoLevel(level,xp)*width/FARMER_XP_PER_LEVEL;
+    }
     public static int level(ServerLevel l,EmploymentData.Station s){return s.worker==null||s.profession==null?1:Math.min(5,Math.max(1,WorkforceData.get(l).progress(s.worker,s.profession.id()).level()));}
     public static int maximumSize(int level){return 3+2*Math.min(5,Math.max(1,level));}
     public static int size(ServerLevel l,EmploymentData.Station s){int max=maximumSize(level(l,s));int selected=s.industry.getInt("size");return level(l,s)==5&&selected>=5&&selected<=max&&selected%2==1?selected:max;}
@@ -14,7 +26,7 @@ public final class IndustrialRules {
     /** A completed action is one unit; cumulative thresholds are 25/50/75/100. */
     public static void progress(ServerLevel l,EmploymentData.Station s){
         if(s.worker==null||s.profession==null)return;var data=WorkforceData.get(l);var old=data.progress(s.worker,s.profession.id());
-        long xp=old.xp()+1;int step=s.profession==Profession.FARMER||s.profession==Profession.SHEPHERD?25:EmploymentConfig.OTHER_LEVEL_ACTIONS.get();
+        long xp=old.xp()+1;int step=s.profession==Profession.FARMER||s.profession==Profession.SHEPHERD?FARMER_XP_PER_LEVEL:EmploymentConfig.OTHER_LEVEL_ACTIONS.get();
         int level=Math.min(5,Math.max(old.level(),1+(int)Math.min(4,xp/step)));
         data.setProgress(s.worker,s.profession.id(),level,xp);s.setChanged();
     }

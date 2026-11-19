@@ -96,6 +96,10 @@ public final class VisualClientCheck {
             var uuid=mc.player.getUUID();
             server.execute(()->{
                 var level=server.overworld();level.setDayTime(6000);
+                // The saved GameTest world can end with an active storm.
+                level.setWeatherParameters(12000,0,false,false);
+                level.setRainLevel(0F);
+                level.setThunderLevel(0F);
                 level.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_DOMOBSPAWNING).set(false,server);
                 level.getEntitiesOfClass(net.minecraft.world.entity.Mob.class,new net.minecraft.world.phys.AABB(-5,-64,0,24,-44,31)).forEach(net.minecraft.world.entity.Entity::discard);
                 for(int x=-5;x<=23;x++)for(int z=0;z<=30;z++){

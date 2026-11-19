@@ -81,7 +81,7 @@ public final class IndustryVisualCheck {
         int elapsed=ticks-1120;if(elapsed<0)return;int i=elapsed/70,phase=elapsed%70;
         if(i<6){
             if(phase==0)mc.getSingleplayerServer().execute(()->setup(mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()),i));
-            if(phase==45){check(mc.screen instanceof WorkScreen,"Industry menu missing");check(mc.player.containerMenu instanceof WorkMenu m&&m.slots.size()==68&&m.snapshot!=null,"Industry menu not synchronized");}
+            if(phase==45){check(mc.screen instanceof WorkScreen,"Industry menu missing");check(mc.player.containerMenu instanceof WorkMenu m&&m.slots.size()==(i==0?67:68)&&m.snapshot!=null,"Industry menu not synchronized");}
             if(phase==50)Screenshot.grab(new File("../build"),"visual-industry-"+Profession.values()[i].path+".png",mc.getMainRenderTarget(),message->{});
             if(i==0&&phase==53){check(bounds().stream().anyMatch(b->b.pos().equals(post(0))&&b.size()==5&&b.farmer()),"Blue bounds not synchronized");toggle(mc);}
             if(i==0&&phase==56){check(bounds().stream().noneMatch(b->b.pos().equals(post(0))),"Blue toggle off left ghost");toggle(mc);}

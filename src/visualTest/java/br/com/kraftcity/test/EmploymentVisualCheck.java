@@ -44,6 +44,22 @@ public final class EmploymentVisualCheck {
         }
         click(screen,suffix);
     }
+    private static void checkCompactFarmer(Minecraft mc,WorkScreen screen,WorkMenu menu){
+        screen.init(mc,320,240);
+        int left=(320-WorkMenu.FARM_WIDTH)/2,top=(240-WorkMenu.FARM_HEIGHT)/2;
+        for(var slot:menu.slots)check(left+slot.x>=0&&left+slot.x+16<=320&&top+slot.y>=0&&top+slot.y+16<=240,
+            "Farmer slot outside compact GUI");
+        check(button(screen,"Demitir")!=null&&button(screen,"Limites")!=null,"Controls missing in compact GUI");
+        screen.init(mc,mc.getWindow().getGuiScaledWidth(),mc.getWindow().getGuiScaledHeight());
+    }
+    private static void checkFarmerHeader(WorkScreen screen,String ending,int expectedWidth){
+        try{
+            var title=WorkScreen.class.getDeclaredMethod("farmerTitle",int.class);title.setAccessible(true);
+            var bar=WorkScreen.class.getDeclaredMethod("farmerXpWidth");bar.setAccessible(true);
+            check(((String)title.invoke(screen,172)).endsWith(ending),"Farmer title mismatch: "+title.invoke(screen,172));
+            check((int)bar.invoke(screen)==expectedWidth,"Farmer XP texture width");
+        }catch(ReflectiveOperationException e){throw new IllegalStateException(e);}
+    }
     private static void capture(Minecraft mc,String name){Screenshot.grab(new File("../build"),name,mc.getMainRenderTarget(),message->{});}
     public static void tick(Minecraft mc,int ticks){
         var server=mc.getSingleplayerServer();UUID playerId=mc.player.getUUID();
@@ -67,11 +83,20 @@ public final class EmploymentVisualCheck {
             var homes=ResidenceData.get(level);check(homes.link(level,HOME,resident).equals("ok"),"Visual resident link failed");homes.renameResident(worker,"Morador Contratável");homes.reserveBed(worker,level.dimension(),HOME,BED);
             resident.startSleeping(BED);
             level.setBlock(POST,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);level.setBlock(COMMERCIAL,WorkModule.COMMERCIAL.get().defaultBlockState(),3);
-            station(level,POST).setItem(31,new ItemStack(Items.EMERALD,10));
-            open(server.getPlayerList().getPlayer(playerId),POST);
+            station(level,POST).setItem(31,ItemStack.EMPTY);
+            var player=server.getPlayerList().getPlayer(playerId);
+            player.getInventory().setItem(1,new ItemStack(Items.EMERALD,20));
+            open(player,POST);
         });
         if(ticks==800){selectWorker(mc);click(screen(mc),"Fazendeiro");}
-        if(ticks==810)capture(mc,"visual-industrial-hiring.png");
+        if(ticks==804){
+            var menu=(WorkMenu)mc.player.containerMenu;
+            mc.gameMode.handleInventoryMouseClick(menu.containerId,29,0,net.minecraft.world.inventory.ClickType.QUICK_MOVE,mc.player);
+        }
+        if(ticks==810){
+            check(mc.player.containerMenu.getSlot(0).getItem().getCount()==15,"Payment above 15 or missing client sync");
+            capture(mc,"visual-industrial-hiring.png");
+        }
         if(ticks==815){
             WorkMenu menu=(WorkMenu)mc.player.containerMenu;int id=menu.containerId;UUID stationId=menu.stationId;
             click(screen(mc),"Contratar");
@@ -79,21 +104,44 @@ public final class EmploymentVisualCheck {
         }
         if(ticks==850)server.execute(()->{
             var level=server.overworld();var s=station(level,POST);
+            check(server.getPlayerList().getPlayer(playerId).getInventory().getItem(1).getCount()==10,"First hire did not return five emeralds");
+            ResidenceData.get(level).renameResident(worker,"Steve");
+            ResidenceData.get(level).applyResidentName((Villager)level.getEntity(worker));
             check(s.worker.equals(worker)&&s.getItem(31).isEmpty()&&level.getBlockState(POST).is(WorkModule.PROFESSIONAL.get(Profession.FARMER).get()),"Real industrial transaction/double-click failed");
             check(ResidenceData.get(level).bedClaim(worker).bed().equals(BED)&&Employment.indicator(level,worker,false),"Hiring lost bed or work indicator");
-            s.setItem(0,new ItemStack(Items.APPLE,13));s.setItem(27,new ItemStack(Items.IRON_HOE));s.setItem(30,new ItemStack(Items.LEATHER_BOOTS));
+            s.setItem(0,new ItemStack(Items.APPLE,13));s.setItem(27,new ItemStack(Items.IRON_HOE));s.setItem(28,new ItemStack(Items.BONE_MEAL,3));s.setItem(29,new ItemStack(Items.PUMPKIN_SEEDS,2));s.setItem(30,new ItemStack(Items.WATER_BUCKET));
             WorkforceData.get(level).setProgress(worker,Profession.FARMER.id(),3,57);hired=true;
             System.out.println("EMPLOYMENT_GRAPHICAL_CONTRACT_PASSED");
         });
-        if(ticks==880){check(hired&&mc.player.containerMenu instanceof WorkMenu m&&!m.hiring&&m.slots.get(0).getItem().getCount()==13,"Professional menu inventory did not sync");capture(mc,"visual-farmer-inventory.png");}
-        if(ticks==885)server.execute(()->{
+        if(ticks==870){check(hired&&mc.player.containerMenu instanceof WorkMenu m&&!m.hiring&&m.slots.get(0).getItem().getCount()==13,"Professional menu inventory did not sync");checkFarmerHeader(screen(mc),"Steve (Fazendeiro) - Lv. 3",50);
+            checkCompactFarmer(mc,screen(mc),(WorkMenu)mc.player.containerMenu);
+            check(!button(screen(mc),"5×5").active&&button(screen(mc),"9×9").active&&!button(screen(mc),"13×13").active,"Farmer area level lock");
+            capture(mc,"visual-farmer-inventory.png");}
+        if(ticks==875)server.execute(()->{
             var player=server.getPlayerList().getPlayer(playerId);var resident=(Villager)player.getLevel().getEntity(worker);
+            var level=player.getLevel();
+            ResidenceData.get(level).renameResident(worker,"Alexandria de Campo Verde e Vale do Sol");
+            ResidenceData.get(level).applyResidentName(resident);
+            WorkforceData.get(level).setProgress(worker,Profession.FARMER.id(),4,99);
             var event=new PlayerInteractEvent.EntityInteract(player,InteractionHand.MAIN_HAND,resident);MinecraftForge.EVENT_BUS.post(event);
             check(event.isCanceled()&&player.containerMenu instanceof WorkMenu menu&&menu.inventory==station(player.getLevel(),POST),"Worker did not open the block's exact inventory");shared=true;
             System.out.println("EMPLOYMENT_INVENTORY_SHARED_PASSED");
         });
-        if(ticks==905){check(shared&&mc.player.containerMenu.slots.get(0).getItem().getCount()==13,"Worker inventory did not sync");capture(mc,"visual-worker-inventory.png");}
-        if(ticks==907){
+        if(ticks==887){
+            checkFarmerHeader(screen(mc),"… (Fazendeiro) - Lv. 4",174);
+            capture(mc,"visual-farmer-long-name.png");
+            server.execute(()->br.com.kraftcity.industry.IndustrialRules.progress(server.overworld(),station(server.overworld(),POST)));
+        }
+        if(ticks==905){check(shared&&mc.player.containerMenu.slots.get(0).getItem().getCount()==13,"Worker inventory did not sync");checkFarmerHeader(screen(mc),"… (Fazendeiro) - Lv. 5",182);
+            for(int size=5;size<=13;size+=2)check(button(screen(mc),size+"×"+size).active,"Max-level area stayed locked");
+            click(screen(mc),"11×11");
+            capture(mc,"visual-worker-inventory.png");}
+        if(ticks==912)server.execute(()->{
+            var level=server.overworld();
+            check(br.com.kraftcity.industry.IndustrialRules.size(level,station(level,POST))==11,"Area change missing on server");
+            WorkforceData.get(level).setProgress(worker,Profession.FARMER.id(),3,57);
+        });
+        if(ticks==914){
             var screen=screen(mc);
             var menu=(WorkMenu)mc.player.containerMenu;
             var dismiss=button(screen,"Demitir");
@@ -138,7 +186,7 @@ public final class EmploymentVisualCheck {
         if(ticks==1000)server.execute(()->{
             var level=server.overworld();var s=station(level,COMMERCIAL);check(s.worker==null&&s.getItem(31).getCount()==20,"Forged commercial request charged emeralds");
             EmploymentConfig.SPEC.setConfig(approvedConfig);approvedConfig=null;
-            pending=true;System.out.println("COMMERCIAL_PENDING_NO_CHARGE_PASSED");station(level,POST).setItem(31,new ItemStack(Items.EMERALD,1));open(server.getPlayerList().getPlayer(playerId),POST);
+            pending=true;System.out.println("COMMERCIAL_PENDING_NO_CHARGE_PASSED");station(level,POST).setItem(31,new ItemStack(Items.EMERALD,15));open(server.getPlayerList().getPlayer(playerId),POST);
         });
         if(ticks==1020)click(screen(mc),"Contratar");
         if(ticks==1040){
@@ -150,6 +198,7 @@ public final class EmploymentVisualCheck {
         }
         if(ticks==1060)server.execute(()->{
             var level=server.overworld();var s=station(level,POST);var progress=WorkforceData.get(level).progress(worker,Profession.FARMER.id());
+            check(server.getPlayerList().getPlayer(playerId).getInventory().getItem(1).getCount()==24,"Rehire did not return fourteen emeralds");
             check(worker.equals(s.worker)&&progress.level()==3&&progress.xp()==57&&s.getItem(0).getCount()==13&&s.getItem(31).isEmpty(),"Rehire lost progression/items or charged incorrectly");
             check(ResidenceData.get(level).bedClaim(worker)!=null&&ResidenceData.get(level).bedClaim(worker).bed().equals(BED),"Bed claim changed during employment lifecycle");
             rehired=true;System.out.println("EMPLOYMENT_REHIRE_PROGRESS_PASSED");
@@ -190,7 +239,7 @@ public final class EmploymentVisualCheck {
     public static void verifyRestore(ServerLevel level){
         var s=station(level,POST);check(s!=null&&s.active&&s.worker!=null&&s.profession==Profession.FARMER,"Employment lost after process restart");
         var progress=WorkforceData.get(level).progress(s.worker,Profession.FARMER.id());
-        check(s.getItem(0).getCount()==13&&s.getItem(27).is(Items.IRON_HOE)&&s.getItem(30).is(Items.LEATHER_BOOTS)&&progress.level()==3&&progress.xp()==57,"Professional inventory/history lost after restart");
+        check(s.getItem(0).getCount()==13&&s.getItem(27).is(Items.IRON_HOE)&&s.getItem(28).getCount()==3&&s.getItem(29).getCount()==2&&s.getItem(30).is(Items.WATER_BUCKET)&&s.getItem(31).isEmpty()&&progress.level()==3&&progress.xp()==57,"Professional inventory/history lost after restart");
         check(ResidenceData.get(level).owner(s.worker).pos.equals(HOME)&&ResidenceData.get(level).bedClaim(s.worker).bed().equals(BED),"Housing/bed link lost after restart");
         var vacant=station(level,COMMERCIAL);
         check(vacant.worker==null&&vacant.getItem(31).getCount()==20,"Dismissed workstation did not stay vacant");

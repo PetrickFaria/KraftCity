@@ -183,8 +183,17 @@ public final class IndustryGameTests {
             var restored=EmploymentData.load(EmploymentData.get(f.l).save(new CompoundTag())).station(f.s.id);
             check(restored.getItem(26).getCount()==7&&restored.industry.getLong("fish_elapsed")==42&&restored.worker.equals(f.v.getUUID()),"persist "+p);
             var player=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"SharedJob"));var a=new WorkMenu(1,player.getInventory(),f.s,false,null);var b=new WorkMenu(2,player.getInventory(),f.s,false,f.v.getUUID());
-            check(a.inventory==b.inventory&&a.slots.size()==68,"dual menu "+p);
+            check(a.inventory==b.inventory&&a.slots.size()==(p==Profession.FARMER?67:68),"dual menu "+p);
         }h.succeed();
+    }
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_xp_bar_tracks_cumulative_thresholds_and_maximum(GameTestHelper h){
+        check(IndustrialRules.farmerXpBarWidth(1,0,182)==0,"empty experience");
+        check(IndustrialRules.farmerXpBarWidth(2,38,182)==94,"proportional experience");
+        check(IndustrialRules.farmerXpBarWidth(3,50,182)==0,"experience reset at level boundary");
+        check(IndustrialRules.farmerXpBarWidth(5,100,182)==182
+            &&IndustrialRules.farmerXpBarWidth(5,Long.MAX_VALUE,182)==182,"full maximum level bar");
+        h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void legacy_employment_schema_loads_without_reset_or_inventory_migration(GameTestHelper h){
