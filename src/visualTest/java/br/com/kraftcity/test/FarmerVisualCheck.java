@@ -53,8 +53,8 @@ public final class FarmerVisualCheck {
         var l=p.getLevel();
         l.setDayTime(1000);
         l.setWeatherParameters(10000,0,false,false);
-        for(int x=-9;x<=7;x++)for(int z=-5;z<=5;z++){
-            l.setBlock(POST.offset(x,0,z),Blocks.STONE.defaultBlockState(),3);
+        for(int x=-11;x<=9;x++)for(int z=-7;z<=7;z++){
+            for(int y=-4;y<=0;y++)l.setBlock(POST.offset(x,y,z),Blocks.STONE.defaultBlockState(),3);
             for(int y=1;y<=4;y++)l.setBlock(POST.offset(x,y,z),Blocks.AIR.defaultBlockState(),3);
         }
         l.setBlock(HOME,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);
@@ -147,7 +147,9 @@ public final class FarmerVisualCheck {
         }else if(stage==3){
             var barrel=(BarrelBlockEntity)l.getBlockEntity(CHEST);
             int deposited=barrel.countItem(Items.COBBLESTONE);
-            progressDetail="worker="+v.blockPosition()+" chest="+deposited+" stock="+s.countItem(Items.COBBLESTONE);
+            progressDetail="worker="+v.blockPosition()+" chest="+deposited+" stock="+s.countItem(Items.COBBLESTONE)
+                +" phaseUntil="+s.industry.getLong("farmer_discard_until")+" chestTarget="+s.industry.contains("farmer_discard_pos")
+                +" pickupUntil="+s.industry.getLong("farmer_pickup_until")+" navigation="+v.getNavigation().isDone();
             if(!v.isSleeping())return;
             check(deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding");
             s.industry.putBoolean("visual_farmer_night",true);

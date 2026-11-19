@@ -91,7 +91,8 @@ public final class FarmerLogistics {
         for(var direction:Direction.Plane.HORIZONTAL){
             var at=target.relative(direction);
             if(l.hasChunkAt(at)&&l.getBlockState(at).getCollisionShape(l,at).isEmpty()
-                &&l.getBlockState(at.above()).getCollisionShape(l,at.above()).isEmpty())options.add(at);
+                &&l.getBlockState(at.above()).getCollisionShape(l,at.above()).isEmpty()
+                &&!l.getBlockState(at.below()).getCollisionShape(l,at.below()).isEmpty())options.add(at);
         }
         options.sort(Comparator.comparingDouble(at->v.distanceToSqr(Vec3.atBottomCenterOf(at))));
         for(var at:options){
@@ -317,7 +318,7 @@ public final class FarmerLogistics {
         }
         if(s.industry.contains("farmer_discard_pos")){
             var pos=BlockPos.of(s.industry.getLong("farmer_discard_pos"));
-            int result=now<s.industry.getLong("farmer_discard_until")&&supports(l,pos)?approach(l,v,pos,1.38,1):-1;
+            int result=now<s.industry.getLong("farmer_discard_until")&&supports(l,pos)?approach(l,v,pos,1.65,1):-1;
             if(result==0)return true;
             if(result>0)deposit(l,s,v,pos);
         }
