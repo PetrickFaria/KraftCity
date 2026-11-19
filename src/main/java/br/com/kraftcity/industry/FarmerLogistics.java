@@ -10,6 +10,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
@@ -67,7 +68,7 @@ public final class FarmerLogistics {
         if(route==null||!route.target.equals(pos)){
             route=new Route(pos.immutable(),now);
             ROUTES.put(v,route);
-            var path=v.getNavigation().createPath(pos,accuracy);
+            var path=workPath(l,v,pos,accuracy);
             if(path==null||!path.canReach()||!v.getNavigation().moveTo(path,.8)){
                 ROUTES.remove(v);
                 blocked.put(pos.immutable(),now+100);
@@ -81,6 +82,23 @@ public final class FarmerLogistics {
             return -1;
         }
         return 0;
+    }
+
+    private static Path workPath(ServerLevel l,Villager v,BlockPos target,int accuracy){
+        if(accuracy==0||l.getBlockState(target).getCollisionShape(l,target).isEmpty())
+            return v.getNavigation().createPath(target,accuracy);
+        var options=new ArrayList<BlockPos>();
+        for(var direction:Direction.Plane.HORIZONTAL){
+            var at=target.relative(direction);
+            if(l.hasChunkAt(at)&&l.getBlockState(at).getCollisionShape(l,at).isEmpty()
+                &&l.getBlockState(at.above()).getCollisionShape(l,at.above()).isEmpty())options.add(at);
+        }
+        options.sort(Comparator.comparingDouble(at->v.distanceToSqr(Vec3.atBottomCenterOf(at))));
+        for(var at:options){
+            var path=v.getNavigation().createPath(at,0);
+            if(path!=null&&path.canReach())return path;
+        }
+        return null;
     }
 
     static void stayInField(ServerLevel l,EmploymentData.Station s,Villager v){
@@ -139,10 +157,10 @@ public final class FarmerLogistics {
         rejected.values().removeIf(until->until<=now);
         ItemEntity item=state!=null&&state.item!=null&&l.getEntity(state.item) instanceof ItemEntity e?e:null;
         if(!eligible(l,s,area,item)){
-            if(state!=null&&state.nextScan>now)return closing&&state.item==null;
+            if(state!=null&&state.nextScan>now)return closing;
             item=l.getEntitiesOfClass(ItemEntity.class,area,e->!rejected.containsKey(e.getUUID())&&eligible(l,s,area,e)).stream()
                 .min(Comparator.comparingDouble(v::distanceToSqr)).orElse(null);
-            if(item!=null||!closing)PICKUPS.put(v,new Pickup(item==null?null:item.getUUID(),now+(closing?5:10)));
+            if(item!=null||!closing)PICKUPS.put(v,new Pickup(item==null?null:item.getUUID(),now+(closing?10:20)));
             else PICKUPS.remove(v);
         }
         if(item==null){
@@ -155,6 +173,8 @@ public final class FarmerLogistics {
         }
         boolean close=v.distanceToSqr(item)<=1.21&&visible(l,v,item.position().add(0,.1,0),null);
         if(!close){
+            var pending=PICKUPS.get(v);
+            if(!item.isOnGround()&&Math.abs(item.getY()-v.getY())>.85&&pending!=null&&now<pending.nextScan)return true;
             int travel=approach(l,v,item.blockPosition(),.4,0);
             if(travel==0)return true;
             if(travel<0||v.distanceToSqr(item)>1.21||!visible(l,v,item.position().add(0,.1,0),null)){

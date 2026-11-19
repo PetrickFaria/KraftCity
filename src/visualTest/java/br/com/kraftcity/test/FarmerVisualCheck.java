@@ -34,6 +34,7 @@ public final class FarmerVisualCheck {
     private static final BlockPos JUMP=POST.offset(-2,1,1);
     private static final List<BlockPos> ROW=List.of(POST.offset(-2,1,-2),POST.offset(-1,1,-2),POST.offset(0,1,-2),POST.offset(2,1,-2),POST.offset(2,1,-1),POST.offset(1,1,-1));
     private static volatile int stage;
+    private static volatile String progressDetail="";
     private static UUID worker;
     private static boolean canePrepared,canePlanted,sawLooseCane,sawJump;
     private static int ticks;
@@ -115,6 +116,9 @@ public final class FarmerVisualCheck {
             stage=2;
         }else if(stage==2){
             sawLooseCane|=!l.getEntitiesOfClass(ItemEntity.class,new AABB(CANE).inflate(2,3,2),e->e.getItem().is(Items.SUGAR_CANE)).isEmpty();
+            progressDetail="worker="+v.blockPosition()+" cane="+l.getBlockState(CANE.above()).getBlock()
+                +" fruit="+l.getBlockState(FRUIT).getBlock()+" storedCane="+s.countItem(Items.SUGAR_CANE)
+                +" loose="+sawLooseCane+" navigation="+v.getNavigation().isDone();
             if(!l.getBlockState(CANE.above()).isAir()||!l.getBlockState(FRUIT).isAir()||s.countItem(Items.SUGAR_CANE)!=2)return;
             if(l.getBlockState(ROW.get(0)).getValue(CropBlock.AGE)==7)return;
             for(var at:ROW)check(l.getBlockState(at).is(Blocks.WHEAT)&&l.getBlockState(at.below()).is(Blocks.FARMLAND),"crop or soil damaged beside the harvest");
@@ -127,6 +131,8 @@ public final class FarmerVisualCheck {
             l.setBlock(JUMP,Blocks.GRASS.defaultBlockState(),3);
             stage=5;
         }else if(stage==5){
+            progressDetail="worker="+v.blockPosition()+" fruit space="+l.getBlockState(JUMP)
+                +" soil="+l.getBlockState(JUMP.below())+" jump="+sawJump;
             if(v.getY()>JUMP.getY()+.3&&Math.abs(v.getX()-(JUMP.getX()+.5))<.6&&Math.abs(v.getZ()-(JUMP.getZ()+.5))<.6)sawJump=true;
             if(!sawJump||!v.isOnGround()||!l.getBlockState(JUMP).isAir())return;
             check(l.getBlockState(STEM).is(Blocks.PUMPKIN_STEM)||l.getBlockState(STEM).is(Blocks.ATTACHED_PUMPKIN_STEM),"fruit-space work damaged stem");
@@ -141,6 +147,7 @@ public final class FarmerVisualCheck {
         }else if(stage==3){
             var barrel=(BarrelBlockEntity)l.getBlockEntity(CHEST);
             int deposited=barrel.countItem(Items.COBBLESTONE);
+            progressDetail="worker="+v.blockPosition()+" chest="+deposited+" stock="+s.countItem(Items.COBBLESTONE);
             if(!v.isSleeping())return;
             check(deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding");
             s.industry.putBoolean("visual_farmer_night",true);
@@ -164,7 +171,7 @@ public final class FarmerVisualCheck {
             capturedStage=stage;
             Screenshot.grab(new File("../build"),"visual-farmer-field-"+stage+".png",mc.getMainRenderTarget(),m->{});
         }
-        check(ticks<2400,"field or sleep sequence timed out at stage "+stage);
+        check(ticks<2400,"field or sleep sequence timed out at stage "+stage+" "+progressDetail);
         return stage==4&&capturedStage==4;
     }
 
