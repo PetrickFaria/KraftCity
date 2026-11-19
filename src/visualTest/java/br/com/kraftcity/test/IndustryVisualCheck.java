@@ -53,7 +53,7 @@ public final class IndustryVisualCheck {
             default->throw new IllegalStateException();
         }
         // Cursor at (x=+1,z=0,y=0) for the initial 5x5 area.
-        if(profession==Profession.FARMER)s.industry.putInt("cursor",65);
+        if(profession==Profession.FARMER)v.setPos(target.getX()+.5,target.getY()+1,target.getZ()+.5);
         if(profession==Profession.BEEKEEPER)s.industry.putInt("cursor",67);
         IndustrialWork.tick(l,s);
         boolean worked=switch(profession){

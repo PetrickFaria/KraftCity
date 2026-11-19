@@ -15,6 +15,8 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -27,11 +29,13 @@ public final class FarmerVisualCheck {
     private static final BlockPos HOME=POST.offset(-7,1,-1);
     private static final BlockPos CHEST=POST.offset(4,1,0);
     private static final BlockPos CANE=POST.offset(2,1,1);
-    private static final BlockPos STEM=POST.offset(1,1,-2);
+    private static final BlockPos STEM=POST.offset(-1,1,1);
     private static final BlockPos FRUIT=STEM.south();
-    private static final List<BlockPos> ROW=List.of(POST.offset(-2,1,-2),POST.offset(-1,1,-2),POST.offset(0,1,-2));
+    private static final BlockPos JUMP=POST.offset(-2,1,1);
+    private static final List<BlockPos> ROW=List.of(POST.offset(-2,1,-2),POST.offset(-1,1,-2),POST.offset(0,1,-2),POST.offset(2,1,-2),POST.offset(2,1,-1),POST.offset(1,1,-1));
     private static volatile int stage;
     private static UUID worker;
+    private static boolean canePrepared,canePlanted,sawLooseCane,sawJump;
     private static int ticks;
     private static int capturedStage=-1,visibleStage=-1,stageTicks;
     private FarmerVisualCheck(){}
@@ -71,7 +75,7 @@ public final class FarmerVisualCheck {
         check(Employment.hire(p,s,v.getUUID(),Profession.FARMER).equals("ok"),"hire");
         worker=v.getUUID();
         s.setItem(27,new ItemStack(Items.IRON_HOE));s.setItem(30,new ItemStack(Items.WATER_BUCKET));
-        s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,3));
+        s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,ROW.size()));
         s.industry.putBoolean("preview",true);
         s.setChanged();
         IndustryNetwork.sendBounds(p);
@@ -85,27 +89,47 @@ public final class FarmerVisualCheck {
             boolean previous=true;
             for(var at:ROW){
                 boolean planted=l.getBlockState(at).is(Blocks.WHEAT);
-                check(!planted||previous,"new crops skipped a reachable spiral position");
+                check(!planted||previous,"new crops skipped a reachable zigzag position");
                 previous=planted;
             }
             if(!previous)return;
-            l.setBlock(CANE.below(2),Blocks.STONE.defaultBlockState(),3);
-            l.setBlock(CANE.below(2).east(),Blocks.STONE.defaultBlockState(),3);
-            l.setBlock(CANE.below(),Blocks.SAND.defaultBlockState(),3);
-            l.setBlock(CANE.below().east(),Blocks.WATER.defaultBlockState(),3);
-            for(int height=0;height<3;height++)l.setBlock(CANE.above(height),Blocks.SUGAR_CANE.defaultBlockState(),3);
+            if(!canePrepared){
+                l.setBlock(CANE.below(2),Blocks.STONE.defaultBlockState(),3);
+                l.setBlock(CANE.below(2).east(),Blocks.STONE.defaultBlockState(),3);
+                l.setBlock(CANE.below(),Blocks.SAND.defaultBlockState(),3);
+                l.setBlock(CANE.below().east(),Blocks.WATER.defaultBlockState(),3);
+                s.setItem(0,new ItemStack(Items.SUGAR_CANE));
+                canePrepared=true;
+                return;
+            }
+            if(!l.getBlockState(CANE).is(Blocks.SUGAR_CANE))return;
+            check(s.getItem(0).isEmpty(),"planting did not cost one cane");
+            canePlanted=true;
+            for(int height=1;height<3;height++)l.setBlock(CANE.above(height),Blocks.SUGAR_CANE.defaultBlockState(),3);
             l.setBlock(STEM.below(),Blocks.FARMLAND.defaultBlockState(),3);
             l.setBlock(FRUIT.below(),Blocks.DIRT.defaultBlockState(),3);
             l.setBlock(FRUIT,Blocks.PUMPKIN.defaultBlockState(),3);
             l.setBlock(STEM,Blocks.ATTACHED_PUMPKIN_STEM.defaultBlockState().setValue(AttachedStemBlock.FACING,Direction.SOUTH),3);
             stage=2;
         }else if(stage==2){
-            if(!l.getBlockState(CANE.above()).isAir()||!l.getBlockState(FRUIT).isAir())return;
-            check(l.getBlockState(CANE).is(Blocks.SUGAR_CANE),"cane base was removed: "+l.getBlockState(CANE));
+            sawLooseCane|=!l.getEntitiesOfClass(ItemEntity.class,new AABB(CANE).inflate(2,3,2),e->e.getItem().is(Items.SUGAR_CANE)).isEmpty();
+            if(!l.getBlockState(CANE.above()).isAir()||!l.getBlockState(FRUIT).isAir()||s.countItem(Items.SUGAR_CANE)!=2)return;
+            check(canePlanted&&sawLooseCane&&l.getBlockState(CANE).is(Blocks.SUGAR_CANE),"missing cane planting/world pickup/base");
             check(l.getBlockState(STEM).is(Blocks.PUMPKIN_STEM),"pumpkin stem was removed: "+l.getBlockState(STEM));
+            var mature=Blocks.PUMPKIN_STEM.defaultBlockState().setValue(StemBlock.AGE,7);
+            l.setBlock(STEM,mature,3);
+            l.setBlock(FRUIT.below(),Blocks.STONE.defaultBlockState(),3);
+            l.setBlock(JUMP.below(),Blocks.FARMLAND.defaultBlockState(),3);
+            l.setBlock(JUMP,Blocks.GRASS.defaultBlockState(),3);
+            stage=5;
+        }else if(stage==5){
+            if(v.getY()>JUMP.getY()+.3&&Math.abs(v.getX()-(JUMP.getX()+.5))<.6&&Math.abs(v.getZ()-(JUMP.getZ()+.5))<.6)sawJump=true;
+            if(!sawJump||!v.isOnGround()||!l.getBlockState(JUMP).isAir())return;
+            check(l.getBlockState(STEM).is(Blocks.PUMPKIN_STEM)||l.getBlockState(STEM).is(Blocks.ATTACHED_PUMPKIN_STEM),"fruit-space work damaged stem");
             l.setBlock(CHEST,Blocks.BARREL.defaultBlockState(),3);
             s.industry.putLong("discard",CHEST.asLong());
-            s.setItem(8,new ItemStack(Items.COBBLESTONE,6));
+            var drop=new ItemEntity(l,JUMP.getX()+.5,JUMP.getY()+.1,JUMP.getZ()+.5,new ItemStack(Items.COBBLESTONE,6));
+            l.addFreshEntity(drop);
             l.setDayTime(13001);
             p.teleportTo(l,CHEST.getX()+2.5,CHEST.getY()+.5,CHEST.getZ()+4.5,150,20);
             stage=3;
@@ -113,10 +137,10 @@ public final class FarmerVisualCheck {
             var barrel=(BarrelBlockEntity)l.getBlockEntity(CHEST);
             int deposited=barrel.countItem(Items.COBBLESTONE);
             if(!v.isSleeping())return;
-            check(deposited==6&&s.getItem(8).isEmpty(),"went to bed before discarding");
+            check(deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding");
             s.industry.putBoolean("visual_farmer_night",true);
             s.setChanged();
-            System.out.println("FARMER_SPIRAL_HARVEST_DISCARD_AND_SLEEP_PASSED");
+            System.out.println("FARMER_ZIGZAG_HARVEST_JUMP_DISCARD_AND_SLEEP_PASSED");
             var bed=v.getSleepingPos().orElseThrow();
             p.teleportTo(l,bed.getX()+.5,bed.getY()+.5,bed.getZ()+3.5,180,20);
             stage=4;
@@ -128,20 +152,20 @@ public final class FarmerVisualCheck {
         var player=mc.player.getUUID();
         ticks++;
         if(ticks==1)server.execute(()->setup(server.getPlayerList().getPlayer(player)));
-        if(ticks%5==0&&stage>0&&stage<4)server.execute(()->progress(server.getPlayerList().getPlayer(player)));
+        if(ticks%5==0&&stage>0&&stage!=4)server.execute(()->progress(server.getPlayerList().getPlayer(player)));
         if(stage!=visibleStage){visibleStage=stage;stageTicks=0;}
         stageTicks++;
         if(stage>=2&&stage!=capturedStage&&stageTicks>=8){
             capturedStage=stage;
             Screenshot.grab(new File("../build"),"visual-farmer-field-"+stage+".png",mc.getMainRenderTarget(),m->{});
         }
-        check(ticks<1200,"field or sleep sequence timed out at stage "+stage);
+        check(ticks<2400,"field or sleep sequence timed out at stage "+stage);
         return stage==4&&capturedStage==4;
     }
 
     static void verifyRestore(ServerLevel l){
         var s=station(l);
-        check(s.industry.getBoolean("visual_farmer_night")&&s.industry.getInt("spiral_size")==5,"saved spiral or night state missing");
+        check(s.industry.getBoolean("visual_farmer_night")&&s.industry.getInt("zigzag_size")==5,"saved zigzag or night state missing");
         check(((BarrelBlockEntity)l.getBlockEntity(CHEST)).countItem(Items.COBBLESTONE)==6,"saved discard changed");
         for(var at:ROW)check(l.getBlockState(at).is(Blocks.WHEAT),"saved crop changed");
         System.out.println("FARMER_SAME_WORLD_RESTART_PASSED");

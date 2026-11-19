@@ -18,6 +18,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.items.ItemHandlerHelper;
+import net.minecraftforge.event.ForgeEventFactory;
 
 public final class FarmerLogistics {
     private static final Map<Villager,Route> ROUTES=new WeakHashMap<>();
@@ -27,15 +28,31 @@ public final class FarmerLogistics {
     private FarmerLogistics(){}
 
     private static boolean visible(ServerLevel l,Villager v,Vec3 target,BlockPos allowedHit){
+        var eye=v.getEyePosition();
+        int minX=(int)Math.floor(Math.min(eye.x,target.x))>>4,maxX=(int)Math.floor(Math.max(eye.x,target.x))>>4;
+        int minZ=(int)Math.floor(Math.min(eye.z,target.z))>>4,maxZ=(int)Math.floor(Math.max(eye.z,target.z))>>4;
+        for(int x=minX;x<=maxX;x++)for(int z=minZ;z<=maxZ;z++)if(l.getChunkSource().getChunkNow(x,z)==null)return false;
         var hit=l.clip(new ClipContext(v.getEyePosition(),target,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,v));
         return hit.getType()==HitResult.Type.MISS||allowedHit!=null&&hit.getBlockPos().equals(allowedHit);
     }
 
+    private static final Map<Villager,Map<BlockPos,Long>> BLOCKED=new WeakHashMap<>();
+    private static final Map<Villager,Jump> JUMPS=new WeakHashMap<>();
+    private static final Map<Villager,Map<UUID,Long>> UNREACHABLE_ITEMS=new WeakHashMap<>();
+    private record Jump(BlockPos soil,long until,int attempts){}
+
     /** 1 arrived, 0 navigating, -1 inaccessible. */
-    static int approach(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos pos){
+    static int approachCell(ServerLevel l,Villager v,BlockPos pos,boolean adjacent){
+        return approach(l,v,pos,adjacent?1.38:.68,adjacent?1:0);
+    }
+
+    private static int approach(ServerLevel l,Villager v,BlockPos pos,double radius,int accuracy){
         if(!l.hasChunkAt(pos))return -1;
+        var feet=Vec3.atBottomCenterOf(pos);
         var center=Vec3.atCenterOf(pos);
-        if(v.distanceToSqr(center)<=9&&visible(l,v,center,pos)){
+        double dx=v.getX()-feet.x,dz=v.getZ()-feet.z;
+        boolean sameColumn=new BlockPos(v.getX(),pos.getY(),v.getZ()).equals(pos);
+        if((accuracy!=0||sameColumn)&&dx*dx+dz*dz<=radius*radius&&Math.abs(v.getY()-feet.y)<=.85&&visible(l,v,center,pos)){
             ROUTES.remove(v);
             v.getNavigation().stop();
             v.getLookControl().setLookAt(center.x,center.y,center.z);
@@ -43,40 +60,98 @@ public final class FarmerLogistics {
         }
         if(v.isNoAi())return -1;
         long now=l.getGameTime();
+        var blocked=BLOCKED.computeIfAbsent(v,k->new HashMap<>());
+        blocked.values().removeIf(until->until<=now);
+        if(blocked.containsKey(pos))return -1;
         var route=ROUTES.get(v);
         if(route==null||!route.target.equals(pos)){
             route=new Route(pos.immutable(),now);
             ROUTES.put(v,route);
-            var path=v.getNavigation().createPath(pos,1);
+            var path=v.getNavigation().createPath(pos,accuracy);
             if(path==null||!path.canReach()||!v.getNavigation().moveTo(path,.8)){
                 ROUTES.remove(v);
+                blocked.put(pos.immutable(),now+100);
                 return -1;
             }
         }
         if(now-route.since>=100||v.getNavigation().isDone()){
             ROUTES.remove(v);
             v.getNavigation().stop();
+            blocked.put(pos.immutable(),now+100);
             return -1;
         }
         return 0;
     }
 
+    static void stayInField(ServerLevel l,EmploymentData.Station s,Villager v){
+        var area=IndustrialWork.area(l,s);
+        if(area.contains(v.position().add(0,.125,0))||v.isNoAi())return;
+        int size=IndustrialRules.size(l,s);
+        var cells=FarmerWork.zigzag(s.pos,size,0);
+        var candidates=new ArrayList<BlockPos>();
+        for(var base:cells)for(int y=0;y<FarmerWork.HEIGHT;y++){
+            var pos=base.above(y);
+            if(l.hasChunkAt(pos)&&l.getBlockState(pos).getCollisionShape(l,pos).isEmpty()
+                &&l.getBlockState(pos.above()).getCollisionShape(l,pos.above()).isEmpty()
+                &&!l.getBlockState(pos.below()).getCollisionShape(l,pos.below()).isEmpty())candidates.add(pos);
+        }
+        candidates.sort(Comparator.comparingDouble(pos->v.distanceToSqr(Vec3.atBottomCenterOf(pos))));
+        for(var pos:candidates.stream().limit(8).toList())if(approachCell(l,v,pos,false)>=0)return;
+    }
+
+    static void jumpOn(Villager v,BlockPos soil){
+        v.getNavigation().stop();
+        JUMPS.put(v,new Jump(soil.immutable(),v.level.getGameTime()+18,1));
+        v.getJumpControl().jump();
+    }
+    static boolean isJumping(Villager v){
+        var jump=JUMPS.get(v);
+        if(jump==null)return false;
+        if(v.level.getGameTime()<jump.until)return true;
+        if(jump.attempts<4&&v.isOnGround()&&v.level.getBlockState(jump.soil).is(net.minecraft.world.level.block.Blocks.FARMLAND)
+            &&v.level.getBlockState(jump.soil.above()).isAir()&&v.distanceToSqr(Vec3.atBottomCenterOf(jump.soil.above()))<.36){
+            JUMPS.put(v,new Jump(jump.soil,v.level.getGameTime()+18,jump.attempts+1));
+            v.getJumpControl().jump();
+            return true;
+        }
+        JUMPS.remove(v);
+        return false;
+    }
+    public static boolean allowsTrample(Villager v,BlockPos soil){
+        var jump=JUMPS.get(v);
+        return jump!=null&&v.level.getGameTime()<=jump.until&&jump.soil.equals(soil)
+            &&v.level.getBlockState(soil.above()).isAir();
+    }
+
+    static void rescan(Villager v){PICKUPS.remove(v);}
     static boolean collect(ServerLevel l,EmploymentData.Station s,Villager v){
+        return collect(l,s,v,false);
+    }
+    private static boolean collect(ServerLevel l,EmploymentData.Station s,Villager v,boolean closing){
         var state=PICKUPS.get(v);
         long now=l.getGameTime();
         var area=IndustrialWork.area(l,s).inflate(3,1,3);
+        var rejected=UNREACHABLE_ITEMS.computeIfAbsent(v,k->new HashMap<>());
+        rejected.values().removeIf(until->until<=now);
         ItemEntity item=state!=null&&state.item!=null&&l.getEntity(state.item) instanceof ItemEntity e?e:null;
         if(!eligible(l,s,area,item)){
             if(state!=null&&state.nextScan>now)return false;
-            item=l.getEntitiesOfClass(ItemEntity.class,area,e->eligible(l,s,area,e)).stream()
+            item=l.getEntitiesOfClass(ItemEntity.class,area,e->!rejected.containsKey(e.getUUID())&&eligible(l,s,area,e)).stream()
                 .min(Comparator.comparingDouble(v::distanceToSqr)).orElse(null);
-            PICKUPS.put(v,new Pickup(item==null?null:item.getUUID(),now+40));
+            PICKUPS.put(v,new Pickup(item==null?null:item.getUUID(),now+(closing?5:10)));
         }
         if(item==null)return false;
-        int travel=approach(l,s,v,item.blockPosition());
-        if(travel==0)return true;
-        if(travel>0&&visible(l,v,item.position().add(0,.1,0),null)
-            &&IndustrialWork.allowed(l,s,v,item.blockPosition(),item,"farmer_collect")
+        boolean close=v.distanceToSqr(item)<=1.21&&visible(l,v,item.position().add(0,.1,0),null);
+        if(!close){
+            int travel=approach(l,v,item.blockPosition(),.4,0);
+            if(travel==0)return true;
+            if(travel<0||v.distanceToSqr(item)>1.21||!visible(l,v,item.position().add(0,.1,0),null)){
+                rejected.put(item.getUUID(),now+100);
+                rescan(v);
+                return closing;
+            }
+        }
+        if(IndustrialWork.allowed(l,s,v,item.blockPosition(),item,"farmer_collect")
             &&eligible(l,s,area,item)&&Employment.valid(l,v.getUUID())&&v.getUUID().equals(s.worker)){
             var take=item.getItem().copy();
             while(!take.isEmpty()&&!IndustrialWork.insert(s,take,false))take.shrink(1);
@@ -84,10 +159,14 @@ public final class FarmerLogistics {
                 var remaining=item.getItem().copy();
                 remaining.shrink(take.getCount());
                 if(remaining.isEmpty())item.discard();else item.setItem(remaining);
+                v.getNavigation().stop();
+                rescan(v);
+                return true;
             }
         }
-        PICKUPS.put(v,new Pickup(null,now+40));
-        return travel>0;
+        rejected.put(item.getUUID(),now+100);
+        rescan(v);
+        return closing;
     }
     private static boolean eligible(ServerLevel l,EmploymentData.Station s,net.minecraft.world.phys.AABB area,ItemEntity e){
         if(e==null||!e.isAlive()||e.hasPickUpDelay()||!area.contains(e.position())||!l.hasChunkAt(e.blockPosition()))return false;
@@ -185,22 +264,30 @@ public final class FarmerLogistics {
         long now=l.getGameTime();
         if(s.industry.getLong("farmer_discard_day")!=cycle){
             s.industry.putLong("farmer_discard_day",cycle);
-            s.industry.remove("farmer_discard_until");
-            if(hasExcess(l,s)){
-                var pos=target(l,s,v);
-                if(pos!=null){
-                    s.industry.putLong("farmer_discard_pos",pos.asLong());
-                    s.industry.putLong("farmer_discard_until",now+100);
-                }
-            }
+            s.industry.putLong("farmer_discard_until",now+220);
+            s.industry.putLong("farmer_pickup_until",now+120);
+            s.industry.remove("farmer_discard_pos");
+            rescan(v);
             s.setChanged();
         }
         if(!s.industry.contains("farmer_discard_until"))return false;
-        var pos=BlockPos.of(s.industry.getLong("farmer_discard_pos"));
-        int result=now<s.industry.getLong("farmer_discard_until")&&supports(l,pos)?approach(l,s,v,pos):-1;
-        if(result==0)return true;
-        if(result>0)deposit(l,s,v,pos);
+        if(s.industry.contains("farmer_pickup_until")){
+            if(now<s.industry.getLong("farmer_pickup_until")&&ForgeEventFactory.getMobGriefingEvent(l,v)){
+                if(collect(l,s,v,true))return true;
+            }
+            s.industry.remove("farmer_pickup_until");
+            var target=hasExcess(l,s)?target(l,s,v):null;
+            if(target!=null)s.industry.putLong("farmer_discard_pos",target.asLong());
+            s.setChanged();
+        }
+        if(s.industry.contains("farmer_discard_pos")){
+            var pos=BlockPos.of(s.industry.getLong("farmer_discard_pos"));
+            int result=now<s.industry.getLong("farmer_discard_until")&&supports(l,pos)?approach(l,v,pos,1.38,1):-1;
+            if(result==0)return true;
+            if(result>0)deposit(l,s,v,pos);
+        }
         s.industry.remove("farmer_discard_until");
+        s.industry.remove("farmer_discard_pos");
         s.setChanged();
         return false;
     }

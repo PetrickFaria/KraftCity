@@ -15,8 +15,8 @@ if Path('build/screenshots').exists():shutil.copytree('build/screenshots',out/'s
 for stage in ('01','02','03','04','05','06'):
     shutil.copy2(f'docs/KRAFTCITY-ETAPA-{stage}.md',out/f'KRAFTCITY-ETAPA-{stage}.md')
 shutil.copytree('docs/licenses',out/'licenses',dirs_exist_ok=True)
-farmer_report=Path('docs/KRAFTCITY-1.1.01.md')
-if version=='1.1.01':
+farmer_report=Path(f'docs/KRAFTCITY-{version}.md')
+if farmer_report.is_file():
     shutil.copy2(farmer_report,out/farmer_report.name)
 sha=os.environ['GITHUB_SHA']
 run_url=f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
@@ -51,7 +51,7 @@ Commit validado: {sha}.
 GitHub Actions: {run_url}.
 SHA-256 JAR: {digest}.
 """,encoding='utf-8')
-if version=='1.1.01':
+if farmer_report.is_file():
     report=out/f'relatorio-{version}.md'
     baseline=report.read_text(encoding='utf-8')
     report.write_text(

@@ -60,11 +60,23 @@ public final class CommerceVisualCheck {
         if(i==0){
             src.setItem(27,new ItemStack(Items.WOODEN_HOE));src.setItem(0,new ItemStack(Items.WHEAT_SEEDS,25));
             int[][] plots={{-2,1},{-1,1},{0,1},{1,1},{2,1},{2,0}};
-            for(var plot:plots){var crop=sourcePos.offset(plot[0],1,plot[1]);l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);src.industry.putInt("cursor",((plot[1]+2)*5+plot[0]+2)*5);IndustrialWork.tick(l,src);}
+            for(var plot:plots){var crop=sourcePos.offset(plot[0],1,plot[1]);l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);supplier.setPos(crop.getX()+.5,crop.getY(),crop.getZ()+.5);IndustrialWork.tick(l,src);}
             check(count(src,Items.WHEAT)==6,"Real wheat harvest for baker");
         }else if(i==1){
-            src.setItem(27,new ItemStack(Items.WOODEN_HOE));src.setItem(0,new ItemStack(Items.SUGAR_CANE,25));var root=sourcePos.east().above();supplier.setPos(sourcePos.getX()+.5,sourcePos.getY()+1,sourcePos.getZ()+1.5);l.setBlock(root.below(2),Blocks.STONE.defaultBlockState(),3);l.setBlock(root.below(),Blocks.SAND.defaultBlockState(),3);l.setBlock(root.below().south(),Blocks.WATER.defaultBlockState(),3);
-            for(int n=0;n<3;n++)l.setBlock(root.above(n),Blocks.SUGAR_CANE.defaultBlockState(),3);src.industry.putInt("cursor",66);IndustrialWork.tick(l,src);check(count(src,Items.SUGAR_CANE)==27,"Real cane harvest");
+            src.setItem(27,new ItemStack(Items.WOODEN_HOE));src.setItem(0,new ItemStack(Items.SUGAR_CANE,25));
+            var root=sourcePos.east().above();
+            for(var at:BlockPos.betweenClosed(root.offset(-1,-1,-1),root.offset(1,-1,1))){
+                if(!at.equals(sourcePos))l.setBlock(at,Blocks.STONE.defaultBlockState(),3);
+            }
+            supplier.setPos(root.getX()+.5,root.getY(),root.getZ()+.5);
+            l.setBlock(root.below(2),Blocks.STONE.defaultBlockState(),3);
+            l.setBlock(root.below(),Blocks.SAND.defaultBlockState(),3);
+            l.setBlock(root.below().south(),Blocks.WATER.defaultBlockState(),3);
+            for(int n=0;n<3;n++)l.setBlock(root.above(n),Blocks.SUGAR_CANE.defaultBlockState(),3);
+            IndustrialWork.tick(l,src);
+            check(count(src,Items.SUGAR_CANE)==25&&l.getBlockState(root.above()).isAir(),"Cane harvest must leave drops in the world");
+            s.commerce.putUUID("visual_cane_post",src.id);
+            supplier.setNoAi(false);
         }else{
             src.setItem(27,new ItemStack(Items.WOODEN_AXE));for(int n=0;n<3;n++){var cow=EntityType.COW.create(l);cow.setAge(0);cow.setNoAi(true);cow.setPos(sourcePos.getX()+1.5,sourcePos.getY(),sourcePos.getZ()+.5);cow.getPersistentData().putUUID("KCIndustryStation",src.id);cow.getPersistentData().putLong("KCIndustryBorn",-1000000+n);l.addFreshEntity(cow);}IndustrialWork.tick(l,src);check(count(src,Items.BEEF)==1,"Real butcher source");s.setItem(30,new ItemStack(Items.COAL));
         }
@@ -82,7 +94,17 @@ public final class CommerceVisualCheck {
     @net.minecraftforge.eventbus.api.SubscribeEvent(priority=net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public static void actualSupply(WorkActionEvent e){if(!e.action.equals("commercial_supply")||!e.station.commerce.contains("visual_stage"))return;int i=e.station.commerce.getInt("visual_stage");if(i<0||i>=3||!e.station.pos.equals(post(i)))return;check(e.worker.distanceToSqr(Vec3.atCenterOf(e.position))<=9,"Commercial supply occurred without physical arrival");var inventory=DiscardChests.at(e.level,e.position);check(inventory!=null,"Commercial supply accessed absent container");visited[i]=true;e.station.commerce.putLong("visual_actual_supply",e.position.asLong());}
     private static void poll(ServerPlayer player,int i){
-        var l=player.getLevel();var s=station(l,i);var v=(Villager)l.getEntity(s.worker);var chest=BlockPos.of(s.commerce.getLong("visual_source"));
+        var l=player.getLevel();var s=station(l,i);
+        if(i==1&&s.commerce.hasUUID("visual_cane_post")){
+            var source=EmploymentData.get(l).station(s.commerce.getUUID("visual_cane_post"));
+            if(count(source,Items.SUGAR_CANE)>=27&&l.getEntity(source.worker) instanceof Villager supplier){
+                IndustrialWork.deposit(l,source,supplier);
+                supplier.setNoAi(true);
+                s.commerce.remove("visual_cane_post");
+                s.setChanged();
+            }
+        }
+        var v=(Villager)l.getEntity(s.worker);var chest=BlockPos.of(s.commerce.getLong("visual_source"));
         if(v!=null&&v.distanceToSqr(Vec3.atCenterOf(chest))<=9)visited[i]=true;
         if(!done&&l.getGameTime()%200==0)System.out.println("COMMERCE_DEBUG "+JOBS[i]+" elapsed="+s.commerce.getInt("elapsed")+" pos="+(v==null?"unloaded":v.position())+" status="+s.commerce.getString("status"));
         Item product=i==0?Items.BREAD:i==1?Items.SUGAR:Items.COOKED_BEEF;

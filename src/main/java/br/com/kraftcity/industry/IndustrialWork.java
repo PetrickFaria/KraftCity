@@ -41,7 +41,7 @@ public final class IndustrialWork {
             &&!v.getPersistentData().contains("residenciasaldeoes_night_door_task");
     }
     public static boolean day(ServerLevel l){long t=Math.floorMod(l.getDayTime(),24000);return t<12000||t>=23000;}
-    public static AABB area(ServerLevel l,EmploymentData.Station s){int r=IndustrialRules.size(l,s)/2;return s.profession==Profession.FARMER ? new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,6,r+1)) : new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
+    public static AABB area(ServerLevel l,EmploymentData.Station s){int r=IndustrialRules.size(l,s)/2;return s.profession==Profession.FARMER ? new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,FarmerWork.HEIGHT+1,r+1)) : new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
     public static void tick(ServerLevel l,EmploymentData.Station s){
         if(!industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
         if(!day(l)||l.isRaining()||v.isSleeping()){
@@ -66,7 +66,7 @@ public final class IndustrialWork {
         replenish(s);showTool(v,s);
         if(!ForgeEventFactory.getMobGriefingEvent(l,v)){alert(l,s,"protection","Trabalho bloqueado pela proteção/mobGriefing.");return;}
         switch(s.profession){
-            case FARMER->{if(!FarmerLogistics.collect(l,s,v))FarmerWork.tick(l,s,v);}
+            case FARMER->{if(!FarmerLogistics.isJumping(v)&&!FarmerLogistics.collect(l,s,v))FarmerWork.tick(l,s,v);}
             case BUTCHER->animals(l,s,v,Profession.BUTCHER);
             case SHEPHERD->animals(l,s,v,Profession.SHEPHERD);
             case FISHERMAN->fish(l,s,v);
