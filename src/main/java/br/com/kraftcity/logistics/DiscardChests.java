@@ -36,19 +36,31 @@ public final class DiscardChests {
     public static List<Access> around(ServerLevel l,EmploymentData.Station s,AABB area){
         var map=CACHE.computeIfAbsent(l,k->new HashMap<>());var cache=map.get(s.id);long now=l.getGameTime();
         if(cache==null||!cache.post.equals(s.pos)||!cache.area.equals(area)||now<cache.at||now-cache.at>=20){
-            var positions=new ArrayList<BlockPos>();var search=area.inflate(5);
-            for(int x=((int)Math.floor(search.minX))>>4;x<=((int)Math.floor(search.maxX))>>4;x++)
-                for(int z=((int)Math.floor(search.minZ))>>4;z<=((int)Math.floor(search.maxZ))>>4;z++){
-                    var chunk=l.getChunkSource().getChunkNow(x,z);if(chunk==null)continue;
-                    for(var be:chunk.getBlockEntities().values())if((be instanceof ChestBlockEntity||be instanceof BarrelBlockEntity)&&inRange(area,be.getBlockPos())&&at(l,be.getBlockPos())!=null)positions.add(be.getBlockPos().immutable());
-                }
-            positions.sort(Comparator.<BlockPos>comparingDouble(p->p.distSqr(s.pos)).thenComparingInt(BlockPos::getX).thenComparingInt(BlockPos::getY).thenComparingInt(BlockPos::getZ));
+            var positions=loadedPositions(l,s,area,p->at(l,p)!=null);
             cache=new Cached(now,s.pos,area,List.copyOf(positions));map.put(s.id,cache);
         }
         var result=new ArrayList<Access>();Set<Long> seen=new HashSet<>();
         for(var p:cache.positions){Container c=at(l,p);if(c!=null&&inRange(area,p)&&seen.add(identity(l,p)))result.add(new Access(p,c));}
         return List.copyOf(result);
     }
+    public static List<BlockPos> loadedPositions(ServerLevel l,EmploymentData.Station station,AABB area,
+                                                    java.util.function.Predicate<BlockPos> accepts){
+        var positions=new ArrayList<BlockPos>();
+        var search=area.inflate(5);
+        for(int x=((int)Math.floor(search.minX))>>4;x<=((int)Math.floor(search.maxX))>>4;x++){
+            for(int z=((int)Math.floor(search.minZ))>>4;z<=((int)Math.floor(search.maxZ))>>4;z++){
+                var chunk=l.getChunkSource().getChunkNow(x,z);
+                if(chunk==null)continue;
+                for(var pos:chunk.getBlockEntitiesPos()){
+                    if(inRange(area,pos)&&accepts.test(pos))positions.add(pos.immutable());
+                }
+            }
+        }
+        positions.sort(Comparator.<BlockPos>comparingDouble(p->p.distSqr(station.pos))
+            .thenComparingInt(BlockPos::getX).thenComparingInt(BlockPos::getY).thenComparingInt(BlockPos::getZ));
+        return positions;
+    }
+
     private static long identity(ServerLevel l,BlockPos p){
         var state=l.getBlockState(p);if(state.getBlock() instanceof ChestBlock&&state.getValue(ChestBlock.TYPE)!=net.minecraft.world.level.block.state.properties.ChestType.SINGLE){
             var other=p.relative(ChestBlock.getConnectedDirection(state));return Math.min(p.asLong(),other.asLong());

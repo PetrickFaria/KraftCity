@@ -27,7 +27,7 @@ public final class BuilderWork {
     private static final Map<UUID,Integer> STALLED=new HashMap<>();
     private static final Map<UUID,Integer> MISSING=new HashMap<>();
     public static boolean builder(EmploymentData.Station s){return s!=null&&s.profession==Profession.BUILDER;}
-    public static boolean ownsNavigation(Villager v){return v.level instanceof ServerLevel l&&builder(EmploymentData.get(l).assigned(v.getUUID()))&&IndustrialWork.day(l)&&!v.isSleeping()&&!v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")&&!v.getPersistentData().contains("residenciasaldeoes_night_door_task")&&!v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced");}
+    public static boolean ownsNavigation(Villager v){return v.level instanceof ServerLevel l&&builder(EmploymentData.get(l).assigned(v.getUUID()))&&IndustrialWork.day(l)&&!l.isThundering()&&!Employment.fleeing(v)&&!v.isSleeping()&&!v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")&&!v.getPersistentData().contains("residenciasaldeoes_night_door_task")&&!v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced");}
     public static int level(long xp){return xp>=500?5:xp>=300?4:xp>=150?3:xp>=50?2:1;}
     public static int duration(long xp){return (6-level(xp))*20;}
     public static void release(ServerLevel l,UUID worker){var d=BuilderData.get(l);for(var j:d.jobs.values()){j.workers.remove(worker);j.tasks.values().removeIf(t->t.worker.equals(worker));}CLOCKS.remove(worker);MISSING.remove(worker);STALLED.remove(worker);d.setDirty();}

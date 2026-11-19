@@ -15,38 +15,20 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.Vec3;
 
 public final class FarmerWork {
     public static final int HEIGHT=3;
     private FarmerWork(){}
 
-    public static List<BlockPos> zigzag(BlockPos post,int size,int corner){
+    public static List<BlockPos> zigzag(BlockPos post,int size){
         var path=new ArrayList<BlockPos>(size*size);
         for(int row=0;row<size;row++){
             for(int column=0;column<size;column++){
                 int x=(row%2==0?column:size-1-column)-size/2;
-                path.add(rotated(post,x,row-size/2,corner));
+                path.add(post.offset(x,1,row-size/2));
             }
         }
         return path;
-    }
-    private static BlockPos rotated(BlockPos post,int x,int z,int corner){
-        return switch(corner){
-            case 1 -> post.offset(-z,1,x);
-            case 2 -> post.offset(-x,1,-z);
-            case 3 -> post.offset(z,1,-x);
-            default -> post.offset(x,1,z);
-        };
-    }
-    public static int farthestCorner(BlockPos post,int size,Vec3 worker){
-        int best=0;
-        double distance=-1;
-        for(int corner=0;corner<4;corner++){
-            double next=worker.distanceToSqr(Vec3.atCenterOf(rotated(post,-size/2,-size/2,corner)));
-            if(next>distance){best=corner;distance=next;}
-        }
-        return best;
     }
 
     static boolean inside(EmploymentData.Station s,int size,BlockPos pos){
@@ -74,16 +56,17 @@ public final class FarmerWork {
             return;
         }
         int size=IndustrialRules.size(l,s);
-        if(s.industry.getInt("zigzag_size")!=size){
+        if(s.industry.getInt("zigzag_size")!=size||s.industry.contains("zigzag_corner")){
             s.industry.putInt("zigzag_size",size);
-            s.industry.putInt("zigzag_corner",farthestCorner(s.pos,size,v.position()));
+            s.industry.remove("zigzag_corner");
             s.industry.putInt("zigzag_harvest",0);
             s.industry.putInt("zigzag_plant",0);
             s.setChanged();
         }
-        var path=zigzag(s.pos,size,s.industry.getInt("zigzag_corner"));
+        var path=zigzag(s.pos,size);
         if(harvest(l,s,v,size,path,tool))return;
         if(clearFruitSpace(l,s,v,size,path))return;
+        if(plantCane(l,s,v,path,tool))return;
         if(sow(l,s,v,size,path,tool,false)||sow(l,s,v,size,path,tool,true))return;
         if(s.getItem(28).is(Items.BONE_MEAL)){
             for(var base:path)for(int y=0;y<HEIGHT;y++){
@@ -157,7 +140,7 @@ public final class FarmerWork {
         if(!IndustrialWork.exchange(s,input,1,drops,false)){
             IndustrialWork.alert(l,s,"space","Inventário cheio; colheita preservada no terreno.");return;
         }
-        if(!l.setBlock(pos,replant?replanted:Blocks.AIR.defaultBlockState(),replant?Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE:Block.UPDATE_ALL))return;
+        if(!l.setBlock(pos,replant?replanted:Blocks.AIR.defaultBlockState(),Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE))return;
         IndustrialWork.exchange(s,input,1,drops,true);
         if(!replant){
             var pending=s.industry.getCompound("farmer_replant");
@@ -165,6 +148,7 @@ public final class FarmerWork {
             s.industry.put("farmer_replant",pending);
             IndustrialWork.alert(l,s,"seed","Falta semente para replantar a mesma cultura.");
         }
+        traceHarvest(v,pos,state,l.getBlockState(pos));
         v.swing(InteractionHand.MAIN_HAND,true);
         IndustrialRules.wear(l,s,tool);
         IndustrialRules.progress(l,s);
@@ -190,7 +174,7 @@ public final class FarmerWork {
             IndustrialWork.alert(l,s,"space","Inventário cheio; colheita preservada no terreno.");return;
         }
         if(cane&&!l.setBlock(pos.above(),Blocks.AIR.defaultBlockState(),2))return;
-        if(!l.setBlock(pos,Blocks.AIR.defaultBlockState(),3)){
+        if(!l.setBlock(pos,Blocks.AIR.defaultBlockState(),cane?Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE:Block.UPDATE_ALL)){
             if(cane)l.setBlock(pos.above(),upper,3);
             return;
         }
@@ -201,6 +185,7 @@ public final class FarmerWork {
             }
             FarmerLogistics.rescan(v);
         }else IndustrialWork.outputs(s,drops,true);
+        traceHarvest(v,pos,state,l.getBlockState(pos));
         v.swing(InteractionHand.MAIN_HAND,true);
         IndustrialRules.wear(l,s,tool);
         IndustrialRules.progress(l,s);
@@ -232,24 +217,50 @@ public final class FarmerWork {
             if(!(state.getBlock() instanceof StemBlock)||state.getValue(StemBlock.AGE)!=7||fruitSpace(l,s,size,stem)!=null)continue;
             for(var direction:Direction.Plane.HORIZONTAL){
                 var pos=stem.relative(direction);
-                if(!inside(s,size,pos)||!l.hasChunkAt(pos)||!fruitSoil(l,pos))continue;
+                if(!inside(s,size,pos)||!l.hasChunkAt(pos)||!l.getBlockState(pos.below()).is(Blocks.FARMLAND))continue;
+                // Vanilla already accepts an empty farmland cell for fruit. Only
+                // clear replaceable vegetation, never a crop, to make room.
                 var obstacle=l.getBlockState(pos);
                 if(!obstacle.is(Blocks.GRASS)&&!obstacle.is(Blocks.FERN)&&!obstacle.is(Blocks.DEAD_BUSH))continue;
                 int travel=FarmerLogistics.approachCell(l,v,pos,false);
                 if(travel<0)continue;
                 if(travel==0)return true;
-                if(!IndustrialWork.breakAllowed(l,s,v,pos)||l.getBlockState(pos)!=obstacle||l.getBlockState(stem)!=state)continue;
+                if(!IndustrialWork.breakAllowed(l,s,v,pos)
+                    ||!IndustrialWork.allowed(l,s,v,pos.below(),null,"farmer_fruit_space")
+                    ||l.getBlockState(pos)!=obstacle||l.getBlockState(stem)!=state)continue;
                 if(!l.destroyBlock(pos,true,v))continue;
-                if(l.getBlockState(pos.below()).is(Blocks.FARMLAND)
-                    &&IndustrialWork.allowed(l,s,v,pos.below(),null,"farmer_fruit_space")){
-                    FarmerLogistics.jumpOn(v,pos.below());
-                }
+                FarmerLogistics.jumpOn(v,pos.below());
                 return true;
             }
             IndustrialWork.alert(l,s,"fruit_space","Caule maduro sem espaço lateral livre; cultivos vizinhos preservados.");
         }
         return false;
     }
+
+    private static boolean plantCane(ServerLevel l,EmploymentData.Station s,Villager v,List<BlockPos> path,ItemStack tool){
+        int slot=IndustrialWork.find(s,stack->stack.is(Items.SUGAR_CANE),0,27);
+        if(slot<0)return false;
+        var cane=Blocks.SUGAR_CANE.defaultBlockState();
+        for(var base:path)for(int y=0;y<HEIGHT;y++){
+            var pos=base.above(y);
+            if(!l.hasChunkAt(pos)||!l.getBlockState(pos).isAir()
+                ||l.getBlockState(pos.below()).is(Blocks.SUGAR_CANE)||!cane.canSurvive(l,pos))continue;
+            int travel=FarmerLogistics.approachCell(l,v,pos,false);
+            if(travel<0)continue;
+            if(travel>0&&sowAt(l,s,v,pos,slot,tool)){
+                s.industry.putInt("zigzag_plant",0);
+                s.setChanged();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private static void traceHarvest(Villager v,BlockPos pos,BlockState before,BlockState after){
+        com.mojang.logging.LogUtils.getLogger().debug(
+            "Farmer {} at {} harvested {}: {} -> {}",v.getUUID(),v.position(),pos,before,after);
+    }
+
     private static boolean reservedFruitSpace(ServerLevel l,EmploymentData.Station s,int size,BlockPos pos){
         for(var direction:Direction.Plane.HORIZONTAL){
             var stem=pos.relative(direction);
@@ -297,16 +308,11 @@ public final class FarmerWork {
         for(int i=0;i<27;i++){
             var candidate=plant(s.getItem(i));
             if(candidate==null||!pending.isEmpty()&&!Registry.BLOCK.getKey(candidate.getBlock()).toString().equals(pending))continue;
-            int priority;
-            if(candidate.is(Blocks.SUGAR_CANE)){
-                if(till||soil.is(Blocks.SUGAR_CANE)||!candidate.canSurvive(l,pos))continue;
-                priority=3;
-            }else{
-                if(till?!tillable(soil):!soil.is(Blocks.FARMLAND))continue;
-                boolean stem=candidate.getBlock() instanceof StemBlock;
-                if(stem&&fruitSpace(l,s,size,pos)==null)continue;
-                priority=stem?2:1;
-            }
+            if(candidate.is(Blocks.SUGAR_CANE)||(till?!tillable(soil):!soil.is(Blocks.FARMLAND)))continue;
+            boolean stem=candidate.getBlock() instanceof StemBlock;
+            int border=Math.max(Math.abs(pos.getX()-s.pos.getX()),Math.abs(pos.getZ()-s.pos.getZ()));
+            if(stem&&(border!=size/2||fruitSpace(l,s,size,pos)==null))continue;
+            int priority=stem?2:1;
             if(priority>best){slot=i;best=priority;}
         }
         return slot;
@@ -315,19 +321,19 @@ public final class FarmerWork {
     private static boolean tillable(BlockState soil){
         return soil.is(Blocks.DIRT)||soil.is(Blocks.GRASS_BLOCK)||soil.is(Blocks.DIRT_PATH);
     }
-    private static void sowAt(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos pos,int slot,ItemStack tool){
+    private static boolean sowAt(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos pos,int slot,ItemStack tool){
         var seed=s.getItem(slot);
         var crop=plant(seed);
         var ground=pos.below();
         var soil=l.getBlockState(ground);
         if(crop==null||!IndustrialWork.placeAllowed(l,s,v,pos,crop)
-            ||s.getItem(slot)!=seed||!same(l,s,v,pos,Blocks.AIR.defaultBlockState(),tool))return;
+            ||s.getItem(slot)!=seed||!same(l,s,v,pos,Blocks.AIR.defaultBlockState(),tool))return false;
         boolean till=!crop.is(Blocks.SUGAR_CANE)&&tillable(soil);
         if(till){
             var farmland=Blocks.FARMLAND.defaultBlockState();
             if(!IndustrialWork.breakAllowed(l,s,v,ground)||!IndustrialWork.placeAllowed(l,s,v,ground,farmland)
                 ||s.getItem(slot)!=seed||l.getBlockState(ground)!=soil||!same(l,s,v,pos,Blocks.AIR.defaultBlockState(),tool)
-                ||!l.setBlock(ground,farmland,3))return;
+                ||!l.setBlock(ground,farmland,3))return false;
         }
         if(crop.canSurvive(l,pos)&&l.setBlock(pos,crop,3)){
             s.removeItem(slot,1);
@@ -335,8 +341,10 @@ public final class FarmerWork {
             s.industry.getCompound("farmer_replant").remove(Long.toString(pos.asLong()));
             s.setChanged();
             if(till)IndustrialRules.wear(l,s,tool);
+            return true;
         }else if(till){
             l.setBlock(ground,soil,3);
         }
+        return false;
     }
 }

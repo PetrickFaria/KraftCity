@@ -202,8 +202,8 @@ public final class IndustryGameTests {
         var f=fixture(h,Profession.FARMER);BlockPos p=f.p.west();f.l.setBlock(p,Blocks.BARREL.defaultBlockState(),3);f.s.industry.putLong("discard",p.asLong());
         f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,40));f.s.setItem(1,new ItemStack(Items.WHEAT,20));
         IndustrialWork.deposit(f.l,f.s,f.v);var chest=(BarrelBlockEntity)f.l.getBlockEntity(p);
-        check(f.s.getItem(0).getCount()==25&&count(f,Items.WHEAT)==0,"reserve/excess");int seeds=0,wheat=0;for(int i=0;i<27;i++){if(chest.getItem(i).is(Items.WHEAT_SEEDS))seeds+=chest.getItem(i).getCount();if(chest.getItem(i).is(Items.WHEAT))wheat+=chest.getItem(i).getCount();}
-        check(seeds==15&&wheat==20,"discard duplication/loss");IndustrialWork.deposit(f.l,f.s,f.v);check(f.s.getItem(0).getCount()==25,"reserve deposited twice");h.succeed();
+        check(f.s.getItem(0).getCount()==10&&count(f,Items.WHEAT)==0,"reserve/excess");int seeds=0,wheat=0;for(int i=0;i<27;i++){if(chest.getItem(i).is(Items.WHEAT_SEEDS))seeds+=chest.getItem(i).getCount();if(chest.getItem(i).is(Items.WHEAT))wheat+=chest.getItem(i).getCount();}
+        check(seeds==30&&wheat==20,"discard duplication/loss");IndustrialWork.deposit(f.l,f.s,f.v);check(f.s.getItem(0).getCount()==10,"reserve deposited twice");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void protection_cancels_without_consuming_and_alert_is_throttled(GameTestHelper h){
@@ -287,13 +287,13 @@ public final class IndustryGameTests {
 
 
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
-    public static void farmer_zigzag_starts_far_and_crosses_each_row(GameTestHelper h){
+    public static void farmer_zigzag_starts_northwest_and_crosses_each_row(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);
-        var worker=net.minecraft.world.phys.Vec3.atCenterOf(f.p.offset(-4,0,4));
-        int corner=FarmerWork.farthestCorner(f.p,5,worker);
-        check(FarmerWork.zigzag(f.p,5,corner).get(0).equals(f.p.offset(2,1,-2)),"wrong farthest corner");
+        var firstRow=FarmerWork.zigzag(f.p,5);
+        check(firstRow.get(0).equals(f.p.offset(-2,1,-2))&&firstRow.get(4).equals(f.p.offset(2,1,-2))
+            &&firstRow.get(5).equals(f.p.offset(2,1,-1)),"route must start northwest and alternate east/west");
         for(int width:new int[]{5,13}){
-            var path=FarmerWork.zigzag(f.p,width,corner);
+            var path=FarmerWork.zigzag(f.p,width);
             check(path.size()==width*width&&new java.util.HashSet<>(path).size()==path.size(),"repeated or missing zigzag cell");
             check(path.get(path.size()-1).equals(f.p.offset(f.p.getX()-path.get(0).getX(),1,f.p.getZ()-path.get(0).getZ())),"zigzag did not finish at opposite corner");
             for(int n=1;n<path.size();n++)check(path.get(n).distManhattan(path.get(n-1))==1,"zigzag jumped a cell");
@@ -374,7 +374,7 @@ public final class IndustryGameTests {
         f.s.setItem(2,new ItemStack(Items.STICK,7));
         f.l.setDayTime(13001);f.v.setNoAi(false);
         FarmerLogistics.beforeHome(f.l,f.v);
-        check(count(f,Items.WHEAT_SEEDS)==25&&count(f,Items.MELON_SEEDS)==2&&count(f,Items.STICK)==0,"night transfer/reserve");
+        check(count(f,Items.WHEAT_SEEDS)==10&&count(f,Items.MELON_SEEDS)==2&&count(f,Items.STICK)==0,"night transfer/reserve");
         f.s.setItem(2,new ItemStack(Items.STICK,3));
         f.l.setDayTime(1000);f.l.setDayTime(13001);
         FarmerLogistics.beforeHome(f.l,f.v);
@@ -404,15 +404,15 @@ public final class IndustryGameTests {
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void farmer_reserves_the_only_lateral_fruit_cell(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);
-        var stem=f.p.east().south().above();
-        var fruit=stem.east();
+        var stem=f.p.offset(2,1,1);
+        var fruit=stem.west();
         f.l.setBlock(stem.below(),Blocks.FARMLAND.defaultBlockState(),3);
         f.l.setBlock(fruit.below(),Blocks.DIRT.defaultBlockState(),3);
         f.s.setItem(27,new ItemStack(Items.IRON_HOE));
         f.s.setItem(0,new ItemStack(Items.MELON_SEEDS,1));
         // Seed an initial orientation/cursor at the stem cell. Position the
         // worker adjacent so the assertions exercise the real placement step.
-        var route=FarmerWork.zigzag(f.p,5,0);
+        var route=FarmerWork.zigzag(f.p,5);
         f.s.industry.putInt("zigzag_size",5);
         f.s.industry.putInt("zigzag_plant",route.indexOf(stem)*FarmerWork.HEIGHT);
         f.v.setPos(stem.getX()+.5,stem.getY(),stem.getZ()+.5);
@@ -451,6 +451,191 @@ public final class IndustryGameTests {
                 check(f.l.getBlockState(at.below()).is(Blocks.FARMLAND),"neighbor soil changed: "+at);
             }
         }
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=220,batch="industry")
+    public static void walking_farmer_harvests_only_target_wheat(GameTestHelper h){walkingHarvest(h,Blocks.WHEAT);}
+    @GameTest(template="empty",timeoutTicks=220,batch="industry")
+    public static void walking_farmer_harvests_only_target_carrots(GameTestHelper h){walkingHarvest(h,Blocks.CARROTS);}
+    @GameTest(template="empty",timeoutTicks=220,batch="industry")
+    public static void walking_farmer_harvests_only_target_potatoes(GameTestHelper h){walkingHarvest(h,Blocks.POTATOES);}
+    @GameTest(template="empty",timeoutTicks=220,batch="industry")
+    public static void walking_farmer_harvests_only_target_beetroot(GameTestHelper h){walkingHarvest(h,Blocks.BEETROOTS);}
+    @GameTest(template="empty",timeoutTicks=220,batch="industry")
+    public static void walking_farmer_harvests_only_target_melon(GameTestHelper h){walkingHarvest(h,Blocks.MELON);}
+    @GameTest(template="empty",timeoutTicks=220,batch="industry")
+    public static void walking_farmer_harvests_only_target_pumpkin(GameTestHelper h){walkingHarvest(h,Blocks.PUMPKIN);}
+
+    private static void walkingHarvest(GameTestHelper h,Block kind){
+        var f=fixture(h,Profession.FARMER);
+        var target=f.p.offset(-2,1,-2);
+        var start=f.p.offset(2,1,2);
+        for(var floor:BlockPos.betweenClosed(f.p.offset(-4,-1,-4),f.p.offset(4,-1,4))){
+            f.l.setBlock(floor,Blocks.STONE.defaultBlockState(),3);
+        }
+        var soil=Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE,7);
+        var crop=kind instanceof CropBlock selected?selected:(CropBlock)Blocks.WHEAT;
+        var stem=target.east();
+        for(var pos:FarmerWork.zigzag(f.p,5)){
+            if(!pos.below().equals(f.p))f.l.setBlock(pos.below(),soil,3);
+            if(pos.equals(target)||pos.equals(stem)&&!(kind instanceof CropBlock)||pos.below().equals(f.p))continue;
+            var stage=pos.getZ()==target.getZ()+1?crop.getMaxAge():0;
+            f.l.setBlock(pos,crop.getStateForAge(stage),3);
+        }
+        if(kind instanceof CropBlock){
+            f.l.setBlock(target,crop.getStateForAge(crop.getMaxAge()),3);
+        }else{
+            f.l.setBlock(target.below(),Blocks.DIRT.defaultBlockState(),3);
+            f.l.setBlock(target,kind.defaultBlockState(),3);
+            var attached=kind==Blocks.MELON?Blocks.ATTACHED_MELON_STEM:Blocks.ATTACHED_PUMPKIN_STEM;
+            f.l.setBlock(stem,attached.defaultBlockState().setValue(AttachedStemBlock.FACING,Direction.WEST),3);
+        }
+        var before=new HashMap<BlockPos,BlockState>();
+        for(var pos:FarmerWork.zigzag(f.p,5)){
+            before.put(pos,f.l.getBlockState(pos));
+            before.put(pos.below(),f.l.getBlockState(pos.below()));
+        }
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        for(int i=0;i<4;i++)f.s.setItem(i,new ItemStack(List.of(Items.WHEAT_SEEDS,Items.CARROT,Items.POTATO,Items.BEETROOT_SEEDS).get(i),4));
+        f.s.setItem(30,new ItemStack(Items.WATER_BUCKET));
+        var from=Vec3.atBottomCenterOf(start);
+        f.v.setPos(from.x,from.y,from.z);
+        f.v.setNoAi(false);
+        h.succeedWhen(()->{
+            check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.FARMER.id()).xp()>0,"Farm worker has not harvested at "+f.v.position());
+            check(f.v.distanceToSqr(from)>4,"harvest did not require walking");
+            check(f.v.distanceToSqr(Vec3.atCenterOf(target))<3,"worker was not at the harvest target: "+f.v.position());
+            for(var entry:before.entrySet()){
+                var pos=entry.getKey();
+                if(pos.equals(target))continue;
+                var actual=f.l.getBlockState(pos);
+                if(!(kind instanceof CropBlock)&&pos.equals(stem)){
+                    check(actual.is(kind==Blocks.MELON?Blocks.MELON_STEM:Blocks.PUMPKIN_STEM)
+                        &&actual.getValue(StemBlock.AGE)==7,"fruit harvest damaged the mature stem");
+                }else check(actual==entry.getValue(),"harvest changed neighbor "+pos+" from "+entry.getValue()+" to "+actual);
+            }
+        });
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_works_in_rain_and_pauses_in_thunder(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,4));
+        var ripe=Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7);
+        var at=crop(f,ripe);
+        float rain=f.l.getRainLevel(1),thunder=f.l.getThunderLevel(1);
+        try{
+            f.l.setRainLevel(1);f.l.setThunderLevel(1);
+            step(f,1);check(f.l.getBlockState(at)==ripe,"worked during thunder");
+            f.l.setThunderLevel(0);
+            step(f,1);check(f.l.getBlockState(at).is(Blocks.WHEAT)&&f.l.getBlockState(at).getValue(CropBlock.AGE)==0,"did not resume in ordinary rain");
+        }finally{
+            f.l.setRainLevel(rain);f.l.setThunderLevel(thunder);
+        }
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=180,batch="industry")
+    public static void worker_walks_through_fence_gate_and_shuts_it(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        for(var floor:BlockPos.betweenClosed(f.p.offset(-4,0,-4),f.p.offset(4,0,4))){
+            if(!floor.equals(f.p))f.l.setBlock(floor,Blocks.STONE.defaultBlockState(),3);
+        }
+        var gate=f.p.offset(-2,1,0);
+        for(int x=-4;x<=4;x++){
+            if(x!=-2)f.l.setBlock(f.p.offset(x,1,0),Blocks.OAK_FENCE.defaultBlockState(),3);
+        }
+        f.l.setBlock(gate,Blocks.OAK_FENCE_GATE.defaultBlockState(),3);
+        var start=Vec3.atBottomCenterOf(gate.south(2));
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        var crop=gate.north(2);
+        f.l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);
+        f.l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);
+        h.startSequence().thenWaitUntil(()->check(f.l.getBlockState(gate).getValue(FenceGateBlock.OPEN),
+            "worker has not opened the gate: position="+f.v.position()+" target="+f.v.getNavigation().getTargetPos()))
+        .thenWaitUntil(()->{
+            check(f.l.getBlockState(crop).getValue(CropBlock.AGE)==0,"farmer did not reach the crop behind the gate");
+            check(f.v.getZ()<gate.getZ(),"farmer did not cross the gate");
+            check(!f.l.getBlockState(gate).getValue(FenceGateBlock.OPEN),"gate did not close after passage");
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=200,batch="industry")
+    public static void farmer_flees_beyond_field_and_returns_to_work(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        for(var pos:BlockPos.betweenClosed(f.p.offset(-9,0,-9),f.p.offset(9,0,9))){
+            if(pos.equals(f.p)||pos.equals(home))continue;
+            int distance=Math.max(Math.abs(pos.getX()-f.p.getX()),Math.abs(pos.getZ()-f.p.getZ()));
+            f.l.setBlock(pos.below(Math.max(0,distance-7)),Blocks.STONE.defaultBlockState(),3);
+        }
+        var wheat=crop(f,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7));
+        var start=Vec3.atBottomCenterOf(f.p.offset(1,1,2));
+        f.v.setPos(start.x,start.y,start.z);
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,4));
+        var zombie=EntityType.ZOMBIE.create(f.l);
+        zombie.setNoAi(true);zombie.setInvulnerable(true);zombie.setPersistenceRequired();
+        zombie.setItemSlot(EquipmentSlot.HEAD,new ItemStack(Items.IRON_HELMET));
+        zombie.setPos(start.x,start.y,start.z-1.5);zombie.setTarget(f.v);
+        f.l.addFreshEntity(zombie);
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->check(Employment.fleeing(f.v),
+            "worker did not detect zombie: worker="+f.v.position()+" zombie="+zombie.position()
+            +" alive="+zombie.isAlive()+" target="+zombie.getTarget()))
+        .thenWaitUntil(()->{
+            check(!IndustrialWork.area(f.l,f.s).contains(f.v.position().add(0,.125,0)),"worker has not fled beyond the field");
+            check(f.l.getBlockState(wheat).getValue(CropBlock.AGE)==7,"harvest continued during danger");
+        }).thenExecute(zombie::discard).thenWaitUntil(()->{
+            check(!Employment.fleeing(f.v),"worker resumed before the danger expired");
+            check(f.l.getBlockState(wheat).getValue(CropBlock.AGE)==0,"worker did not return to harvest");
+        }).thenSucceed();
+    }
+
+    private static final class ModInventory implements net.minecraftforge.common.capabilities.ICapabilityProvider {
+        final net.minecraftforge.items.ItemStackHandler storage=new net.minecraftforge.items.ItemStackHandler(1){
+            @Override public boolean isItemValid(int slot,ItemStack stack){return stack.is(Items.CARROT);}
+        };
+        final net.minecraftforge.common.util.LazyOptional<net.minecraftforge.items.IItemHandler> capability=
+            net.minecraftforge.common.util.LazyOptional.of(()->storage);
+
+        @Override public <T> net.minecraftforge.common.util.LazyOptional<T> getCapability(
+            net.minecraftforge.common.capabilities.Capability<T> cap,Direction side){
+            return cap==net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER&&side==Direction.EAST
+                ?capability.cast():net.minecraftforge.common.util.LazyOptional.empty();
+        }
+
+        @net.minecraftforge.eventbus.api.SubscribeEvent
+        public void attach(net.minecraftforge.event.AttachCapabilitiesEvent<BlockEntity> event){
+            if(event.getObject() instanceof BeaconBlockEntity){
+                event.addCapability(new net.minecraft.resources.ResourceLocation("residenciasaldeoes","test_inventory"),this);
+                event.addListener(capability::invalidate);
+            }
+        }
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_discovers_sided_mod_inventory_and_reserves_ten_across_stacks(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var pos=f.p.east().south();
+        var mod=new ModInventory();
+        MinecraftForge.EVENT_BUS.register(mod);
+        try{
+            f.l.setBlock(pos,Blocks.BEACON.defaultBlockState(),3);
+        }finally{
+            MinecraftForge.EVENT_BUS.unregister(mod);
+        }
+        f.s.setItem(0,new ItemStack(Items.CARROT,8));
+        f.s.setItem(1,new ItemStack(Items.CARROT,7));
+        f.s.setItem(2,new ItemStack(Items.STICK,3));
+        f.s.setItem(3,new ItemStack(Items.BONE_MEAL,4));
+        f.v.setPos(pos.getX()+1.5,pos.getY(),pos.getZ()+.5);
+        IndustrialWork.deposit(f.l,f.s,f.v);
+        check(mod.storage.getStackInSlot(0).getCount()==5&&count(f,Items.CARROT)==10,"sided storage or combined reserve failed");
+        check(count(f,Items.STICK)==3&&count(f,Items.BONE_MEAL)==4,"filter or functional input was ignored");
         h.succeed();
     }
 

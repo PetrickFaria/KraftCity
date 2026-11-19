@@ -26,7 +26,7 @@ public final class CommercialWork {
     public static boolean ownsNavigation(Villager v){
         if(!(v.level instanceof ServerLevel l))return false;var s=EmploymentData.get(l).assigned(v.getUUID());
         long phase=Math.floorMod(l.getDayTime(),24000);
-        return s!=null&&commercial(s)&&l.hasChunkAt(s.pos)&&!v.isSleeping()&&!l.isRaining()&&(phase<13000||phase>=23000)
+        return s!=null&&commercial(s)&&l.hasChunkAt(s.pos)&&!v.isSleeping()&&!l.isThundering()&&!Employment.fleeing(v)&&(phase<13000||phase>=23000)
             &&!v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced")
             &&!v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")&&!v.getPersistentData().contains("residenciasaldeoes_night_door_task");
     }
@@ -43,7 +43,7 @@ public final class CommercialWork {
         if(elapsedTicks<0||elapsedTicks>20)throw new IllegalArgumentException("Unbounded operation delta");
         if(!commercial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
         if(!IndustrialWork.day(l)){
-            if(Math.floorMod(l.getDayTime(),24000)<13000&&!l.isRaining()&&!v.isSleeping())evening(l,s,v);
+            if(Math.floorMod(l.getDayTime(),24000)<13000&&!l.isThundering()&&!Employment.fleeing(v)&&!v.isSleeping())evening(l,s,v);
             pause(s);return;
         }
         if(!ownsNavigation(v)){state(s,v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")?"Pausa para transporte residencial; progresso preservado.":"Pausa por clima/rotina residencial; progresso preservado.");return;}

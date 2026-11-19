@@ -26,6 +26,8 @@
     "IndustrialNavigationMixin",
     "IndustrialIrrigationMixin",
     "FarmerCaneMixin",
+    "FarmerSoilMixin",
+    "WorkerGatePathMixin",
     "MilitaryEquipmentMixin",
     "MilitaryCureMixin"
   ]

@@ -75,7 +75,7 @@ jobs:
         run: |
           version="$(sed -n 's/^mod_version=//p' gradle.properties)"
           echo "value=$version" >> "$GITHUB_OUTPUT"
-          if [[ "$version" == "1.1.02" ]]; then
+          if [[ "$(git log -1 --format=%s)" == "chore(release): prepare $version" ]]; then
             echo "release=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Verify output and preserved behavior

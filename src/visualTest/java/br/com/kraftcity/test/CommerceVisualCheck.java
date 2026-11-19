@@ -63,7 +63,7 @@ public final class CommerceVisualCheck {
             for(var plot:plots){var crop=sourcePos.offset(plot[0],1,plot[1]);l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);supplier.setPos(crop.getX()+.5,crop.getY(),crop.getZ()+.5);IndustrialWork.tick(l,src);}
             check(count(src,Items.WHEAT)==6,"Real wheat harvest for baker");
         }else if(i==1){
-            src.setItem(27,new ItemStack(Items.WOODEN_HOE));src.setItem(0,new ItemStack(Items.SUGAR_CANE,25));
+            src.setItem(27,new ItemStack(Items.WOODEN_HOE));src.setItem(0,new ItemStack(Items.SUGAR_CANE,10));
             var root=sourcePos.east().above();
             for(var at:BlockPos.betweenClosed(root.offset(-1,-1,-1),root.offset(1,-1,1))){
                 if(!at.equals(sourcePos))l.setBlock(at,Blocks.STONE.defaultBlockState(),3);
@@ -74,7 +74,7 @@ public final class CommerceVisualCheck {
             l.setBlock(root.below().south(),Blocks.WATER.defaultBlockState(),3);
             for(int n=0;n<3;n++)l.setBlock(root.above(n),Blocks.SUGAR_CANE.defaultBlockState(),3);
             IndustrialWork.tick(l,src);
-            check(count(src,Items.SUGAR_CANE)==25&&l.getBlockState(root.above()).isAir(),"Cane harvest must leave drops in the world");
+            check(count(src,Items.SUGAR_CANE)==10&&l.getBlockState(root.above()).isAir(),"Cane harvest must leave drops in the world");
             s.commerce.putUUID("visual_cane_post",src.id);
             supplier.setNoAi(false);
         }else{
@@ -97,7 +97,7 @@ public final class CommerceVisualCheck {
         var l=player.getLevel();var s=station(l,i);
         if(i==1&&s.commerce.hasUUID("visual_cane_post")){
             var source=EmploymentData.get(l).station(s.commerce.getUUID("visual_cane_post"));
-            if(count(source,Items.SUGAR_CANE)>=27&&l.getEntity(source.worker) instanceof Villager supplier){
+            if(count(source,Items.SUGAR_CANE)>=12&&l.getEntity(source.worker) instanceof Villager supplier){
                 IndustrialWork.deposit(l,source,supplier);
                 supplier.setNoAi(true);
                 s.commerce.remove("visual_cane_post");

@@ -442,11 +442,15 @@ public class VillagerResidenceEvents {
         // A resident already returning home may still need to close a nearby
         // residential door. The bounded door route temporarily owns navigation;
         // the existing return state resumes after the route completes.
+        long phase=Math.floorMod(level.getDayTime(),DAY_LENGTH);
+        boolean duringWork=phase<NIGHT_START||phase>=NIGHT_END;
         List<Villager> active=new ArrayList<>();Villager leader=null;
         for(UUID id:home.residents){
             if(!(level.getEntity(id) instanceof Villager villager)||!villager.isAlive()||villager.isBaby()||villager.isNoAi()
                     ||br.com.kraftcity.military.Military.isSoldier(villager)||villager.isTrading()||villager.getPersistentData().contains(EMERALD_TRANSFER)
-                    ||villager.getPersistentData().contains(NIGHT_DOOR_TASK))continue;
+                    ||villager.getPersistentData().contains(NIGHT_DOOR_TASK)
+                    ||br.com.kraftcity.employment.Employment.fleeing(villager)
+                    ||duringWork&&!level.isThundering()&&br.com.kraftcity.employment.Employment.active(villager))continue;
             if(leader==null)leader=villager;
             active.add(villager);
         }
@@ -1029,13 +1033,14 @@ public class VillagerResidenceEvents {
     }
     @SubscribeEvent public void onVillagerTick(LivingEvent.LivingTickEvent event){
         if(!(event.getEntity() instanceof Villager villager)||!(villager.level instanceof ServerLevel level))return;
-        if(br.com.kraftcity.military.Military.isSoldier(villager))return;
+        if(br.com.kraftcity.military.Military.isSoldier(villager)||br.com.kraftcity.employment.Employment.fleeing(villager))return;
         if(villager.tickCount%20==0&&villager.getPersistentData().hasUUID("residenciasaldeoes_resident_identity"))
             ResidenceData.get(level).updateResidentAge(villager);
         if(villager.getPersistentData().contains(EMERALD_TRANSFER)){tickEmeraldTransfer(level,villager);return;}
         if(villager.getPersistentData().contains(NIGHT_DOOR_TASK)){tickNightDoorClosure(level,villager);return;}
         if(br.com.kraftcity.industry.FarmerLogistics.beforeHome(level,villager))return;
-        boolean weather=level.isRaining();var entityData=villager.getPersistentData();
+        boolean employed=br.com.kraftcity.employment.Employment.active(villager);
+        boolean weather=employed?level.isThundering():level.isRaining();var entityData=villager.getPersistentData();
         boolean doorResume=entityData.getBoolean(NIGHT_DOOR_RESUME);if(doorResume)entityData.remove(NIGHT_DOOR_RESUME);
         boolean forced=entityData.getBoolean(RETURN_FORCED);
         boolean wandering=entityData.contains(NIGHT_WANDER);
@@ -1047,7 +1052,7 @@ public class VillagerResidenceEvents {
         long time=level.getDayTime()%24000L;boolean night=time>=13000L&&time<23000L;
         boolean returningFromNightDoor=entityData.getBoolean(NIGHT_DOOR_BED_RETURN);
         if(!night&&returningFromNightDoor){entityData.remove(NIGHT_DOOR_BED_RETURN);returningFromNightDoor=false;}
-        if(weather)weather=isRainingAtResidentialArea(level,home);
+        if(weather&&!employed)weather=isRainingAtResidentialArea(level,home);
         boolean inside=insideResidence(villager.getX(),villager.getY(),villager.getZ(),home);
         // A door can be just outside the inner residence bounds. Keep the one-shot
         // resume marker while the normal home-return path brings the resident back;
@@ -1103,7 +1108,8 @@ public class VillagerResidenceEvents {
         if(inside){
             clearHomeReturn(entityData);
             if(weather&&!night){
-                keepResidentInsideDuringRain(level,data,villager,home,true,true);
+                if(employed)shelterDuringStorm(level,villager,home);
+                else keepResidentInsideDuringRain(level,data,villager,home,true,true);
                 return;
             }
             if(!night){if(villager.isSleeping())villager.stopSleeping();return;}
@@ -1568,7 +1574,29 @@ public class VillagerResidenceEvents {
         }
         return null;
     }
-    private BlockPos findSafeSpot(ServerLevel level,Villager v,BlockPos anchor,int size){
+    public static void shelterDuringStorm(ServerLevel level,Villager villager,ResidenceData.Home home){
+        if(!home.dimension.equals(level.dimension())||!level.hasChunkAt(home.pos))return;
+        var brain=villager.getBrain();
+        brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+        brain.eraseMemory(MemoryModuleType.PATH);
+        if(insideResidence(villager.blockPosition(),home)&&!level.canSeeSky(villager.blockPosition().above())){
+            villager.getNavigation().stop();
+            return;
+        }
+        var nav=villager.getNavigation();
+        if(!nav.isDone()&&nav.getTargetPos()!=null&&insideResidence(nav.getTargetPos(),home))return;
+        if(villager.tickCount%10!=0)return;
+        var spot=findSafeSpot(level,villager,home.pos,home.size,true);
+        if(spot==null&&!insideResidence(villager.blockPosition(),home))spot=findSafeSpot(level,villager,home.pos,home.size);
+        if(spot!=null)nav.moveTo(spot.getX()+.5,spot.getY(),spot.getZ()+.5,.85);
+        else nav.stop();
+    }
+
+    private static BlockPos findSafeSpot(ServerLevel level,Villager v,BlockPos anchor,int size){
+        return findSafeSpot(level,v,anchor,size,false);
+    }
+
+    private static BlockPos findSafeSpot(ServerLevel level,Villager v,BlockPos anchor,int size,boolean covered){
         int r=size/2;List<BlockPos> bedApproaches=new ArrayList<>(),candidates=new ArrayList<>();
         for(int y=anchor.getY()+1;y<anchor.getY()+size+1;y++)for(int x=anchor.getX()-r;x<=anchor.getX()+r;x++)for(int z=anchor.getZ()-r;z<=anchor.getZ()+r;z++){
             BlockPos floor=new BlockPos(x,y,z);if(!level.hasChunkAt(floor))continue;
@@ -1580,6 +1608,7 @@ public class VillagerResidenceEvents {
         bedApproaches.addAll(candidates);candidates=bedApproaches;
         Set<BlockPos> seen=new HashSet<>();for(BlockPos feet:candidates){if(!seen.add(feet)||!level.hasChunkAt(feet)||!level.hasChunkAt(feet.above())||!level.hasChunkAt(feet.below()))continue;int fx=feet.getX(),fy=feet.getY(),fz=feet.getZ();
             if(fx<anchor.getX()-r||fx>anchor.getX()+r||fz<anchor.getZ()-r||fz>anchor.getZ()+r||fy<anchor.getY()+1||fy>=anchor.getY()+size+1)continue;
+            if(covered&&level.canSeeSky(feet.above()))continue;
             BlockState floor=level.getBlockState(feet.below());BlockState a=level.getBlockState(feet),b=level.getBlockState(feet.above());
             if(!floor.isFaceSturdy(level,feet.below(),Direction.UP)||!a.getCollisionShape(level,feet).isEmpty()||!b.getCollisionShape(level,feet.above()).isEmpty())continue;
             if(!a.getFluidState().isEmpty()||!b.getFluidState().isEmpty()||a.isBurning(level,feet)||b.isBurning(level,feet.above()))continue;

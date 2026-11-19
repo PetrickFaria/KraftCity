@@ -153,7 +153,7 @@ public final class FarmerVisualCheck {
             progressDetail="worker="+v.blockPosition()+" fruit space="+l.getBlockState(JUMP)
                 +" soil="+l.getBlockState(JUMP.below())+" jump="+sawJump;
             if(v.getY()>JUMP.getY()+.3&&Math.abs(v.getX()-(JUMP.getX()+.5))<.6&&Math.abs(v.getZ()-(JUMP.getZ()+.5))<.6)sawJump=true;
-            if(!sawJump||!v.isOnGround()||!l.getBlockState(JUMP).isAir())return;
+            if(!sawJump||!v.isOnGround()||!l.getBlockState(JUMP).isAir()||!l.getBlockState(JUMP.below()).is(Blocks.DIRT))return;
             check(l.getBlockState(STEM).is(Blocks.PUMPKIN_STEM)||l.getBlockState(STEM).is(Blocks.ATTACHED_PUMPKIN_STEM),"fruit-space work damaged stem");
             l.setBlock(CHEST,Blocks.BARREL.defaultBlockState(),3);
             s.industry.putLong("discard",CHEST.asLong());

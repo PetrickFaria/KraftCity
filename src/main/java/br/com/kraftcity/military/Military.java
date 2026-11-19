@@ -84,6 +84,12 @@ public final class Military {
         var t=target(l,s,v);
         if(t!=null){s.military.putUUID("target",t.getUUID());combat(l,s,v,t);s.setChanged();return;}
         s.military.remove("target");v.stopUsingItem();
+        if(l.isThundering()){
+            var home=ResidenceData.get(l).owner(v.getUUID());
+            if(home!=null)br.com.residenciasaldeoes.VillagerResidenceEvents.shelterDuringStorm(l,v,home);
+            s.setChanged();
+            return;
+        }
         if(mode(s)==Mode.FOLLOW){var p=s.military.hasUUID("player")?l.getPlayerByUUID(s.military.getUUID("player")):null;if(p!=null&&v.distanceToSqr(p)>9)v.getNavigation().moveTo(p,1.1);else v.getNavigation().stop();}
         else if(mode(s)==Mode.GUARD){Vec3 p=Vec3.atBottomCenterOf(s.pos.above());if(v.distanceToSqr(p)>.16)v.getNavigation().moveTo(p.x,p.y,p.z,1.1);else{v.getNavigation().stop();v.setDeltaMovement(Vec3.ZERO);float yaw=l.getBlockState(s.pos).getValue(WorkBlock.FACING).toYRot();v.setYRot(yaw);v.setYHeadRot(yaw);v.setYBodyRot(yaw);v.setXRot(0);var facing=l.getBlockState(s.pos).getValue(WorkBlock.FACING);v.getLookControl().setLookAt(v.getX()+facing.getStepX()*5,v.getEyeY(),v.getZ()+facing.getStepZ()*5);}}
         else if(v.distanceToSqr(Vec3.atCenterOf(s.pos))>225)v.getNavigation().moveTo(s.pos.getX()+.5,s.pos.getY()+1,s.pos.getZ()+.5,1.1);

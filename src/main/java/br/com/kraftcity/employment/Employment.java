@@ -32,6 +32,40 @@ public final class Employment {
     public static boolean active(Villager v){
         return v.level instanceof ServerLevel level&&EmploymentData.get(level).assigned(v.getUUID())!=null;
     }
+    private static final Map<Villager,Long> FLEE_UNTIL=new WeakHashMap<>();
+
+    public static boolean fleeing(Villager v){
+        return FLEE_UNTIL.getOrDefault(v,Long.MIN_VALUE)>v.level.getGameTime();
+    }
+
+    static void flee(ServerLevel level,Villager v){
+        if(v.tickCount%5!=0||v.isNoAi()||!active(v)||br.com.kraftcity.military.Military.isSoldier(v))return;
+        var zombie=level.getEntitiesOfClass(net.minecraft.world.entity.monster.Zombie.class,
+            v.getBoundingBox().inflate(8),z->z.isAlive()&&!br.com.kraftcity.military.Military.isSoldier(z)
+                &&(z.getTarget()==v||v.hasLineOfSight(z))).stream()
+            .min(Comparator.comparingDouble(v::distanceToSqr)).orElse(null);
+        if(zombie==null){
+            if(!fleeing(v)&&FLEE_UNTIL.remove(v)!=null){
+                v.getNavigation().stop();
+                v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                v.getBrain().eraseMemory(MemoryModuleType.PATH);
+            }
+            return;
+        }
+        boolean starting=!fleeing(v);
+        if(starting)com.mojang.logging.LogUtils.getLogger().debug("Worker {} at {} fleeing zombie at {}",
+            v.getUUID(),v.position(),zombie.position());
+        FLEE_UNTIL.put(v,level.getGameTime()+40);
+        if(starting||v.getNavigation().isDone()||v.tickCount%15==0){
+            if(v.isSleeping())v.stopSleeping();
+            v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+            v.getBrain().eraseMemory(MemoryModuleType.PATH);
+            var away=net.minecraft.world.entity.ai.util.DefaultRandomPos.getPosAway(v,12,5,zombie.position());
+            if(away!=null)v.getNavigation().moveTo(away.x,away.y,away.z,1.25);
+            else if(starting)v.getNavigation().stop();
+        }
+    }
+
     public static void makePortable(ServerLevel level,EmploymentData.Station s){
         if(!s.active)return;
         if(s.worker!=null)release(level,s.worker);

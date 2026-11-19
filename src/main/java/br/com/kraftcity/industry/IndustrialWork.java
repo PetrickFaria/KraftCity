@@ -35,7 +35,7 @@ public final class IndustrialWork {
     public static boolean ownsNavigation(Villager v){
         if(!(v.level instanceof ServerLevel l))return false;
         var s=EmploymentData.get(l).assigned(v.getUUID());
-        return s!=null&&industrial(s)&&(day(l)||s.profession==Profession.FARMER&&FarmerLogistics.ending(v))&&!v.isSleeping()&&!l.isRaining()
+        return s!=null&&industrial(s)&&(day(l)||s.profession==Profession.FARMER&&FarmerLogistics.ending(v))&&!v.isSleeping()&&!l.isThundering()&&!Employment.fleeing(v)
             &&!v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced")
             &&!v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")
             &&!v.getPersistentData().contains("residenciasaldeoes_night_door_task");
@@ -44,7 +44,11 @@ public final class IndustrialWork {
     public static AABB area(ServerLevel l,EmploymentData.Station s){int r=IndustrialRules.size(l,s)/2;return s.profession==Profession.FARMER ? new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,FarmerWork.HEIGHT+1,r+1)) : new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
     public static void tick(ServerLevel l,EmploymentData.Station s){
         if(!industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
-        if(!day(l)||l.isRaining()||v.isSleeping()){
+        if(l.isThundering()||Employment.fleeing(v)){
+            s.industry.remove("fish_elapsed");
+            return;
+        }
+        if(!day(l)||v.isSleeping()){
             s.industry.remove("fish_elapsed");
             if(!day(l)&&s.profession==Profession.FARMER)return;
             if(!day(l)){

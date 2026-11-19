@@ -28,8 +28,18 @@ public final class EmploymentEvents {
     }
     @SubscribeEvent public void died(LivingDeathEvent event){if(event.getEntity() instanceof Villager v&&v.level instanceof ServerLevel l)Employment.release(l,v.getUUID());}
     @SubscribeEvent public void joined(EntityJoinLevelEvent event){if(event.getEntity() instanceof Villager v&&event.getLevel() instanceof ServerLevel l){var s=EmploymentData.get(l).assigned(v.getUUID());if(s!=null&&!s.dimension.equals(l.dimension()))Employment.release(l,v.getUUID());else Employment.valid(l,v.getUUID());}}
+    @SubscribeEvent(priority=EventPriority.HIGHEST)
+    public void survival(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent event){
+        if(event.getEntity() instanceof Villager v&&v.level instanceof ServerLevel level){
+            Employment.flee(level,v);
+            WorkerGates.openAlongPath(level,v);
+        }
+    }
+
     @SubscribeEvent public void tick(TickEvent.ServerTickEvent event){
-        var server=ServerLifecycleHooks.getCurrentServer();if(event.phase!=TickEvent.Phase.END||server==null||server.getTickCount()%20!=0)return;
+        var server=ServerLifecycleHooks.getCurrentServer();if(event.phase!=TickEvent.Phase.END||server==null)return;
+        if(server.getTickCount()%5==0)for(var level:server.getAllLevels())WorkerGates.closeVacant(level);
+        if(server.getTickCount()%20!=0)return;
         for(var s:EmploymentData.get(server.overworld()).stations())Employment.reconcile(server.overworld(),s);
     }
     @SubscribeEvent(priority=EventPriority.HIGH) public void interact(PlayerInteractEvent.EntityInteract event){

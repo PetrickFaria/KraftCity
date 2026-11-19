@@ -42,7 +42,10 @@ public final class IndustrialEvents {
     @SubscribeEvent public void trample(net.minecraftforge.event.level.BlockEvent.FarmlandTrampleEvent e){
         if(e.getEntity() instanceof Villager v&&v.level instanceof ServerLevel l){
             var station=EmploymentData.get(l).assigned(v.getUUID());
-            if(station!=null&&station.profession==Profession.FARMER&&!FarmerLogistics.allowsTrample(v,e.getPos()))e.setCanceled(true);
+            if(station!=null&&!FarmerLogistics.allowsTrample(v,e.getPos())){
+                e.setCanceled(true);
+                com.mojang.logging.LogUtils.getLogger().debug("Blocked workplace trampling by {} at {}",v.getUUID(),e.getPos());
+            }
         }
     }
     @SubscribeEvent public void animal(PlayerInteractEvent.EntityInteract e){

@@ -27,6 +27,7 @@ import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.ZipEntry;
@@ -647,6 +648,14 @@ public final class ResidenceGameTests {
         }
         BlockPos firstBed=h.absolutePos(firstBedLocal),secondBed=h.absolutePos(secondBedLocal);
         check(data.reserveBed(leader.getUUID(),level.dimension(),home,firstBed)&&data.reserveBed(second.getUUID(),level.dimension(),home,secondBed),"Could not reserve both beds");
+        // Model existing sleepers with both the residential and the vanilla HOME reservation.
+        for(var entry:Map.of(leader,firstBed,second,secondBed).entrySet()){
+            var bed=entry.getValue();
+            check(level.getPoiManager().take(type->type.is(net.minecraft.world.entity.ai.village.poi.PoiTypes.HOME),
+                (type,pos)->pos.equals(bed),bed,1).isPresent(),"Missing HOME POI for the reserved bed "+bed);
+            entry.getKey().getBrain().setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.HOME,
+                net.minecraft.core.GlobalPos.of(level.dimension(),bed));
+        }
         leader.startSleeping(firstBed);second.startSleeping(secondBed);check(leader.isSleeping()&&second.isSleeping(),"Residents did not begin asleep");
         BlockPos doorLocal=new BlockPos(7,3,6);placeOpenDoor(h,doorLocal,Blocks.OAK_DOOR);level.setDayTime(13_001L);level.setWeatherParameters(0,12_000,true,false);level.setRainLevel(1.0F);
         invoke("beginNightDoorClosure",new Class[]{net.minecraft.server.level.ServerLevel.class,long.class},level,500_000L+level.getGameTime());

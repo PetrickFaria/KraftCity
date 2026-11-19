@@ -109,11 +109,14 @@ public final class CommerceGameTests {
         CommercialWork.step(f.l,f.s,0);check(count(f,Items.COOKED_BEEF)==1,"double completion");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
-    public static void night_rain_and_missing_material_pause_without_free_elapsed_or_loss(GameTestHelper h){
+    public static void night_thunder_and_missing_material_pause_without_free_elapsed_or_loss(GameTestHelper h){
         var f=fixture(h,Profession.BAKER);f.s.setItem(0,new ItemStack(Items.WHEAT,3));work(f,400);
         f.l.setDayTime(13000);work(f,1200);check(f.s.commerce.getInt("elapsed")==400&&count(f,Items.WHEAT)==3,"night work");
-        f.l.setDayTime(1000);f.l.setWeatherParameters(0,1000,true,false);f.l.setRainLevel(1F);work(f,200);check(f.s.commerce.getInt("elapsed")==400,"rain work");f.l.setWeatherParameters(10000,0,false,false);f.l.setRainLevel(0F);
-        f.s.setItem(0,ItemStack.EMPTY);work(f,200);check(f.s.commerce.getInt("elapsed")==400,"missing input reset progress");f.s.setItem(0,new ItemStack(Items.WHEAT,3));work(f,800);check(count(f,Items.BREAD)==1,"pause resume output");h.succeed();
+        f.l.setDayTime(1000);f.l.setWeatherParameters(0,1000,true,false);f.l.setRainLevel(1F);
+        work(f,100);check(f.s.commerce.getInt("elapsed")==500,"ordinary rain paused commercial work");
+        f.l.setThunderLevel(1F);work(f,200);check(f.s.commerce.getInt("elapsed")==500,"storm work");
+        f.l.setWeatherParameters(10000,0,false,false);f.l.setRainLevel(0F);f.l.setThunderLevel(0F);
+        f.s.setItem(0,ItemStack.EMPTY);work(f,200);check(f.s.commerce.getInt("elapsed")==500,"missing input reset progress");f.s.setItem(0,new ItemStack(Items.WHEAT,3));work(f,700);check(count(f,Items.BREAD)==1,"pause resume output");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void housing_loss_blocks_work_and_same_profession_rehire_retains_level_and_partial_recipe(GameTestHelper h){
@@ -206,7 +209,7 @@ public final class CommerceGameTests {
             IndustrialWork.tick(farm.l,farm.s);
             check(count(farm,Items.SUGAR_CANE)==27,"worker has not recovered both cane drops yet");
             IndustrialWork.deposit(farm.l,farm.s,farm.v);takeAndProduce(f,chestPos);
-            check(count(f,Items.SUGAR)==1&&farm.s.getItem(0).getCount()==25,"real farmer-confectioner chain/reserve");
+            check(count(f,Items.SUGAR)==1&&farm.s.getItem(0).getCount()==10,"real farmer-confectioner chain/reserve");
         });
     }
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
