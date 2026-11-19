@@ -39,7 +39,7 @@ public final class FarmerVisualCheck {
     private static final BlockPos JUMP=POST.offset(-2,1,1);
     private static final List<BlockPos> ROW=List.of(POST.offset(-2,1,-2),POST.offset(-1,1,-2),POST.offset(0,1,-2),POST.offset(2,1,-2),POST.offset(2,1,-1),POST.offset(1,1,-1));
     private static volatile int stage;
-    private static volatile String progressDetail="";
+    private static volatile String progressDetail="",serverFailure;
     private static UUID worker;
     private static boolean canePrepared,canePlanted,sawLooseCane,sawJump,seenPhysicalDeposit;
     private static int ticks;
@@ -201,8 +201,9 @@ public final class FarmerVisualCheck {
         var server=mc.getSingleplayerServer();
         var player=mc.player.getUUID();
         ticks++;
-        if(ticks==1)server.execute(()->setup(server.getPlayerList().getPlayer(player)));
-        if(ticks%5==0&&stage>0&&stage!=4)server.execute(()->progress(server.getPlayerList().getPlayer(player)));
+        if(serverFailure!=null)throw new IllegalStateException(serverFailure);
+        if(ticks==1)server.execute(()->recordFailure(()->setup(server.getPlayerList().getPlayer(player))));
+        if(ticks%5==0&&stage>0&&stage!=4)server.execute(()->recordFailure(()->progress(server.getPlayerList().getPlayer(player))));
         if(stage!=visibleStage){visibleStage=stage;stageTicks=0;}
         stageTicks++;
         if(stage>=2&&stage!=capturedStage&&stageTicks>=8){
@@ -211,6 +212,15 @@ public final class FarmerVisualCheck {
         }
         check(ticks<3600&&(stage==3||stage==4||ticks<2400),"field or sleep sequence timed out at stage "+stage+" "+progressDetail);
         return stage==4&&capturedStage==4;
+    }
+
+    private static void recordFailure(Runnable step){
+        if(serverFailure!=null)return;
+        try{step.run();}
+        catch(RuntimeException failure){
+            serverFailure=failure.toString();
+            throw failure;
+        }
     }
 
     static void verifyRestore(ServerLevel l){
