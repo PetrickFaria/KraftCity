@@ -29,7 +29,7 @@ import net.minecraft.world.level.block.state.properties.BedPart;
 
 @net.minecraftforge.fml.common.Mod.EventBusSubscriber(modid="residenciasaldeoes",value=net.minecraftforge.api.distmarker.Dist.CLIENT)
 public final class FarmerVisualCheck {
-    private static final BlockPos POST=new BlockPos(79,-58,60);
+    private static final BlockPos POST=new BlockPos(79,-61,60);
     private static final BlockPos HOME=POST.offset(-7,0,-1);
     private static final BlockPos BED=HOME.east(3).above();
     private static final BlockPos CHEST=POST.offset(-5,1,2);
@@ -60,8 +60,13 @@ public final class FarmerVisualCheck {
         l.setDayTime(1000);
         l.setWeatherParameters(10000,0,false,false);
         for(int x=-11;x<=9;x++)for(int z=-7;z<=7;z++){
-            for(int y=-4;y<=0;y++)l.setBlock(POST.offset(x,y,z),Blocks.STONE.defaultBlockState(),3);
+            for(int y=-2;y<=0;y++)l.setBlock(POST.offset(x,y,z),Blocks.STONE.defaultBlockState(),3);
             for(int y=1;y<=4;y++)l.setBlock(POST.offset(x,y,z),Blocks.AIR.defaultBlockState(),3);
+        }
+        // Continuous terrain at the flat world's walking elevation. The farm
+        // and home share a fenced compound with all work targets accessible.
+        for(int x=-11;x<=9;x++)for(int z=-7;z<=7;z++){
+            if(x==-11||x==9||z==-7||z==7)l.setBlock(POST.offset(x,1,z),Blocks.OAK_FENCE.defaultBlockState(),3);
         }
         ResidenceData.get(l).unlinkAll(l,l.dimension(),HOME);
         l.getEntitiesOfClass(Villager.class,new AABB(HOME).inflate(7)).forEach(Villager::discard);
@@ -130,7 +135,9 @@ public final class FarmerVisualCheck {
             sawLooseCane|=!l.getEntitiesOfClass(ItemEntity.class,new AABB(CANE).inflate(2,3,2),e->e.getItem().is(Items.SUGAR_CANE)).isEmpty();
             progressDetail="worker="+v.blockPosition()+" cane="+l.getBlockState(CANE.above()).getBlock()
                 +" fruit="+l.getBlockState(FRUIT).getBlock()+" storedCane="+s.countItem(Items.SUGAR_CANE)
-                +" loose="+sawLooseCane+" navigation="+v.getNavigation().isDone();
+                +" loose="+sawLooseCane+" navigation="+v.getNavigation().getTargetPos()
+                +" homeReturn="+v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced")
+                +" delivery="+v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")+" day="+l.getDayTime();
             if(!l.getBlockState(CANE.above()).isAir()||!l.getBlockState(FRUIT).isAir()||s.countItem(Items.SUGAR_CANE)!=2)return;
             if(l.getBlockState(ROW.get(0)).getValue(CropBlock.AGE)==7)return;
             for(var at:ROW)check(l.getBlockState(at).is(Blocks.WHEAT)&&l.getBlockState(at.below()).is(Blocks.FARMLAND),"crop or soil damaged beside the harvest");
