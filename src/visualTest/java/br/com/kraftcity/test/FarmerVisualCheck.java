@@ -24,6 +24,7 @@ import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.state.properties.BedPart;
 
+@net.minecraftforge.fml.common.Mod.EventBusSubscriber(modid="residenciasaldeoes",value=net.minecraftforge.api.distmarker.Dist.CLIENT)
 public final class FarmerVisualCheck {
     private static final BlockPos POST=new BlockPos(79,-58,60);
     private static final BlockPos HOME=POST.offset(-7,0,-1);
@@ -36,7 +37,7 @@ public final class FarmerVisualCheck {
     private static volatile int stage;
     private static volatile String progressDetail="";
     private static UUID worker;
-    private static boolean canePrepared,canePlanted,sawLooseCane,sawJump;
+    private static boolean canePrepared,canePlanted,sawLooseCane,sawJump,seenPhysicalDeposit;
     private static int ticks;
     private static int capturedStage=-1,visibleStage=-1,stageTicks;
     private static long nightStarted;
@@ -64,6 +65,10 @@ public final class FarmerVisualCheck {
         var bed=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
         l.setBlock(foot,bed.setValue(BedBlock.PART,BedPart.FOOT),3);
         l.setBlock(foot.east(),bed.setValue(BedBlock.PART,BedPart.HEAD),3);
+        // Keep the top of the mattress out of the standing navigation graph.
+        // The side aisle remains clear and is inside the residence.
+        l.setBlock(foot.above(2),Blocks.STONE.defaultBlockState(),3);
+        l.setBlock(foot.east().above(2),Blocks.STONE.defaultBlockState(),3);
         for(var at:ROW)l.setBlock(at.below(),Blocks.DIRT.defaultBlockState(),3);
         var v=EntityType.VILLAGER.create(l);
         v.setAge(0);v.setInvulnerable(true);
@@ -158,16 +163,8 @@ public final class FarmerVisualCheck {
                 +" delivery="+v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")
                 +" attacked="+(v.getLastHurtByMob()!=null)+" noAI="+v.isNoAi();
             check(l.getGameTime()-nightStarted<480,"night sequence did not finish: "+progressDetail);
-            if(deposited==6){
-                check(v.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(CHEST))<=3.5||v.isSleeping()
-                    ||s.industry.getBoolean("visual_farmer_reached_chest"),"discard occurred outside physical reach");
-                if(!s.industry.getBoolean("visual_farmer_reached_chest")){
-                    s.industry.putBoolean("visual_farmer_reached_chest",true);
-                    s.setChanged();
-                }
-            }
             if(!v.isSleeping())return;
-            check(deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding");
+            check(seenPhysicalDeposit&&deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding");
             s.industry.putBoolean("visual_farmer_night",true);
             s.setChanged();
             System.out.println("FARMER_ZIGZAG_HARVEST_JUMP_DISCARD_AND_SLEEP_PASSED");
@@ -175,6 +172,12 @@ public final class FarmerVisualCheck {
             p.teleportTo(l,bed.getX()+.5,bed.getY()+.5,bed.getZ()+3.5,180,20);
             stage=4;
         }
+    }
+
+    @net.minecraftforge.eventbus.api.SubscribeEvent
+    public static void depositProbe(WorkActionEvent event){
+        if(stage!=3||!event.action.equals("deposit")||!event.position.equals(CHEST)||!event.worker.getUUID().equals(worker))return;
+        seenPhysicalDeposit=event.worker.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(CHEST))<=3.5;
     }
 
     static boolean tick(Minecraft mc){
