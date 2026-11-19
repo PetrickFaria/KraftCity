@@ -7,32 +7,6 @@ on:
 permissions:
   contents: read
 jobs:
-  inspect_last_gametest_failure:
-    if: >-
-      github.event_name == 'push' && startsWith(github.event.head_commit.message, 'ci: surface captured GameTest failure details')
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: kraftcity-1.1.02
-          run-id: 44455185962
-          github-token: ${{ github.token }}
-          path: prior-failure
-      - name: Surface last Forge errors
-        run: |
-          python3 - <<'PYCODE'
-          from pathlib import Path
-          import re
-          for path in Path('prior-failure').rglob('gametest-console.log'):
-              lines=path.read_text(errors='replace').splitlines()
-              errors=[line for line in lines if re.search(
-                  r'(test.*failed|required.*fail|game tests complete|GameTestAssertException|Daemon.*disappear|Caused by:|OutOfMemory|error:|Error|Exception)',line,re.I
-              )]
-              for line in dict.fromkeys(errors[-16:]):
-                  print('::warning title=Previous GameTest run::'+line.replace('%','%25')[:500])
-          PYCODE
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30

@@ -1548,6 +1548,12 @@ public class VillagerResidenceEvents {
                 .filter(type->type.is(net.minecraft.world.entity.ai.village.poi.PoiTypes.HOME)).isPresent();
     }
     private BlockPos findReachableBedApproach(ServerLevel level,Villager villager,BlockPos bed,ResidenceData.Home home){
+        // A farmer can follow the vanilla HOME path onto the mattress after
+        // releasing its closing route. Standing on the pillow is physical arrival.
+        if(villager.blockPosition().equals(bed)&&bedInsideHome(level,bed,home)){
+            var station=br.com.kraftcity.employment.EmploymentData.get(level).assigned(villager.getUUID());
+            if(station!=null&&station.profession==br.com.kraftcity.employment.Profession.FARMER)return bed;
+        }
         List<BlockPos> approaches=new ArrayList<>();
         for(Direction direction:Direction.Plane.HORIZONTAL){
             BlockPos approach=bed.relative(direction);
