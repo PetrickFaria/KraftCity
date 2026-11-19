@@ -30,6 +30,10 @@ public final class WorkforceData extends SavedData {
         public Progress { if(level<0||xp<0)throw new IllegalArgumentException("Negative progression"); }
     }
     private final Map<UUID,Map<ResourceLocation,Progress>> history=new LinkedHashMap<>();
+    public boolean hasEmploymentHistory(UUID worker){
+        var record=workers.get(worker);
+        return history.containsKey(worker)||record!=null&&record.profession().isPresent();
+    }
     public Progress progress(UUID worker,ResourceLocation profession){
         Progress saved=history.getOrDefault(worker,Map.of()).get(profession);
         if(saved!=null)return saved;

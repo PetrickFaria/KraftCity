@@ -45,7 +45,11 @@ public final class MilitaryVisualCheck {
         if(t==30)capture(mc,"visual-military-hiring.png");
         if(t==35)click(mc,"Treinar");
         if(t==60){check(mc.screen instanceof SoldierScreen&&mc.player.containerMenu instanceof SoldierMenu m&&m.slots.size()==74&&m.state!=null&&m.state.employed(),"Soldier menu not synchronized");mc.getSingleplayerServer().execute(()->{var p=player(mc);var s=station(p.getLevel());check(s.worker.equals(worker)&&s.getItem(31).getCount()==15,"Military contract/payment");s.equipment.setItem(0,new ItemStack(Items.IRON_SWORD));s.equipment.setItem(1,new ItemStack(Items.SHIELD));s.equipment.setItem(3,new ItemStack(Items.IRON_CHESTPLATE));s.setItem(0,new ItemStack(Items.ARROW,16));});}
-        if(t==80)capture(mc,"visual-military-soldier.png");
+        if(t==80){
+            check(mc.screen.children().stream().anyMatch(widget->widget instanceof Button button&&button.getMessage().getString().equals("Demitir")),
+                "Soldier dismissal button missing");
+            capture(mc,"visual-military-soldier.png");
+        }
         if(t==85)click(mc,"Blacklist");
         if(t==110){var m=(SoldierMenu)mc.player.containerMenu;check(m.catalog.stream().anyMatch(e->e.id().equals("minecraft:creeper")&&!e.selected()),"Creeper enabled by default");click(mc,"Pacíficos");click(mc,"Origem:");}
         if(t==120)click(mc,"minecraft:cow");

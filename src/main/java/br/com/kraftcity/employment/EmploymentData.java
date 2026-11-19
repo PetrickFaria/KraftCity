@@ -21,6 +21,10 @@ public final class EmploymentData extends SavedData {
     public static EmploymentData get(ServerLevel level) {
         return level.getServer().overworld().getDataStorage().computeIfAbsent(EmploymentData::load,EmploymentData::new,NAME);
     }
+    private final CompoundTag detachedSoldiers=new CompoundTag();
+    public void saveDetachedSoldier(UUID id,CompoundTag snapshot){detachedSoldiers.put(id.toString(),snapshot.copy());setDirty();}
+    public CompoundTag detachedSoldier(UUID id){return detachedSoldiers.getCompound(id.toString()).copy();}
+    public void forgetDetachedSoldier(UUID id){if(detachedSoldiers.contains(id.toString())){detachedSoldiers.remove(id.toString());setDirty();}}
     public Collection<Station> stations(){return List.copyOf(stations.values());}
     public Station station(UUID id){return stations.get(id);}
     public Station assigned(UUID worker){return stations.values().stream().filter(s->s.active&&worker.equals(s.worker)).findFirst().orElse(null);}
@@ -59,11 +63,11 @@ public final class EmploymentData extends SavedData {
             t.put("military",s.military.copy());ListTag gear=new ListTag();for(int i=0;i<6;i++){CompoundTag e=s.equipment.getItem(i).save(new CompoundTag());e.putInt("slot",i);gear.add(e);}t.put("military_equipment",gear);
             t.put("items",items);t.put("industry",s.industry.copy());t.put("commerce",s.commerce.copy());entries.add(t);
         }
-        root.put("stations",entries);return root;
+        root.put("stations",entries);root.put("detachedSoldiers",detachedSoldiers.copy());return root;
     }
     public static EmploymentData load(CompoundTag root){
         if(root.getInt("schema")!=1)throw new IllegalArgumentException("Unsupported employment schema");
-        EmploymentData data=new EmploymentData();
+        EmploymentData data=new EmploymentData();data.detachedSoldiers.merge(root.getCompound("detachedSoldiers"));
         for(Tag raw:root.getList("stations",Tag.TAG_COMPOUND)){
             CompoundTag t=(CompoundTag)raw;Station s=new Station(data,t.getUUID("id"),Profession.Sector.valueOf(t.getString("sector")));
             s.military=t.getCompound("military").copy();for(Tag rawGear:t.getList("military_equipment",Tag.TAG_COMPOUND)){var e=(CompoundTag)rawGear;int slot=e.getInt("slot");if(slot<0||slot>=6)throw new IllegalArgumentException("Invalid military equipment slot");s.equipment.setItem(slot,ItemStack.of(e));}

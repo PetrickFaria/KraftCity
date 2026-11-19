@@ -93,8 +93,29 @@ public final class EmploymentVisualCheck {
             System.out.println("EMPLOYMENT_INVENTORY_SHARED_PASSED");
         });
         if(ticks==905){check(shared&&mc.player.containerMenu.slots.get(0).getItem().getCount()==13,"Worker inventory did not sync");capture(mc,"visual-worker-inventory.png");}
-        if(ticks==910)mc.player.closeContainer();
-        if(ticks==915)server.execute(()->{
+        if(ticks==907){
+            var screen=screen(mc);
+            var menu=(WorkMenu)mc.player.containerMenu;
+            var dismiss=button(screen,"Demitir");
+            check(dismiss!=null&&dismiss.active&&button(screen,"Vincular baú")==null,"Dismissal or automatic discard control missing");
+            check(dismiss.x>=screen.width/2&&dismiss.y<screen.height/2,"Dismiss button is not in the upper right");
+            capture(mc,"visual-worker-dismiss.png");
+            dismiss.onPress();
+            WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Dismiss(menu.containerId,menu.stationId,menu.snapshot.epoch()));
+        }
+        if(ticks==925){
+            check(button(screen(mc),"Demitir")==null&&button(screen(mc),"Contratar")!=null,"Dismiss UI remained available at vacant post");
+            capture(mc,"visual-worker-dismissed.png");
+            server.execute(()->{
+                var level=server.overworld();var s=station(level,POST);
+                check(s.worker==null&&s.getItem(0).getCount()==13&&ResidenceData.get(level).owner(worker)!=null,"Dismissal lost housing or inventory");
+                s.setItem(31,new ItemStack(Items.EMERALD,1));
+                check(Employment.hire(server.getPlayerList().getPlayer(playerId),s,worker,Profession.FARMER).equals("ok"),"One-emerald rehire failed");
+                System.out.println("EMPLOYMENT_DISMISS_GRAPHICAL_PASSED");
+            });
+        }
+        if(ticks==930)mc.player.closeContainer();
+        if(ticks==935)server.execute(()->{
             var level=server.overworld();var player=server.getPlayerList().getPlayer(playerId);var s=station(level,POST);
             level.destroyBlock(POST,true);check(!s.active&&s.worker==null,"Broken workstation still employed worker");
             var drops=level.getEntitiesOfClass(ItemEntity.class,new AABB(POST).inflate(2),e->e.getItem().hasTag()&&e.getItem().getTag().hasUUID("KraftCityStation")&&e.getItem().getTag().getUUID("KraftCityStation").equals(s.id));
@@ -117,10 +138,16 @@ public final class EmploymentVisualCheck {
         if(ticks==1000)server.execute(()->{
             var level=server.overworld();var s=station(level,COMMERCIAL);check(s.worker==null&&s.getItem(31).getCount()==20,"Forged commercial request charged emeralds");
             EmploymentConfig.SPEC.setConfig(approvedConfig);approvedConfig=null;
-            pending=true;System.out.println("COMMERCIAL_PENDING_NO_CHARGE_PASSED");station(level,POST).setItem(31,new ItemStack(Items.EMERALD,10));open(server.getPlayerList().getPlayer(playerId),POST);
+            pending=true;System.out.println("COMMERCIAL_PENDING_NO_CHARGE_PASSED");station(level,POST).setItem(31,new ItemStack(Items.EMERALD,1));open(server.getPlayerList().getPlayer(playerId),POST);
         });
         if(ticks==1020)click(screen(mc),"Contratar");
-        if(ticks==1040){selectWorker(mc);click(screen(mc),"Contratar");}
+        if(ticks==1040){
+            selectWorker(mc);
+            var menu=(WorkMenu)mc.player.containerMenu;
+            check(menu.snapshot.candidates().stream().anyMatch(candidate->candidate.id().equals(worker)&&candidate.cost()==1),
+                "Server did not synchronize one-emerald rehire price");
+            click(screen(mc),"Contratar");
+        }
         if(ticks==1060)server.execute(()->{
             var level=server.overworld();var s=station(level,POST);var progress=WorkforceData.get(level).progress(worker,Profession.FARMER.id());
             check(worker.equals(s.worker)&&progress.level()==3&&progress.xp()==57&&s.getItem(0).getCount()==13&&s.getItem(31).isEmpty(),"Rehire lost progression/items or charged incorrectly");
@@ -129,7 +156,20 @@ public final class EmploymentVisualCheck {
         });
         if(ticks==1070){check(hired&&shared&&portable&&pending&&rehired,"Employment graphical sequence incomplete");capture(mc,"visual-rehired-progress.png");}
         if(ticks==1080)server.execute(()->{
-            var player=server.getPlayerList().getPlayer(playerId);var level=player.getLevel();player.teleportTo(level,60.5,-57,10.5,180F,20F);
+            var player=server.getPlayerList().getPlayer(playerId);var level=player.getLevel();
+            var former=EntityType.VILLAGER.create(level);former.setNoAi(true);former.setAge(0);
+            former.moveTo(65.5,-57,8.5,0,0);level.addFreshEntity(former);
+            var formerId=former.getUUID();
+            check(ResidenceData.get(level).link(level,HOME,former).equals("ok"),"Second resident link failed");
+            var vacant=station(level,COMMERCIAL);
+            player.teleportTo(level,COMMERCIAL.getX()+.5,COMMERCIAL.getY(),COMMERCIAL.getZ()+1.5,180F,20F);
+            check(Employment.hire(player,vacant,formerId,Profession.BAKER).equals("ok"),"Second resident hire failed");
+            WorkforceData.get(level).setProgress(formerId,Profession.BAKER.id(),2,31);
+            check(Employment.dismiss(player,vacant,Employment.epoch(vacant)),"Could not save an independently dismissed worker");
+            vacant.setItem(31,new ItemStack(Items.EMERALD,20));
+            vacant.commerce.putUUID("visual_dismissed_worker",formerId);
+            vacant.setChanged();
+            player.teleportTo(level,60.5,-57,10.5,180F,20F);
             ResidenciasDosAldeoes.ANCHOR.get().use(level.getBlockState(HOME),level,HOME,player,InteractionHand.MAIN_HAND,new BlockHitResult(Vec3.atCenterOf(HOME),Direction.UP,HOME,false));
         });
         if(ticks==1110){
@@ -152,7 +192,14 @@ public final class EmploymentVisualCheck {
         var progress=WorkforceData.get(level).progress(s.worker,Profession.FARMER.id());
         check(s.getItem(0).getCount()==13&&s.getItem(27).is(Items.IRON_HOE)&&s.getItem(30).is(Items.LEATHER_BOOTS)&&progress.level()==3&&progress.xp()==57,"Professional inventory/history lost after restart");
         check(ResidenceData.get(level).owner(s.worker).pos.equals(HOME)&&ResidenceData.get(level).bedClaim(s.worker).bed().equals(BED),"Housing/bed link lost after restart");
-        check(station(level,COMMERCIAL).worker==null&&station(level,COMMERCIAL).getItem(31).getCount()==20,"Commercial pending state lost");
+        var vacant=station(level,COMMERCIAL);
+        check(vacant.worker==null&&vacant.getItem(31).getCount()==20,"Dismissed workstation did not stay vacant");
+        var dismissed=vacant.commerce.getUUID("visual_dismissed_worker");
+        check(ResidenceData.get(level).owner(dismissed).pos.equals(HOME)
+            &&WorkforceData.get(level).worker(dismissed).orElseThrow().workstation().isEmpty()
+            &&WorkforceData.get(level).progress(dismissed,Profession.BAKER.id()).equals(new WorkforceData.Progress(2,31))
+            &&Employment.cost(level,Profession.Sector.INDUSTRIAL,dismissed)==1,"Dismissed resident history or fee changed after reload");
+        System.out.println("EMPLOYMENT_DISMISS_WORLD_RESTART_PASSED");
         System.out.println("EMPLOYMENT_WORLD_RESTART_PASSED");
     }
 }

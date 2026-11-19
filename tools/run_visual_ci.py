@@ -30,16 +30,16 @@ if not source.exists():
 visual_world=Path('run/saves/visual-check')
 if visual_world.exists():shutil.rmtree(visual_world)
 shutil.copytree(source,visual_world)
-# Inspect the unchanged Portuguese UI labels instead of untranslated English keys.
+# Use Portuguese labels and keep vanilla tutorial overlays out of UI captures.
 Path('run').mkdir(exist_ok=True)
-Path('run/options.txt').write_text('lang:pt_br\nguiScale:3\nsimulationDistance:8\n')
+Path('run/options.txt').write_text('lang:pt_br\nguiScale:3\nsimulationDistance:8\ntutorialStep:none\n')
 log=Path('client-console.log')
 started=time.time()
 with log.open('w') as out:
     result=subprocess.run(['xvfb-run','-a','-s','-screen 0 1920x1080x24','bash','gradlew','--no-daemon','-Pvisual_check=true','runClient'],stdout=out,stderr=subprocess.STDOUT)
 text=log.read_text(errors='replace')
 print('\n'.join(text.splitlines()[-35:]))
-for name in ['visual-chests.png','visual-doors.png','visual-anchor-slots.png','visual-reference-door.png','visual-chest-cavity.png','visual-courier-deposit.png','visual-courier-closed.png','visual-steve-opacity-multiple.png','visual-kraftcity-limits-two.png','visual-kraftcity-limits-removed.png','visual-kraftcity-limits-off.png','visual-industrial-hiring.png','visual-farmer-inventory.png','visual-worker-inventory.png','visual-replaced-workstation.png','visual-commercial-pending.png','visual-rehired-progress.png','visual-residential-employed.png','visual-industry-blue-limits.png','visual-farmer-hoe.png','visual-farmer-field-2.png','visual-farmer-field-3.png','visual-farmer-field-4.png','visual-military-hiring.png','visual-military-soldier.png','visual-military-blacklist.png','visual-military-guard.png','visual-military-zombie.png','visual-builder-hiring.png','visual-builder-global.png','visual-builder-global-fifty.png','visual-builder-capture.png','visual-builder-materials.png','visual-builder-print.png','visual-builder-hologram.png','visual-builder-cooperative.png','visual-builder-flight.png','visual-commerce-hiring.png','visual-commerce-baker.png','visual-commerce-confectioner.png','visual-commerce-grill_cook.png']+[f'visual-industry-{name}.png' for name in ('farmer','butcher','shepherd','fisherman','breeder','beekeeper')]+[f'visual-steve-opacity-{percent}.png' for percent in (0,10,25,50,75,90,100)]:
+for name in ['visual-chests.png','visual-doors.png','visual-anchor-slots.png','visual-reference-door.png','visual-chest-cavity.png','visual-courier-deposit.png','visual-courier-closed.png','visual-steve-opacity-multiple.png','visual-kraftcity-limits-two.png','visual-kraftcity-limits-removed.png','visual-kraftcity-limits-off.png','visual-industrial-hiring.png','visual-farmer-inventory.png','visual-worker-inventory.png','visual-worker-dismiss.png','visual-worker-dismissed.png','visual-replaced-workstation.png','visual-commercial-pending.png','visual-rehired-progress.png','visual-residential-employed.png','visual-industry-blue-limits.png','visual-farmer-hoe.png','visual-farmer-field-2.png','visual-farmer-field-3.png','visual-farmer-field-4.png','visual-military-hiring.png','visual-military-soldier.png','visual-military-blacklist.png','visual-military-guard.png','visual-military-zombie.png','visual-builder-hiring.png','visual-builder-global.png','visual-builder-global-fifty.png','visual-builder-capture.png','visual-builder-materials.png','visual-builder-print.png','visual-builder-hologram.png','visual-builder-cooperative.png','visual-builder-flight.png','visual-commerce-hiring.png','visual-commerce-baker.png','visual-commerce-confectioner.png','visual-commerce-grill_cook.png']+[f'visual-industry-{name}.png' for name in ('farmer','butcher','shepherd','fisherman','breeder','beekeeper')]+[f'visual-steve-opacity-{percent}.png' for percent in (0,10,25,50,75,90,100)]:
     path=Path('build/screenshots')/name
     if not path.exists() or path.stat().st_mtime < started:
         errors=[line.strip() for line in text.splitlines() if 'Exception:' in line and any(
@@ -55,7 +55,7 @@ if result.returncode and 'Gradle build daemon disappeared unexpectedly' not in t
     fail(result.returncode)
 for marker in ['COURIER_PLAYER_OVERLAP_PASSED','COURIER_CLIENT_OPEN_CLOSE_PASSED','COURIER_GRAPHICAL_DEPOSIT_PASSED','STEVE_WORLD_OPACITY_50_PASSED','STEVE_WORLD_OPACITY_PERCENTAGES_PASSED','STEVE_MULTI_RESIDENT_OPACITY_SYNC_PASSED','STEVE_MULTI_RESIDENT_OPACITY_CAPTURED']:
     if marker not in text:fail('Minecraft client check missing '+marker)
-for marker in ['EMPLOYMENT_GRAPHICAL_CONTRACT_PASSED','EMPLOYMENT_INVENTORY_SHARED_PASSED','EMPLOYMENT_PORTABLE_INVENTORY_PASSED','COMMERCIAL_PENDING_NO_CHARGE_PASSED','EMPLOYMENT_REHIRE_PROGRESS_PASSED','EMPLOYMENT_RESIDENTIAL_INDICATOR_PASSED']:
+for marker in ['EMPLOYMENT_GRAPHICAL_CONTRACT_PASSED','EMPLOYMENT_INVENTORY_SHARED_PASSED','EMPLOYMENT_DISMISS_GRAPHICAL_PASSED','EMPLOYMENT_PORTABLE_INVENTORY_PASSED','COMMERCIAL_PENDING_NO_CHARGE_PASSED','EMPLOYMENT_REHIRE_PROGRESS_PASSED','EMPLOYMENT_RESIDENTIAL_INDICATOR_PASSED']:
     if marker not in text:fail('Employment client check missing '+marker)
 if 'INDUSTRY_BLUE_LIMITS_PASSED' not in text:fail('Blue work area toggle was not validated.')
 for marker in ('FARMER_HELD_HOE_RENDERED_AT_DOUBLE_SCALE','FARMER_ZIGZAG_HARVEST_JUMP_DISCARD_AND_SLEEP_PASSED'):
@@ -81,6 +81,7 @@ restored_text=restore_log.read_text(errors='replace')
 print('\n'.join(restored_text.splitlines()[-25:]))
 if 'TEN_SLOTS_WORLD_RESTART_PASSED' not in restored_text:
     fail('Ten stored output stacks did not survive a complete Minecraft process restart.')
+if 'EMPLOYMENT_DISMISS_WORLD_RESTART_PASSED' not in restored_text:fail('Dismissed resident history or fee did not survive process restart.')
 if 'EMPLOYMENT_WORLD_RESTART_PASSED' not in restored_text:
     fail('Employment inventory/progression did not survive process restart.')
 if 'WORKFORCE_WORLD_RESTART_PASSED' not in restored_text:

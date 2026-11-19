@@ -34,6 +34,10 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
         search=addRenderableWidget(new EditBox(font,leftPos+146,topPos+46,194,18,Component.literal("Buscar criatura")));search.setValue(query);search.setResponder(v->{query=v;page=0;buttonsForRows();});
         buttonsForRows();return;
     }
+        var state=menu.state;
+        if(state!=null&&state.employed())addRenderableWidget(new Button(leftPos+276,topPos+2,66,14,
+            Component.translatable("gui.kraftcity.dismiss"),b->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(
+                new br.com.kraftcity.employment.WorkNetwork.Dismiss(menu.containerId,menu.stationId,state.epoch()))));
         String[] modes={"Livre","Guarda","Seguir"};for(int i=0;i<3;i++){final int c=i;button(8+82*i,145,78,(menu.state!=null&&menu.state.mode()==i?"> ":"")+modes[i],()->send(0,Military.Mode.values()[c].name()));}
         button(258,145,84,menu.state!=null&&menu.state.night()?"Noturno":"Diurno",()->send(1,menu.state!=null&&menu.state.night()?"DAY":"NIGHT"));
         button(8,169,164,"Blacklist de criaturas",()->{blacklist=true;page=0;buttons();send(3,"");});

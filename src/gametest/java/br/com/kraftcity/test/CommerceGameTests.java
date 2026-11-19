@@ -123,7 +123,7 @@ public final class CommerceGameTests {
         var f=fixture(h,Profession.BAKER);level(f,4,75);f.s.setItem(0,new ItemStack(Items.WHEAT,3));work(f,300);ResidenceData.get(f.l).unlink(f.l,f.v.getUUID());work(f,600);
         check(f.s.worker==null&&count(f,Items.BREAD)==0&&f.s.commerce.getInt("elapsed")==300,"homeless production/partial loss");
         check(ResidenceData.get(f.l).link(f.l,f.home,f.v).equals("ok"),"recovered home");check(f.s.worker==null,"automatic rehire");check(Employment.hire(f.player,f.s,f.v.getUUID(),Profession.BAKER).equals("ok"),"rehire");work(f,300);
-        var p=WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.BAKER.id());check(count(f,Items.BREAD)==1&&p.level()==4&&p.xp()==76&&f.s.getItem(31).getCount()==10,"rehire history/payment");h.succeed();
+        var p=WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.BAKER.id());check(count(f,Items.BREAD)==1&&p.level()==4&&p.xp()==76&&f.s.getItem(31).getCount()==19,"rehire history/payment");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void schema_one_roundtrip_keeps_partial_recipe_heat_and_all_existing_inventory_slots(GameTestHelper h){

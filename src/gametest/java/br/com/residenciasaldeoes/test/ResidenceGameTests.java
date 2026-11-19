@@ -620,6 +620,10 @@ public final class ResidenceGameTests {
         h.setBlock(bedLocal.relative(Direction.SOUTH),bedHead.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.FOOT));
         h.setBlock(bedLocal,bedHead);
         check(data.reserveBed(resident.getUUID(),level.dimension(),home,bed),"Could not reserve the resident's bed");
+        check(level.getPoiManager().take(type->type.is(net.minecraft.world.entity.ai.village.poi.PoiTypes.HOME),
+            (type,pos)->pos.equals(bed),bed,1).isPresent(),"Missing HOME POI for the reserved bed "+bed);
+        resident.getBrain().setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.HOME,
+            net.minecraft.core.GlobalPos.of(level.dimension(),bed));
         level.setDayTime(13_001L);resident.startSleeping(bed);
         check(resident.isSleeping(),"Resident did not enter sleep before the rain transition");
         level.setWeatherParameters(0,12_000,true,false);level.setRainLevel(1.0F);

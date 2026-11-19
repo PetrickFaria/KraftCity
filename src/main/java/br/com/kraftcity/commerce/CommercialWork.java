@@ -148,17 +148,27 @@ public final class CommercialWork {
     private static void evening(ServerLevel l,EmploymentData.Station s,Villager v){
         long day=Math.floorDiv(l.getDayTime(),24000)+1;
         if(s.commerce.getLong("deposited_day")!=day){
-            boolean products=false;for(int i=0;i<27;i++)if(CommercialRecipes.product(s.profession,s.getItem(i)))products=true;
-            if(products){
-                var chest=DiscardChests.around(l,s,IndustrialWork.area(l,s)).stream().findFirst().orElse(null);
-                if(chest==null)IndustrialWork.alert(l,s,"discard","Falta baú de descarte válido a até cinco blocos do limite da área.");
-                else{
-                    if(!reach(v,chest.pos())){state(s,"Levando produtos ao descarte.");return;}
-                    if(IndustrialWork.allowed(l,s,v,chest.pos(),null,"commercial_deposit")&&stillWorker(l,s,v))for(int i=0;i<27;i++)if(CommercialRecipes.product(s.profession,s.getItem(i))){
-                        var stack=s.getItem(i);var remaining=IndustrialWork.transfer(chest.inventory(),stack);stack.shrink(stack.getCount()-remaining.getCount());s.setChanged();
-                    }
-                }
+            var offers=DiscardChests.offers(s,stack->CommercialRecipes.product(s.profession,stack));
+            var candidates=DiscardChests.destinations(l,s,IndustrialWork.area(l,s));
+            if(candidates.isEmpty()&&DiscardChests.hasOffers(offers))
+                IndustrialWork.alert(l,s,"discard","Falta baú de descarte válido a até cinco blocos do limite da área.");
+            var tried=new HashSet<Long>();
+            if(s.commerce.getLong("discard_tried_day")==day){
+                for(long at:s.commerce.getLongArray("discard_tried"))tried.add(at);
+            }else{
+                s.commerce.putLong("discard_tried_day",day);
+                s.commerce.remove("discard_tried");
             }
+            for(var pos:candidates){
+                if(!DiscardChests.hasOffers(offers))break;
+                if(tried.contains(pos.asLong())||!DiscardChests.accepts(l,s,v,pos,offers))continue;
+                int travel=br.com.kraftcity.industry.FarmerLogistics.approachDiscard(l,v,pos);
+                if(travel==0){state(s,"Levando produtos ao descarte.");return;}
+                if(travel>0)DiscardChests.deposit(l,s,v,pos,offers,"commercial_deposit");
+                tried.add(pos.asLong());
+                s.commerce.putLongArray("discard_tried",tried.stream().mapToLong(Long::longValue).toArray());
+            }
+            s.commerce.remove("discard_tried");
             s.commerce.putLong("deposited_day",day);s.setChanged();
         }
         var home=ResidenceData.get(l).owner(v.getUUID());if(home!=null)v.getNavigation().moveTo(home.pos.getX()+.5,home.pos.getY()+1,home.pos.getZ()+.5,.85);

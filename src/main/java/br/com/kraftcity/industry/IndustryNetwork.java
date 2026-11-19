@@ -21,7 +21,6 @@ public final class IndustryNetwork {
                 var s=m.station();if(s!=null&&s.profession!=null){
                     if(command==0)IndustrialRules.selectSize(p.getLevel(),s,size);
                     else if(command==1){s.industry.putBoolean("preview",!s.industry.getBoolean("preview"));s.setChanged();sendBounds(p);}
-                    else if(command==2){p.getPersistentData().putUUID("KCBindDiscard",station);p.closeContainer();p.sendSystemMessage(Component.literal("Clique em um baú/barril a até cinco blocos do limite da área."));}
                     else if(command==4&&s.sector==Profession.Sector.COMMERCIAL){br.com.kraftcity.commerce.CommercialWork.cancel(s);}
                     else if(command==3&&s.profession==Profession.BUTCHER){p.getPersistentData().putUUID("KCRegisterAnimal",station);p.closeContainer();p.sendSystemMessage(Component.literal("Clique nos animais que você colocou na área. Agache e clique no posto para encerrar."));}
                     m.sync(p);

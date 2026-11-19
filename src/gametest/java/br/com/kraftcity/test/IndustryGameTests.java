@@ -206,6 +206,43 @@ public final class IndustryGameTests {
         check(seeds==30&&wheat==20,"discard duplication/loss");IndustrialWork.deposit(f.l,f.s,f.v);check(f.s.getItem(0).getCount()==10,"reserve deposited twice");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void automatic_discard_prioritizes_boundary_left_and_partial_fallback(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var nearLeft=f.p.west(3);
+        var nearRight=f.p.east(3);
+        var far=f.p.west(5);
+        var protectedPos=f.p.west(3).north();
+        var sealed=f.p.north(3);
+        for(var pos:List.of(nearLeft,nearRight,far,protectedPos,sealed))f.l.setBlock(pos,Blocks.BARREL.defaultBlockState(),3);
+        for(var side:Direction.values())f.l.setBlock(sealed.relative(side),Blocks.STONE.defaultBlockState(),3);
+        var left=(BarrelBlockEntity)f.l.getBlockEntity(nearLeft);
+        var right=(BarrelBlockEntity)f.l.getBlockEntity(nearRight);
+        var distant=(BarrelBlockEntity)f.l.getBlockEntity(far);
+        var blocked=(BarrelBlockEntity)f.l.getBlockEntity(protectedPos);
+        var area=IndustrialWork.area(f.l,f.s);
+        var order=br.com.kraftcity.logistics.DiscardChests.destinations(f.l,f.s,area);
+        check(order.equals(List.of(protectedPos,nearLeft,nearRight,far)),"unexpected destination order: "+order);
+        var platform=f.l.getBlockState(f.p);
+        f.l.setBlock(f.p,platform.setValue(WorkBlock.FACING,Direction.SOUTH),3);
+        check(br.com.kraftcity.logistics.DiscardChests.destinations(f.l,f.s,area).get(0).equals(nearRight),"left did not follow post rotation");
+        f.l.setBlock(f.p,platform,3);
+        for(int slot=0;slot<27;slot++)left.setItem(slot,new ItemStack(Items.STONE,64));
+        left.setItem(0,new ItemStack(Items.CARROT,62));
+        f.s.industry.putLong("discard",far.asLong());
+        f.s.setItem(0,new ItemStack(Items.CARROT,15));
+        var protection=new Object(){
+            @net.minecraftforge.eventbus.api.SubscribeEvent
+            public void protect(WorkActionEvent event){if(event.position.equals(protectedPos))event.setCanceled(true);}
+        };
+        MinecraftForge.EVENT_BUS.register(protection);
+        try{IndustrialWork.deposit(f.l,f.s,f.v);}
+        finally{MinecraftForge.EVENT_BUS.unregister(protection);}
+        check(blocked.isEmpty()&&distant.isEmpty()&&left.countItem(Items.CARROT)==64
+            &&right.countItem(Items.CARROT)==3&&count(f,Items.CARROT)==10,"priority/remainder or conservation failed");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void protection_cancels_without_consuming_and_alert_is_throttled(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);f.s.setItem(27,new ItemStack(Items.IRON_HOE));f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,10));var p=crop(f,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7));
         var listener=new Object(){@net.minecraftforge.eventbus.api.SubscribeEvent public void deny(WorkActionEvent e){if(e.station.id.equals(f.s.id))e.setCanceled(true);}};

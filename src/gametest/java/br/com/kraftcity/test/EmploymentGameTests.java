@@ -42,11 +42,11 @@ public final class EmploymentGameTests {
     public static void all_six_industrial_choices_create_distinct_registered_professional_blocks(GameTestHelper h){
         var f=fixture(h,Profession.Sector.INDUSTRIAL);int index=0;
         for(Profession profession:Profession.values())if(profession.sector==Profession.Sector.INDUSTRIAL){
-            BlockPos pos=f.pos.offset(0,0,index++*2);f.level.setBlock(pos,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);
+            int price=index==0?10:1;BlockPos pos=f.pos.offset(0,0,index++*2);f.level.setBlock(pos,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);
             var station=((WorkBlockEntity)f.level.getBlockEntity(pos)).station();station.setItem(31,new ItemStack(Items.EMERALD,10));
             f.player.setPos(pos.getX()+.5,pos.getY(),pos.getZ()+1.5);
             check(Employment.hire(f.player,station,f.resident.getUUID(),profession).equals("ok"),"Choice failed: "+profession);
-            check(f.level.getBlockState(pos).is(WorkModule.PROFESSIONAL.get(profession).get())&&station.getItem(31).isEmpty(),"Choice did not transform/charge: "+profession);
+            check(f.level.getBlockState(pos).is(WorkModule.PROFESSIONAL.get(profession).get())&&station.getItem(31).getCount()==10-price,"Choice did not transform/charge: "+profession);
             Employment.release(f.level,f.resident.getUUID());
         }
         check(index==6,"Industrial choice count changed");h.succeed();
@@ -108,6 +108,43 @@ public final class EmploymentGameTests {
         check(Employment.indicator(f.level,f.resident.getUUID(),false),"Assigned real workbench is not green");
         check(!attempt(f,Profession.FARMER).equals("ok")&&f.station.getItem(31).getCount()==20,"Double click charged twice");h.succeed();
     }
+    @GameTest(template="empty",timeoutTicks=40,batch="employment")
+    public static void dismissal_is_guarded_and_rehire_preserves_profession_specific_history(GameTestHelper h){
+        var f=fixture(h,Profession.Sector.INDUSTRIAL);
+        var id=f.resident.getUUID();
+        check(attempt(f,Profession.FARMER).equals("ok"),"initial farmer hire");
+        var history=WorkforceData.get(f.level);
+        history.setProgress(id,Profession.FARMER.id(),5,123);
+        f.station.setItem(0,new ItemStack(Items.WHEAT,14));
+        long epoch=Employment.epoch(f.station);
+        f.player.getAbilities().mayBuild=false;
+        check(!Employment.dismiss(f.player,f.station,epoch),"unpermitted dismissal");
+        f.player.getAbilities().mayBuild=true;
+        check(Employment.dismiss(f.player,f.station,epoch),"dismissal failed");
+        check(!Employment.dismiss(f.player,f.station,epoch)&&f.station.worker==null,"duplicate dismissal");
+        check(f.level.getEntity(id)==f.resident&&ResidenceData.get(f.level).owner(id).pos.equals(f.home)
+            &&Employment.eligible(f.level,f.resident),"resident identity or housing lost");
+        var saved=WorkforceData.load(history.save(new CompoundTag()));
+        check(saved.hasEmploymentHistory(id)&&saved.progress(id,Profession.FARMER.id()).xp()==123
+            &&saved.worker(id).orElseThrow().workstation().isEmpty(),"dismissed history not persisted");
+        check(f.station.getItem(0).getCount()==14,"dismissal moved station inventory");
+        var other=f.pos.south(3);
+        f.level.setBlock(other,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);
+        var second=((WorkBlockEntity)f.level.getBlockEntity(other)).station();
+        check(Employment.hire(f.player,second,id,Profession.BUTCHER).equals("payment"),"no emerald hire");
+        second.setItem(31,new ItemStack(Items.EMERALD,2));
+        check(Employment.hire(f.player,second,id,Profession.BUTCHER).equals("ok"),"cross-profession rehire");
+        check(second.getItem(31).getCount()==1&&history.progress(id,Profession.BUTCHER.id()).xp()==0,"wrong rehire fee or transferred XP");
+        history.setProgress(id,Profession.BUTCHER.id(),2,25);
+        check(Employment.dismiss(f.player,second,Employment.epoch(second)),"butcher dismissal");
+        f.station.setItem(31,new ItemStack(Items.EMERALD,1));
+        check(attempt(f,Profession.FARMER).equals("ok")&&f.station.getItem(31).isEmpty(),"single emerald same job");
+        check(!Employment.dismiss(f.player,f.station,epoch)&&f.station.worker.equals(id),"stale dismissal affected new assignment");
+        check(history.progress(id,Profession.FARMER.id()).equals(new WorkforceData.Progress(5,123))
+            &&history.progress(id,Profession.BUTCHER.id()).equals(new WorkforceData.Progress(2,25)),"profession histories mixed");
+        h.succeed();
+    }
+
     @GameTest(template="empty",timeoutTicks=40,batch="employment")
     public static void invalid_selections_and_missing_funds_do_not_mutate_or_charge(GameTestHelper h){
         var f=fixture(h,Profession.Sector.INDUSTRIAL);f.station.setItem(31,new ItemStack(Items.EMERALD,9));

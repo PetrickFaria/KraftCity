@@ -1,6 +1,7 @@
 package br.com.kraftcity.industry;
 
 import br.com.kraftcity.employment.*;
+import br.com.kraftcity.logistics.DiscardChests;
 import br.com.residenciasaldeoes.data.ResidenceData;
 import com.mojang.authlib.GameProfile;
 import java.util.*;
@@ -160,23 +161,16 @@ public final class IndustrialWork {
         if(commit){for(int i=0;i<27;i++)s.setItem(i,copy.getItem(i));s.setChanged();}return true;
     }
     public static boolean insert(EmploymentData.Station s,ItemStack out,boolean commit){return outputs(s,List.of(out),commit);}
-    public static Container chest(ServerLevel l,EmploymentData.Station s){
-        var access=br.com.kraftcity.logistics.DiscardChests.around(l,s,area(l,s)).stream().findFirst().orElse(null);
-        return access==null?null:access.inventory();
-    }
-    public static BlockPos chestPosition(ServerLevel l,EmploymentData.Station s){
-        return br.com.kraftcity.logistics.DiscardChests.around(l,s,area(l,s)).stream().findFirst().map(br.com.kraftcity.logistics.DiscardChests.Access::pos).orElse(null);
-    }
     public static void deposit(ServerLevel l,EmploymentData.Station s,Villager v){
         if(s.profession==Profession.FARMER){FarmerLogistics.depositDirect(l,s,v);return;}
-        Container chest=chest(l,s);if(chest==null){alert(l,s,"discard","Falta baú de descarte a até cinco blocos do limite; itens continuam no posto.");return;}
-        BlockPos p=chestPosition(l,s);if(p==null||!allowed(l,s,v,p,null,"deposit"))return;
-        for(int i=0;i<27;i++){
-            var stack=s.getItem(i);
-            if(stack.isEmpty())continue;
-            var remainder=transfer(chest,stack);
-            s.setItem(i,remainder);
+        var offers=DiscardChests.offers(s,stack->true);
+        var destinations=DiscardChests.destinations(l,s,area(l,s));
+        for(var pos:destinations){
+            if(!DiscardChests.hasOffers(offers))break;
+            DiscardChests.deposit(l,s,v,pos,offers,"deposit");
         }
+        if(destinations.isEmpty()&&DiscardChests.hasOffers(offers))
+            alert(l,s,"discard","Falta baú de descarte a até cinco blocos do limite; itens continuam no posto.");
     }
     public static ItemStack transfer(Container target,ItemStack source){
         ItemStack rest=source.copy();for(int i=0;i<target.getContainerSize()&&!rest.isEmpty();i++){

@@ -88,7 +88,7 @@ public final class Employment {
         br.com.kraftcity.military.Military.release(level,worker);
         var data=EmploymentData.get(level);
         for(ServerLevel world:level.getServer().getAllLevels())if(world.getEntity(worker) instanceof Villager v)br.com.kraftcity.industry.IndustrialWork.restoreHand(v);
-        for(var s:data.stations())if(worker.equals(s.worker)){s.worker=null;if(s.sector==Profession.Sector.COMMERCIAL)s.commerce.putLong("epoch",s.commerce.getLong("epoch")+1);s.setChanged();}
+        for(var s:data.stations())if(worker.equals(s.worker)){s.worker=null;s.industry.putLong("employment_epoch",epoch(s)+1);if(s.sector==Profession.Sector.COMMERCIAL)s.commerce.putLong("epoch",s.commerce.getLong("epoch")+1);s.setChanged();}
         var workforce=WorkforceData.get(level);var old=workforce.worker(worker).orElse(null);
         if(old!=null&&old.workstation().isPresent()){
             old.profession().ifPresent(p->{var progress=workforce.progress(worker,p);workforce.setProgress(worker,p,old.level(),progress.xp());});
@@ -114,15 +114,62 @@ public final class Employment {
         // Preserve every legacy indicator for villagers never participating in the new system.
         return WorkforceData.get(level).worker(worker).filter(w->w.profession().isPresent()).isPresent()?valid(level,worker):legacy;
     }
+    public static long epoch(EmploymentData.Station station){
+        return station.industry.getLong("employment_epoch");
+    }
+
+    public static int cost(ServerLevel level,Profession.Sector sector,UUID worker){
+        int first=EmploymentConfig.cost(sector);
+        return first>=0&&worker!=null&&WorkforceData.get(level).hasEmploymentHistory(worker)?1:first;
+    }
+
+    public static boolean dismiss(ServerPlayer player,EmploymentData.Station station,long expectedEpoch){
+        var level=player.getLevel();
+        if(!level.getServer().isSameThread())throw new IllegalStateException("Dismissal off server thread");
+        if(station==null||station.worker==null||epoch(station)!=expectedEpoch||!station.at(level,station.pos)
+            ||!level.hasChunkAt(station.pos)||!player.mayBuild()||player.isSpectator()||!level.mayInteract(player,station.pos)
+            ||!(level.getBlockEntity(station.pos) instanceof WorkBlockEntity be)||!station.id.equals(be.identity()))return false;
+        var worker=station.worker;
+        if(player.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(station.pos))>=64
+            &&(level.getEntity(worker)==null||level.getEntity(worker).distanceToSqr(player)>=64))return false;
+        var hit=new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(station.pos),
+            net.minecraft.core.Direction.UP,station.pos,false);
+        var permission=net.minecraftforge.common.ForgeHooks.onRightClickBlock(player,net.minecraft.world.InteractionHand.MAIN_HAND,station.pos,hit);
+        if(permission.isCanceled()||permission.getUseBlock()==net.minecraftforge.eventbus.api.Event.Result.DENY
+            ||!worker.equals(station.worker)||epoch(station)!=expectedEpoch
+            ||level.getBlockEntity(station.pos)!=be)return false;
+        if(station.profession==Profession.SOLDIER){
+            br.com.kraftcity.military.Military.detachZombie(level,station);
+            station.military.remove("orderedTarget");
+            station.military.remove("orderAt");
+            station.military.remove("orders");
+        }
+        if(level.getEntity(worker) instanceof Villager villager){
+            FLEE_UNTIL.remove(villager);
+            br.com.kraftcity.industry.FarmerLogistics.release(villager);
+            villager.getNavigation().stop();
+            villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+            villager.getBrain().eraseMemory(MemoryModuleType.PATH);
+        }
+        station.industry.remove("farmer_discard_until");
+        station.industry.remove("farmer_discard_pos");
+        station.industry.remove("farmer_pickup_until");
+        station.industry.remove("farmer_discard_tried");
+        station.commerce.remove("discard_tried");
+        release(level,worker);
+        return true;
+    }
+
     public static String hire(ServerPlayer player,EmploymentData.Station s,UUID worker,Profession profession){
         ServerLevel level=player.getLevel();
         if(!level.getServer().isSameThread())throw new IllegalStateException("Hiring off server thread");
+        if(s==null)return "invalid";
         if(s.military.getBoolean("zombie"))return "ineligible";
         if(!s.at(level,s.pos)||s.worker!=null||(s.profession!=null&&s.profession!=profession)||profession==null||profession.sector!=s.sector)return "invalid";
         if(!(level.getBlockEntity(s.pos) instanceof WorkBlockEntity be)||!s.id.equals(be.identity())
                 ||player.distanceToSqr(s.pos.getX()+.5,s.pos.getY()+.5,s.pos.getZ()+.5)>64)return "invalid";
         if(!(level.getEntity(worker) instanceof Villager villager)||!eligible(level,villager))return "ineligible";
-        int price=EmploymentConfig.cost(s.sector);if(price<0)return "pending";
+        int price=cost(level,s.sector,worker);if(price<0)return "pending";
         var payment=s.getItem(EmploymentData.PAYMENT);
         if(price>0&&(!payment.is(Items.EMERALD)||payment.getCount()<price))return "payment";
         // Physical replacement first. A failed block operation never consumes payment.
@@ -132,7 +179,7 @@ public final class Employment {
             finally { CONVERTING.remove(); }
         }
         if(!(level.getBlockEntity(s.pos) instanceof WorkBlockEntity converted))throw new IllegalStateException("Missing professional block entity");
-        converted.bind(s.id);s.profession=profession;s.worker=worker;s.setChanged();
+        converted.bind(s.id);s.profession=profession;s.worker=worker;s.industry.putLong("employment_epoch",epoch(s)+1);s.setChanged();
         var workforce=WorkforceData.get(level);var progress=workforce.progress(worker,profession.id());
         var previous=workforce.worker(worker).orElse(null);
         workforce.setProgress(worker,profession.id(),progress.level(),progress.xp());

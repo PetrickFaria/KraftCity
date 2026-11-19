@@ -158,10 +158,27 @@ public final class Military {
         v.stopSleeping();z.setUUID(v.getUUID());z.moveTo(v.getX(),v.getY(),v.getZ(),v.getYRot(),v.getXRot());z.setVillagerData(v.getVillagerData());z.setCustomName(v.getCustomName());z.getPersistentData().merge(v.getPersistentData().copy());s.military.putBoolean("zombie",true);var snapshot=v.saveWithoutId(new CompoundTag());snapshot.remove("HandItems");snapshot.remove("ArmorItems");s.military.put("villager",snapshot);s.military.remove("target");
         stats(l,z);z.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(v.getAttributeBaseValue(Attributes.ATTACK_DAMAGE));z.setHealth(z.getMaxHealth());bind(s,z);TRANSFERRING.add(v.getUUID());try{for(var slot:GEAR)v.setItemSlot(slot,ItemStack.EMPTY);v.discard();l.addFreshEntity(z);}finally{TRANSFERRING.remove(v.getUUID());}s.setChanged();return z;
     }
+    public static void detachZombie(ServerLevel level,EmploymentData.Station station){
+        if(!station.military.getBoolean("zombie"))return;
+        EmploymentData.get(level).saveDetachedSoldier(station.worker,station.military.getCompound("villager"));
+        station.military.remove("zombie");
+        station.military.remove("villager");
+        station.military.remove("identity");
+        station.setChanged();
+    }
     public static Villager cure(ServerLevel l,SoldierZombie z){
-        var s=station(z);if(!military(s)||!s.military.getBoolean("zombie"))return null;
-        var v=EntityType.VILLAGER.create(l);if(v==null)return null;var nbt=s.military.getCompound("villager").copy();nbt.remove("UUID");nbt.remove("Passengers");nbt.remove("HandItems");nbt.remove("ArmorItems");v.load(nbt);v.setUUID(z.getUUID());v.moveTo(z.getX(),z.getY(),z.getZ(),z.getYRot(),z.getXRot());v.setNoAi(false);v.setVillagerData(z.getVillagerData().setProfession(VillagerProfession.NONE));
-        s.military.remove("zombie");s.military.remove("villager");for(var slot:GEAR)z.setItemSlot(slot,ItemStack.EMPTY);z.discard();stats(l,v);v.setHealth(v.getMaxHealth());l.addFreshEntity(v);if(s.active&&v.getUUID().equals(s.worker))bind(s,v);else{v.getPersistentData().remove("KCSoldier");v.getAttribute(Attributes.MAX_HEALTH).setBaseValue(20);v.setHealth(20);}s.setChanged();return v;
+        var s=station(z);var data=EmploymentData.get(l);
+        boolean attached=military(s)&&s.military.getBoolean("zombie");
+        var nbt=attached?s.military.getCompound("villager").copy():data.detachedSoldier(z.getUUID());
+        if(!attached&&nbt.isEmpty())return null;
+        var v=EntityType.VILLAGER.create(l);if(v==null)return null;nbt.remove("UUID");nbt.remove("Passengers");nbt.remove("HandItems");nbt.remove("ArmorItems");v.load(nbt);v.setUUID(z.getUUID());v.moveTo(z.getX(),z.getY(),z.getZ(),z.getYRot(),z.getXRot());v.setNoAi(false);v.setVillagerData(z.getVillagerData().setProfession(VillagerProfession.NONE));
+        if(attached){s.military.remove("zombie");s.military.remove("villager");s.setChanged();}
+        data.forgetDetachedSoldier(z.getUUID());
+        for(var slot:GEAR)z.setItemSlot(slot,ItemStack.EMPTY);
+        z.discard();
+        if(attached&&s.active&&v.getUUID().equals(s.worker)){stats(l,v);bind(s,v);}
+        else{v.getPersistentData().remove("KCSoldier");v.getAttribute(Attributes.MAX_HEALTH).setBaseValue(20);}
+        v.setHealth(v.getMaxHealth());l.addFreshEntity(v);return v;
     }
     public static void death(ServerLevel l,LivingEntity v){
         var s=station(v);if(!military(s))return;boolean drops=l.getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT);
