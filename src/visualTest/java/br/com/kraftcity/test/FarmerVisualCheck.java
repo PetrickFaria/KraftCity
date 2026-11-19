@@ -105,6 +105,8 @@ public final class FarmerVisualCheck {
             if(!l.getBlockState(CANE).is(Blocks.SUGAR_CANE))return;
             check(s.getItem(0).isEmpty(),"planting did not cost one cane");
             canePlanted=true;
+            l.setBlock(ROW.get(0),Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);
+            s.setItem(0,new ItemStack(Items.WHEAT_SEEDS));
             for(int height=1;height<3;height++)l.setBlock(CANE.above(height),Blocks.SUGAR_CANE.defaultBlockState(),3);
             l.setBlock(STEM.below(),Blocks.FARMLAND.defaultBlockState(),3);
             l.setBlock(FRUIT.below(),Blocks.DIRT.defaultBlockState(),3);
@@ -114,6 +116,8 @@ public final class FarmerVisualCheck {
         }else if(stage==2){
             sawLooseCane|=!l.getEntitiesOfClass(ItemEntity.class,new AABB(CANE).inflate(2,3,2),e->e.getItem().is(Items.SUGAR_CANE)).isEmpty();
             if(!l.getBlockState(CANE.above()).isAir()||!l.getBlockState(FRUIT).isAir()||s.countItem(Items.SUGAR_CANE)!=2)return;
+            if(l.getBlockState(ROW.get(0)).getValue(CropBlock.AGE)==7)return;
+            for(var at:ROW)check(l.getBlockState(at).is(Blocks.WHEAT)&&l.getBlockState(at.below()).is(Blocks.FARMLAND),"crop or soil damaged beside the harvest");
             check(canePlanted&&sawLooseCane&&l.getBlockState(CANE).is(Blocks.SUGAR_CANE),"missing cane planting/world pickup/base");
             check(l.getBlockState(STEM).is(Blocks.PUMPKIN_STEM),"pumpkin stem was removed: "+l.getBlockState(STEM));
             var mature=Blocks.PUMPKIN_STEM.defaultBlockState().setValue(StemBlock.AGE,7);
@@ -129,6 +133,7 @@ public final class FarmerVisualCheck {
             l.setBlock(CHEST,Blocks.BARREL.defaultBlockState(),3);
             s.industry.putLong("discard",CHEST.asLong());
             var drop=new ItemEntity(l,JUMP.getX()+.5,JUMP.getY()+.1,JUMP.getZ()+.5,new ItemStack(Items.COBBLESTONE,6));
+            drop.setDefaultPickUpDelay();
             l.addFreshEntity(drop);
             l.setDayTime(13001);
             p.teleportTo(l,CHEST.getX()+2.5,CHEST.getY()+.5,CHEST.getZ()+4.5,150,20);

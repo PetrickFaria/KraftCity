@@ -68,7 +68,11 @@ public final class FarmerWork {
 
     static void tick(ServerLevel l,EmploymentData.Station s,Villager v){
         var tool=s.getItem(27);
-        if(!(tool.getItem() instanceof HoeItem)){IndustrialWork.alert(l,s,"tool","Falta enxada/arador utilizável.");return;}
+        if(!(tool.getItem() instanceof HoeItem)){
+            IndustrialWork.alert(l,s,"tool","Falta enxada/arador utilizável.");
+            FarmerLogistics.stayInField(l,s,v);
+            return;
+        }
         int size=IndustrialRules.size(l,s);
         if(s.industry.getInt("zigzag_size")!=size){
             s.industry.putInt("zigzag_size",size);

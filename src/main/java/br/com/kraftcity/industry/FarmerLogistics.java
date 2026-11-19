@@ -85,7 +85,11 @@ public final class FarmerLogistics {
 
     static void stayInField(ServerLevel l,EmploymentData.Station s,Villager v){
         var area=IndustrialWork.area(l,s);
-        if(area.contains(v.position().add(0,.125,0))||v.isNoAi())return;
+        if(area.contains(v.position().add(0,.125,0))){
+            if(ROUTES.remove(v)!=null)v.getNavigation().stop();
+            return;
+        }
+        if(v.isNoAi())return;
         int size=IndustrialRules.size(l,s);
         var cells=FarmerWork.zigzag(s.pos,size,0);
         var candidates=new ArrayList<BlockPos>();
@@ -135,12 +139,20 @@ public final class FarmerLogistics {
         rejected.values().removeIf(until->until<=now);
         ItemEntity item=state!=null&&state.item!=null&&l.getEntity(state.item) instanceof ItemEntity e?e:null;
         if(!eligible(l,s,area,item)){
-            if(state!=null&&state.nextScan>now)return false;
+            if(state!=null&&state.nextScan>now)return closing&&state.item==null;
             item=l.getEntitiesOfClass(ItemEntity.class,area,e->!rejected.containsKey(e.getUUID())&&eligible(l,s,area,e)).stream()
                 .min(Comparator.comparingDouble(v::distanceToSqr)).orElse(null);
-            PICKUPS.put(v,new Pickup(item==null?null:item.getUUID(),now+(closing?5:10)));
+            if(item!=null||!closing)PICKUPS.put(v,new Pickup(item==null?null:item.getUUID(),now+(closing?5:10)));
+            else PICKUPS.remove(v);
         }
-        if(item==null)return false;
+        if(item==null){
+            if(!closing)return false;
+            // Tile drops may still have their vanilla pickup delay at a time jump.
+            boolean pending=!l.getEntitiesOfClass(ItemEntity.class,area,e->e.hasPickUpDelay()
+                &&eligible(l,s,area,e,true)&&!rejected.containsKey(e.getUUID())).isEmpty();
+            if(pending)PICKUPS.put(v,new Pickup(null,now+5));
+            return pending;
+        }
         boolean close=v.distanceToSqr(item)<=1.21&&visible(l,v,item.position().add(0,.1,0),null);
         if(!close){
             int travel=approach(l,v,item.blockPosition(),.4,0);
@@ -169,7 +181,10 @@ public final class FarmerLogistics {
         return closing;
     }
     private static boolean eligible(ServerLevel l,EmploymentData.Station s,net.minecraft.world.phys.AABB area,ItemEntity e){
-        if(e==null||!e.isAlive()||e.hasPickUpDelay()||!area.contains(e.position())||!l.hasChunkAt(e.blockPosition()))return false;
+        return eligible(l,s,area,e,false);
+    }
+    private static boolean eligible(ServerLevel l,EmploymentData.Station s,net.minecraft.world.phys.AABB area,ItemEntity e,boolean allowDelay){
+        if(e==null||!e.isAlive()||!allowDelay&&e.hasPickUpDelay()||!area.contains(e.position())||!l.hasChunkAt(e.blockPosition()))return false;
         var stack=e.getItem();
         for(int i=0;i<27;i++){
             var stored=s.getItem(i);
