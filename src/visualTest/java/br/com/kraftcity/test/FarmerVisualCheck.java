@@ -27,7 +27,7 @@ import net.minecraft.world.level.block.state.properties.BedPart;
 public final class FarmerVisualCheck {
     private static final BlockPos POST=new BlockPos(79,-58,60);
     private static final BlockPos HOME=POST.offset(-7,0,-1);
-    private static final BlockPos CHEST=POST.offset(4,1,0);
+    private static final BlockPos CHEST=POST.offset(-5,1,2);
     private static final BlockPos CANE=POST.offset(2,1,1);
     private static final BlockPos STEM=POST.offset(-1,1,1);
     private static final BlockPos FRUIT=STEM.south();
@@ -158,6 +158,14 @@ public final class FarmerVisualCheck {
                 +" delivery="+v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")
                 +" attacked="+(v.getLastHurtByMob()!=null)+" noAI="+v.isNoAi();
             check(l.getGameTime()-nightStarted<480,"night sequence did not finish: "+progressDetail);
+            if(deposited==6){
+                check(v.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(CHEST))<=3.5||v.isSleeping()
+                    ||s.industry.getBoolean("visual_farmer_reached_chest"),"discard occurred outside physical reach");
+                if(!s.industry.getBoolean("visual_farmer_reached_chest")){
+                    s.industry.putBoolean("visual_farmer_reached_chest",true);
+                    s.setChanged();
+                }
+            }
             if(!v.isSleeping())return;
             check(deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding");
             s.industry.putBoolean("visual_farmer_night",true);

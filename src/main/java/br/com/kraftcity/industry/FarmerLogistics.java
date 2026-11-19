@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.item.Item;
@@ -313,14 +314,29 @@ public final class FarmerLogistics {
             }
             s.industry.remove("farmer_pickup_until");
             var target=hasExcess(l,s)?target(l,s,v):null;
-            if(target!=null)s.industry.putLong("farmer_discard_pos",target.asLong());
+            if(target!=null){
+                s.industry.putLong("farmer_discard_pos",target.asLong());
+                ROUTES.remove(v);
+                v.getNavigation().stop();
+                v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                v.getBrain().eraseMemory(MemoryModuleType.PATH);
+            }
             s.setChanged();
         }
         if(s.industry.contains("farmer_discard_pos")){
             var pos=BlockPos.of(s.industry.getLong("farmer_discard_pos"));
-            int result=now<s.industry.getLong("farmer_discard_until")&&supports(l,pos)?approach(l,v,pos,1.65,1):-1;
-            if(result==0)return true;
-            if(result>0)deposit(l,s,v,pos);
+            if(now<s.industry.getLong("farmer_discard_until")&&supports(l,pos)){
+                int result=approach(l,v,pos,1.65,1);
+                if(result<0){
+                    // A failed path request while landing or after a competing goal
+                    // is transient. Retry after a short cooldown within the same deadline.
+                    var blocked=BLOCKED.get(v);
+                    if(blocked!=null)blocked.computeIfPresent(pos,(at,until)->Math.min(until,now+12));
+                    return true;
+                }
+                if(result==0)return true;
+                deposit(l,s,v,pos);
+            }
         }
         s.industry.remove("farmer_discard_until");
         s.industry.remove("farmer_discard_pos");
