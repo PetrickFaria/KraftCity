@@ -5,6 +5,17 @@ import shutil
 import re
 import sys
 import time
+import os
+
+def fail(message, logs=''):
+    if 'GITHUB_ACTIONS' in os.environ:
+        lines=[line.strip() for line in logs.splitlines() if re.search(
+            r'(test.*failed|required.*fail|game tests complete|GameTestAssertException|Daemon.*disappear|Caused by:|OutOfMemory|error:)',
+            line,re.I
+        )]
+        for line in dict.fromkeys([message,*lines[-12:]]):
+            print('::error title=Forge GameTest::'+line.replace('%','%25')[:450])
+    raise SystemExit(message)
 
 run=Path('run-gametest');run.mkdir(exist_ok=True)
 # Dedicated generated fixture only: do not inherit queued residents/items from a previous run.
@@ -18,12 +29,12 @@ text=log_path.read_text(errors='replace')
 print('\n'.join(text.splitlines()[-110:]))
 server_log=Path('run-gametest/logs/latest.log')
 if not server_log.exists() or server_log.stat().st_mtime < started:
-    sys.exit('Forge did not write a fresh server log for this run.')
+    fail('Forge did not write a fresh server log for this run.',text)
 evidence=server_log.read_text(errors='replace') if server_log.exists() else ''
 completed=re.search(r'\b(\d+) GAME TESTS COMPLETE\b',evidence)
 passed=re.search(r'All (\d+) required tests passed',evidence)
 if not completed or not passed or completed.group(1)!=passed.group(1):
-    sys.exit('Forge server did not confirm that all completed GameTests passed.')
+    fail('Forge server did not confirm that all completed GameTests passed.',evidence+'\n'+text)
 expected=sum(len(re.findall(r'@GameTest\s*\(',p.read_text())) for p in Path('src/gametest/java').rglob('*.java'))
 if int(passed.group(1)) != expected or expected == 0:
     sys.exit(f'Forge ran {passed.group(1)} tests; the selected source set contains {expected}.')
