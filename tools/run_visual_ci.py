@@ -6,6 +6,14 @@ import sys
 import struct
 import time
 
+def annotate_failure(error_type, error, tb):
+    if error_type is SystemExit:
+        return
+    print('::error title=Minecraft graphical validation::'+str(error).replace('%','%25').replace('\n','%0A')[:500])
+    sys.__excepthook__(error_type,error,tb)
+
+sys.excepthook=annotate_failure
+
 if not shutil.which('xvfb-run'):
     sys.exit('Xvfb is unavailable.')
 source=Path('run-gametest/world')
