@@ -29,6 +29,8 @@ import net.minecraft.world.level.block.state.properties.BedPart;
 
 @net.minecraftforge.fml.common.Mod.EventBusSubscriber(modid="residenciasaldeoes",value=net.minecraftforge.api.distmarker.Dist.CLIENT)
 public final class FarmerVisualCheck {
+    private static int restoredSleepTicks;
+    private static volatile boolean restoredSleeping;
     // This scenario has its own containers and neighbors, away from the GameTest grid.
     private static final BlockPos POST=new BlockPos(79,-61,-120);
     private static final BlockPos HOME=POST.offset(-7,0,-1);
@@ -242,7 +244,10 @@ public final class FarmerVisualCheck {
             drop.setDefaultPickUpDelay();
             l.addFreshEntity(drop);
             closingDrop=drop.getUUID();
-            s.setItem(5,new ItemStack(Items.CARROT,15));
+            for(int slot=0;slot<EmploymentData.COMMON;slot++){
+                if(s.getItem(slot).is(Items.CARROT))s.removeItemNoUpdate(slot);
+            }
+            check(IndustrialWork.insert(s,new ItemStack(Items.CARROT,15),true),"could not stage 15 carrots");
             l.getServer().getCommands().performPrefixedCommand(l.getServer().createCommandSourceStack(),"time set night");
             nightStarted=l.getGameTime();
             stage=9;
@@ -281,7 +286,7 @@ public final class FarmerVisualCheck {
             s.industry.putUUID("visual_farmer_companion_1",companions.get(1));
             check(v.getSleepingPos().filter(BED::equals).isPresent(),"farmer slept outside its own bed");
             check(seenPhysicalDeposit&&deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding: "+progressDetail+" at designated barrel="+seenPhysicalDeposit);
-            check(barrel.countItem(Items.CARROT)==5&&s.countItem(Items.CARROT)==10,"main farmer did not reserve ten carrots");
+            check(barrel.countItem(Items.CARROT)==5&&s.countItem(Items.CARROT)==10,"main carrot reserve: barrel="+barrel.countItem(Items.CARROT)+" stock="+s.countItem(Items.CARROT));
             s.industry.putBoolean("visual_farmer_night",true);
             s.industry.putInt("visual_saved_harvest_cursor",s.industry.getInt("zigzag_harvest"));
             s.industry.putInt("visual_saved_plant_cursor",s.industry.getInt("zigzag_plant"));
@@ -373,6 +378,42 @@ public final class FarmerVisualCheck {
                 }
             });
         event.addListener(capability::invalidate);
+    }
+
+    public static boolean verifyWorkersSleepAgain(Minecraft mc){
+        var server=mc.getSingleplayerServer();
+        int tick=++restoredSleepTicks;
+        if(tick==1){
+            mc.player.closeContainer();
+            var player=mc.player.getUUID();
+            server.execute(()->recordFailure(()->{
+                var level=server.overworld();
+                server.getPlayerList().getPlayer(player).teleportTo(level,BED.getX()+.5,BED.getY()+2,BED.getZ()+5.5,180,25);
+                level.setDayTime(13001);
+            }));
+        }
+        if(tick%10==0&&!restoredSleeping){
+            server.execute(()->recordFailure(()->{
+                var level=server.overworld();
+                var station=station(level);
+                var residents=List.of(station.worker,station.industry.getUUID("visual_farmer_companion_0"),
+                    station.industry.getUUID("visual_farmer_companion_1"));
+                var beds=new HashSet<BlockPos>();
+                for(var id:residents){
+                    if(!(level.getEntity(id) instanceof Villager villager)||!villager.isSleeping())return;
+                    var bed=villager.getSleepingPos().orElseThrow();
+                    check(beds.add(bed)&&ResidenceData.get(level).ownsBed(level.dimension(),bed,id),
+                        "reopened farm has a conflicting bed");
+                }
+                restoredSleeping=true;
+            }));
+        }
+        if(serverFailure!=null)throw new IllegalStateException(serverFailure);
+        check(tick<500,"three farmers did not return to sleep in the reopened world");
+        if(!restoredSleeping)return false;
+        Screenshot.grab(new File("../build"),"visual-farmers-restored.png",mc.getMainRenderTarget(),m->{});
+        System.out.println("FARMER_THREE_SLEEP_AFTER_RESTART_PASSED");
+        return true;
     }
 
     static void verifyRestore(ServerLevel l){

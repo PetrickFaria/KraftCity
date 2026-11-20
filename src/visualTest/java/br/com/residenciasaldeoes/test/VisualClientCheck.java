@@ -33,7 +33,8 @@ public final class VisualClientCheck {
             return;
         }
         br.com.kraftcity.test.BuilderVisualCheck.restoredTick(mc,++builderRestoreTicks);
-        if(builderRestoreTicks==1160)mc.stop();
+        if(builderRestoreTicks>=1160&&(Boolean.getBoolean("kraftcity.commerceVisualOnly")
+            ||br.com.kraftcity.test.FarmerVisualCheck.verifyWorkersSleepAgain(mc)))mc.stop();
     }
 
     @SubscribeEvent public static void tick(TickEvent.ClientTickEvent event){

@@ -90,6 +90,7 @@ if 'EMPLOYMENT_WORLD_RESTART_PASSED' not in restored_text:
 if 'WORKFORCE_WORLD_RESTART_PASSED' not in restored_text:
     fail('Workforce state did not survive a complete Minecraft process restart.')
 if 'FARMER_SAME_WORLD_RESTART_PASSED' not in restored_text:fail('Farmer persistence did not survive process restart.')
+if 'FARMER_THREE_SLEEP_AFTER_RESTART_PASSED' not in restored_text:fail('The three saved farmers did not sleep again after reopening.')
 if 'INDUSTRY_SIX_JOBS_WORLD_RESTART_PASSED' not in restored_text:
     fail('Six industrial jobs did not survive process restart.')
 if 'MILITARY_WORLD_RESTART_PASSED' not in restored_text:fail('Military did not survive JVM restart.')
