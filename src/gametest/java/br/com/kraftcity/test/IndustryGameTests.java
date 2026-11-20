@@ -587,10 +587,13 @@ public final class IndustryGameTests {
                     check(actual.is(kind==Blocks.MELON?Blocks.MELON_STEM:Blocks.PUMPKIN_STEM)
                         &&actual.getValue(StemBlock.AGE)==7,"fruit harvest damaged the mature stem");
                 }else{
-                    if(actual!=entry.getValue())com.mojang.logging.LogUtils.getLogger().error(
+                    var expected=entry.getValue();
+                    boolean naturalGrowth=expected.getBlock() instanceof CropBlock adjacent
+                        &&actual.getBlock()==adjacent&&actual.getValue(adjacent.getAgeProperty())>=expected.getValue(adjacent.getAgeProperty());
+                    if(actual!=expected&&!naturalGrowth)com.mojang.logging.LogUtils.getLogger().error(
                         "After harvest at {} by worker at {}, neighbor {} changed from {} to {}",
                         target,f.v.position(),pos,entry.getValue(),actual);
-                    check(actual==entry.getValue(),"harvest changed neighbor "+pos+" from "+entry.getValue()+" to "+actual);
+                    check(actual==expected||naturalGrowth,"harvest changed neighbor "+pos+" from "+entry.getValue()+" to "+actual);
                 }
             }
         };
