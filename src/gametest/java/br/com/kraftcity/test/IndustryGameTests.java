@@ -553,14 +553,7 @@ public final class IndustryGameTests {
         var from=Vec3.atBottomCenterOf(start);
         f.v.setPos(from.x,from.y,from.z);
         f.v.setNoAi(false);
-        h.succeedWhen(()->{
-            check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.FARMER.id()).xp()>0,"Farm worker has not harvested at "+f.v.position());
-            check(f.v.distanceToSqr(from)>4,"harvest did not require walking");
-            check(f.v.distanceToSqr(Vec3.atCenterOf(target))<3,"worker was not at the harvest target: "+f.v.position());
-            if(regular)check(f.l.getBlockState(target).is(kind)&&!crop.isMaxAge(f.l.getBlockState(target)),
-                "Selected crop was not harvested at "+target);
-            com.mojang.logging.LogUtils.getLogger().info("Harvest target {} by worker at {}: {} -> {} ({} plot/soil states checked)",
-                target,f.v.position(),before.get(target),f.l.getBlockState(target),before.size());
+        Runnable audit=()->{
             for(var entry:before.entrySet()){
                 var pos=entry.getKey();
                 if(pos.equals(target))continue;
@@ -575,7 +568,23 @@ public final class IndustryGameTests {
                     check(actual==entry.getValue(),"harvest changed neighbor "+pos+" from "+entry.getValue()+" to "+actual);
                 }
             }
-        });
+        };
+        var drop=new net.minecraft.world.entity.item.ItemEntity(f.l,from.x,from.y+.1,from.z,new ItemStack(Items.STICK));
+        drop.setDeltaMovement(Vec3.ZERO);
+        h.startSequence().thenWaitUntil(()->{
+            check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.FARMER.id()).xp()>0,"Farm worker has not harvested at "+f.v.position());
+            check(f.v.distanceToSqr(from)>4,"harvest did not require walking");
+            check(f.v.distanceToSqr(Vec3.atCenterOf(target))<3,"worker was not at the harvest target: "+f.v.position());
+            if(regular)check(f.l.getBlockState(target).is(kind)&&!crop.isMaxAge(f.l.getBlockState(target)),
+                "Selected crop was not harvested at "+target);
+            com.mojang.logging.LogUtils.getLogger().info("Harvest target {} by worker at {}: {} -> {} ({} plot/soil states checked)",
+                target,f.v.position(),before.get(target),f.l.getBlockState(target),before.size());
+            audit.run();
+        }).thenExecute(()->f.l.addFreshEntity(drop)).thenWaitUntil(()->{
+            check(!drop.isAlive()&&count(f,Items.STICK)==1,"worker did not collect the ground item");
+            check(f.v.distanceToSqr(from)<2,"item was collected without reaching it");
+            audit.run();
+        }).thenSucceed();
     }
 
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
@@ -1148,6 +1157,153 @@ public final class IndustryGameTests {
         level.setBlock(head.west(),bed.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.FOOT),3);
         level.setBlock(head,bed.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.HEAD),3);
         return head;
+    }
+
+    @GameTest(template="empty",timeoutTicks=400,batch="farmer_day_linked_discard")
+    public static void daytime_shared_inventory_accepts_only_authorized_excess_and_worker_returns_to_harvest(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var wheat=crop(f,((CropBlock)Blocks.WHEAT).getStateForAge(7));
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        f.s.setItem(0,new ItemStack(Items.CARROT,15));
+        f.s.setItem(1,new ItemStack(Items.STICK,2));
+        f.s.setItem(2,new ItemStack(Items.WHEAT_SEEDS,4));
+        var shared=new net.minecraftforge.items.ItemStackHandler(1){
+            @Override public boolean isItemValid(int slot,ItemStack item){return item.is(Items.CARROT);}
+        };
+        shared.setStackInSlot(0,new ItemStack(Items.CARROT,62));
+        var denied=f.p.east(2).south().above();
+        var open=f.p.east(4).above();
+        var alias=f.p.east(4).south(2).above();
+        putLinked(f.l,denied,shared,UUID.randomUUID());
+        putLinked(f.l,open,shared,f.v.getUUID());
+        putLinked(f.l,alias,shared,f.v.getUUID());
+        var offers=new int[27];
+        offers[0]=5;
+        var unloaded=open.offset(1600,0,1600);
+        check(!f.l.hasChunkAt(unloaded),"unloaded recipient fixture already loaded");
+        check(!br.com.kraftcity.logistics.DiscardChests.accepts(f.l,f.s,f.v,unloaded,offers)
+            &&!f.l.hasChunkAt(unloaded),"discard forced an unloaded chunk");
+        check(!br.com.kraftcity.logistics.DiscardChests.accepts(f.l,f.s,f.v,denied,offers),"private channel offered automation");
+        check(br.com.kraftcity.logistics.DiscardChests.accepts(f.l,f.s,f.v,alias,offers),"second linked endpoint did not expose shared storage");
+        var start=Vec3.atBottomCenterOf(f.p.south().above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->{
+            check(shared.getStackInSlot(0).getCount()==64,"waiting for physical partial transfer into linked channel");
+            check(count(f,Items.CARROT)==13&&count(f,Items.STICK)==2,"linked endpoints consumed the rejected items");
+        }).thenWaitUntil(()->{
+            check(f.l.getBlockState(wheat).getValue(CropBlock.AGE)==0,"worker did not leave linked chest to resume harvest");
+            check(IndustrialWork.area(f.l,f.s).contains(f.v.position().add(0,.125,0)),"worker stayed outside the field");
+            check(count(f,Items.CARROT)==13&&shared.getStackInSlot(0).getCount()==64,"shared aliases duplicated transfer");
+        }).thenSucceed();
+    }
+
+    private static final class LinkedBeacon extends BeaconBlockEntity implements br.com.kraftcity.logistics.WorkerDiscardAccess {
+        private final net.minecraftforge.items.IItemHandler shared;
+        private final UUID allowedWorker;
+
+        LinkedBeacon(BlockPos pos,net.minecraftforge.items.IItemHandler shared,UUID allowedWorker){
+            super(pos,Blocks.BEACON.defaultBlockState());
+            this.shared=shared;
+            this.allowedWorker=allowedWorker;
+        }
+
+        @Override public net.minecraftforge.items.IItemHandler discardInventory(Villager worker,Direction face){
+            return face==Direction.EAST&&allowedWorker.equals(worker.getUUID())?shared:null;
+        }
+    }
+
+    private static void putLinked(ServerLevel level,BlockPos pos,net.minecraftforge.items.IItemHandler shared,UUID allowed){
+        level.setBlock(pos,Blocks.BEACON.defaultBlockState(),3);
+        level.removeBlockEntity(pos);
+        level.setBlockEntity(new LinkedBeacon(pos,shared,allowed));
+    }
+
+    @GameTest(template="empty",timeoutTicks=320,batch="farmer_escapes_after_discard")
+    public static void farmer_flees_without_damage_after_leaving_discard_container(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var chest=f.p.east(4).above();
+        f.l.setBlock(chest,Blocks.BARREL.defaultBlockState(),3);
+        var barrel=(BarrelBlockEntity)f.l.getBlockEntity(chest);
+        f.s.setItem(0,new ItemStack(Items.COBBLESTONE,3));
+        var start=Vec3.atBottomCenterOf(f.p.south().above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        var zombie=EntityType.ZOMBIE.create(f.l);
+        zombie.setInvulnerable(true);
+        zombie.setNoAi(true);
+        zombie.setPersistenceRequired();
+        zombie.setItemSlot(EquipmentSlot.HEAD,new ItemStack(Items.IRON_HELMET));
+        var atTransfer=new Vec3[1];
+        float health=f.v.getHealth();
+        h.startSequence().thenWaitUntil(()->check(barrel.countItem(Items.COBBLESTONE)==3,"daytime discard did not reach the barrel"))
+            .thenExecute(()->{
+                atTransfer[0]=f.v.position();
+                zombie.setPos(f.v.getX()+1.5,f.v.getY(),f.v.getZ()+1.5);
+                f.l.addFreshEntity(zombie);
+                zombie.setTarget(f.v);
+            }).thenWaitUntil(()->{
+                check(Employment.fleeing(f.v)&&f.v.distanceToSqr(atTransfer[0])>4,"farmer remained stopped at the barrel");
+                check(f.v.getHealth()==health&&f.v.getLastHurtByMob()==null,"escape depended on damage");
+            }).thenExecute(zombie::discard).thenSucceed();
+    }
+
+    public static final class PlacementObserver {
+        final F fixture;
+        final BlockPos target,neighbor;
+        final BlockState mature;
+        boolean observed;
+
+        PlacementObserver(F fixture,BlockPos target,BlockPos neighbor,BlockState mature){
+            this.fixture=fixture;
+            this.target=target;
+            this.neighbor=neighbor;
+            this.mature=mature;
+        }
+
+        @net.minecraftforge.eventbus.api.SubscribeEvent
+        public void onProposedCrop(net.minecraftforge.event.level.BlockEvent.EntityPlaceEvent event){
+            if(event.getLevel()!=fixture.l||!event.getPos().equals(target)||event.getEntity()==null
+                ||!event.getEntity().getUUID().equals(fixture.v.getUUID()))return;
+            observed=true;
+            var during=fixture.l.getBlockState(target);
+            com.mojang.logging.LogUtils.getLogger().info("Replant preflight worker={} target={} live={} proposed={} neighbor={} state={}",
+                fixture.v.position(),target,during,event.getPlacedBlock(),neighbor,fixture.l.getBlockState(neighbor));
+            // Model a listener reacting to a replacement that is already visible
+            // in the world before it has decided whether to allow the operation.
+            if(during!=mature)fixture.l.removeBlock(neighbor,false);
+            event.setCanceled(true);
+        }
+    }
+
+    @GameTest(template="empty",timeoutTicks=240,batch="farmer_replant_preflight")
+    public static void real_harvest_route_never_exposes_a_temporary_replant_to_forge(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var mature=((CropBlock)Blocks.WHEAT).getStateForAge(7);
+        var target=crop(f,mature);
+        var neighbor=target.north();
+        var soil=Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE,7);
+        var immature=Blocks.CARROTS.defaultBlockState();
+        f.l.setBlock(neighbor.below(),soil,3);
+        f.l.setBlock(neighbor,immature,3);
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        f.s.setItem(30,new ItemStack(Items.WATER_BUCKET));
+        var start=Vec3.atBottomCenterOf(f.p.south(2).above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        var observer=new PlacementObserver(f,target,neighbor,mature);
+        MinecraftForge.EVENT_BUS.register(observer);
+        h.runAfterDelay(210,()->MinecraftForge.EVENT_BUS.unregister(observer));
+        h.succeedWhen(()->{
+            check(observer.observed&&f.v.distanceToSqr(start)>4,"worker did not physically reach the crop preflight");
+            check(f.l.getBlockState(target)==mature&&f.l.getBlockState(neighbor)==immature
+                &&f.l.getBlockState(neighbor.below())==soil,"cancelled replant temporarily affected the adjoining plot");
+            check(count(f,Items.WHEAT)==0,"cancelled replant credited an uncommitted harvest");
+            MinecraftForge.EVENT_BUS.unregister(observer);
+        });
     }
 
 }

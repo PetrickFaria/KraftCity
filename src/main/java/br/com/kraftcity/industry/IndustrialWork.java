@@ -67,7 +67,8 @@ public final class IndustrialWork {
         if(!ForgeEventFactory.getMobGriefingEvent(l,v)){alert(l,s,"protection","Trabalho bloqueado pela proteção/mobGriefing.");return;}
         switch(s.profession){
             case FARMER->{
-                if(!FarmerLogistics.isJumping(v)&&!FarmerLogistics.leaveWater(l,v)&&!FarmerLogistics.collect(l,s,v)){
+                if(!FarmerLogistics.isJumping(v)&&!FarmerLogistics.leaveWater(l,v)&&!FarmerLogistics.collect(l,s,v)
+                    &&!FarmerLogistics.discardDuringWork(l,s,v)){
                     if(v.distanceToSqr(area(l,s).getCenter())>400)FarmerLogistics.stayInField(l,s,v);
                     else FarmerWork.tick(l,s,v);
                 }
@@ -201,10 +202,25 @@ public final class IndustrialWork {
     }
     static boolean placeAllowed(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos p,BlockState next){
         if(!allowed(l,s,v,p,null,"plant"))return false;
-        var snap=BlockSnapshot.create(l.dimension(),l,p);var old=l.getBlockState(p);
-        // Place event observes proposed state without publishing updates. Restore before transaction.
-        l.setBlock(p,next,16);boolean denied=ForgeEventFactory.onBlockPlace(actor(l,s,v),snap,Direction.UP);l.setBlock(p,old,16);return !denied;
+        var snapshot=BlockSnapshot.create(l.dimension(),l,p);
+        // Event listeners can inspect the proposed state without observing a
+        // premature replacement in the world or running its block callbacks.
+        return !MinecraftForge.EVENT_BUS.post(new ProposedPlacement(snapshot,l.getBlockState(p.below()),actor(l,s,v),next));
     }
+
+    @net.minecraftforge.eventbus.api.Cancelable
+    private static final class ProposedPlacement extends BlockEvent.EntityPlaceEvent {
+        private final BlockState proposed;
+
+        ProposedPlacement(BlockSnapshot snapshot,BlockState support,Player actor,BlockState proposed){
+            super(snapshot,support,actor);
+            this.proposed=proposed;
+        }
+
+        @Override public BlockState getState(){return proposed==null?super.getState():proposed;}
+        @Override public BlockState getPlacedBlock(){return proposed==null?super.getPlacedBlock():proposed;}
+    }
+
     private static boolean livestock(Animal a){return a instanceof Cow||a instanceof Pig||a instanceof Sheep||a instanceof Chicken||a instanceof Rabbit;}
     private static void animals(ServerLevel l,EmploymentData.Station s,Villager v,Profession profession){
         List<Animal> animals=l.getEntitiesOfClass(Animal.class,area(l,s),a->a.isAlive()&&(profession==Profession.SHEPHERD?a instanceof Sheep:profession==Profession.BREEDER?a instanceof Wolf:livestock(a)&&s.id.equals(a.getPersistentData().hasUUID("KCIndustryStation")?a.getPersistentData().getUUID("KCIndustryStation"):null)));

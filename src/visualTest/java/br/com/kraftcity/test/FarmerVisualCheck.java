@@ -42,6 +42,8 @@ public final class FarmerVisualCheck {
     private static final BlockPos JUMP=POST.offset(-2,1,1);
     private static final BlockPos CHANNEL=POST.offset(4,0,2);
     private static final BlockPos FORGE_CHEST=POST.offset(4,1,-4);
+    private static final BlockPos FORGE_ALIAS=FORGE_CHEST.north(2);
+    private static final BlockPos COMPANION_CHEST=POST.offset(-6,1,-5);
     private static net.minecraftforge.items.ItemStackHandler forgeStorage;
     private static final BlockPos CARROTS=POST.offset(-2,1,-1);
     private static final BlockPos POTATOES=POST.offset(2,1,0);
@@ -209,10 +211,14 @@ public final class FarmerVisualCheck {
                 companions.add(companion.getUUID());
                 if(i==1){
                     l.setBlock(FORGE_CHEST,Blocks.BEACON.defaultBlockState(),3);
+                    l.setBlock(FORGE_ALIAS,Blocks.BEACON.defaultBlockState(),3);
                     check(forgeStorage!=null,"missing test capability");
                     forgeStorage.setStackInSlot(0,new ItemStack(Items.CARROT,62));
                     job.setItem(0,new ItemStack(Items.CARROT,15));
                     job.setItem(1,new ItemStack(Items.STICK,2));
+                }else{
+                    l.setBlock(COMPANION_CHEST,Blocks.CHEST.defaultBlockState(),3);
+                    job.setItem(0,new ItemStack(Items.COBBLESTONE,3));
                 }
                 var head=BED.south(i==0?-2:2);
                 var state=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
@@ -274,8 +280,11 @@ public final class FarmerVisualCheck {
             if(!v.isSleeping()||companions.stream().anyMatch(id->!(l.getEntity(id) instanceof Villager resident)||!resident.isSleeping()))return;
             var forgeJob=EmploymentData.get(l).assigned(companions.get(1));
             check(forgeStorage.getStackInSlot(0).getCount()==64&&forgeJob.countItem(Items.CARROT)==13
-                &&forgeJob.countItem(Items.STICK)==2,"Forge partial insert or filter failed");
+                &&forgeJob.countItem(Items.STICK)==2,"Forge partial insert or filter failed: shared="+forgeStorage.getStackInSlot(0)+" carrots="+forgeJob.countItem(Items.CARROT)+" sticks="+forgeJob.countItem(Items.STICK));
+            var third=(net.minecraft.world.level.block.entity.ChestBlockEntity)l.getBlockEntity(COMPANION_CHEST);
+            check(third.countItem(Items.COBBLESTONE)==3,"third farmer did not finish its discard");
             System.out.println("FARMER_FORGE_INVENTORY_PARTIAL_PASSED");
+            System.out.println("FARMER_THREE_DISCARDS_AND_SHARED_FORGE_PASSED");
             var sleepingBeds=new HashSet<BlockPos>();
             sleepingBeds.add(v.getSleepingPos().orElseThrow());
             for(var id:companions){
@@ -364,8 +373,8 @@ public final class FarmerVisualCheck {
     @net.minecraftforge.eventbus.api.SubscribeEvent
     public static void testForgeInventory(net.minecraftforge.event.AttachCapabilitiesEvent<net.minecraft.world.level.block.entity.BlockEntity> event){
         if(stage!=5||!(event.getObject() instanceof net.minecraft.world.level.block.entity.BeaconBlockEntity beacon)
-            ||!beacon.getBlockPos().equals(FORGE_CHEST))return;
-        forgeStorage=new net.minecraftforge.items.ItemStackHandler(1){
+            ||!beacon.getBlockPos().equals(FORGE_CHEST)&&!beacon.getBlockPos().equals(FORGE_ALIAS))return;
+        if(forgeStorage==null)forgeStorage=new net.minecraftforge.items.ItemStackHandler(1){
             @Override public boolean isItemValid(int slot,ItemStack stack){return stack.is(Items.CARROT);}
         };
         var capability=net.minecraftforge.common.util.LazyOptional.of(()->forgeStorage);
@@ -373,7 +382,7 @@ public final class FarmerVisualCheck {
             new net.minecraftforge.common.capabilities.ICapabilityProvider(){
                 @Override public <T> net.minecraftforge.common.util.LazyOptional<T> getCapability(
                     net.minecraftforge.common.capabilities.Capability<T> type,Direction face){
-                    return type==net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER&&face==Direction.NORTH
+                    return type==net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER&&face==Direction.WEST
                         ?capability.cast():net.minecraftforge.common.util.LazyOptional.empty();
                 }
             });

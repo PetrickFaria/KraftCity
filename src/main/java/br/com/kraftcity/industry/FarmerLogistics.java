@@ -27,6 +27,10 @@ public final class FarmerLogistics {
     private static final Map<Villager,Pickup> PICKUPS=new WeakHashMap<>();
     private static final Map<Villager,Long> AIRBORNE_SINCE=new WeakHashMap<>();
     private record Route(BlockPos target,BlockPos endpoint,double remaining,long progress,int retries){}
+    private record DayDiscard(long until,Set<Long> tried){
+        boolean active(){return tried!=null;}
+    }
+    private static final Map<Villager,DayDiscard> DAY_DISCARD=new WeakHashMap<>();
     private record Pickup(UUID item,long nextScan){}
     private FarmerLogistics(){}
 
@@ -248,6 +252,8 @@ public final class FarmerLogistics {
     }
 
     public static void release(Villager worker){
+        var trip=DAY_DISCARD.remove(worker);
+        if(trip!=null&&trip.active())stopRoute(worker);
         ROUTES.remove(worker);
         PICKUPS.remove(worker);
         BLOCKED.remove(worker);
@@ -364,7 +370,7 @@ public final class FarmerLogistics {
         var access=new ArrayList<BlockPos>();
         for(var side:Direction.Plane.HORIZONTAL){
             var at=pos.relative(side);
-            var handler=DiscardChests.handler(be,side);
+            var handler=DiscardChests.handler(be,worker,side);
             if(!level.hasChunkAt(at)||handler==null||station!=null&&!DiscardChests.accepts(handler,station,offers))continue;
             for(int y=0;y>=-1;y--){
                 var feet=at.above(y);
@@ -373,7 +379,7 @@ public final class FarmerLogistics {
             }
         }
         for(var face:List.of(Direction.UP,Direction.DOWN)){
-            var handler=DiscardChests.handler(be,face);
+            var handler=DiscardChests.handler(be,worker,face);
             if(handler==null||station!=null&&!DiscardChests.accepts(handler,station,offers))continue;
             var feet=face==Direction.UP?pos.above():pos.below(2);
             if(level.hasChunkAt(feet)&&level.getBlockState(feet).getCollisionShape(level,feet).isEmpty()
@@ -399,6 +405,26 @@ public final class FarmerLogistics {
         }
     }
 
+    static boolean discardDuringWork(ServerLevel level,EmploymentData.Station station,Villager worker){
+        if(worker.isNoAi())return false;
+        long now=level.getGameTime();
+        var trip=DAY_DISCARD.get(worker);
+        if(trip!=null&&!trip.active()&&now<trip.until)return false;
+        boolean continuing=trip!=null&&trip.active();
+        if(!continuing){
+            if(!DiscardChests.hasOffers(offers(station))){
+                DAY_DISCARD.put(worker,new DayDiscard(now+100,null));
+                return false;
+            }
+            trip=new DayDiscard(now+220,new HashSet<>());
+            DAY_DISCARD.put(worker,trip);
+        }
+        if(now<trip.until&&seekDiscard(level,station,worker,trip.tried,false))return true;
+        if(continuing||!trip.tried.isEmpty())stopRoute(worker);
+        DAY_DISCARD.put(worker,new DayDiscard(now+100,null));
+        return false;
+    }
+
     public static boolean ending(Villager v){
         if(!(v.level instanceof ServerLevel l))return false;
         var s=EmploymentData.get(l).assigned(v.getUUID());
@@ -410,6 +436,8 @@ public final class FarmerLogistics {
         ROUTES.remove(v);
         AIRBORNE_SINCE.remove(v);
         v.getNavigation().stop();
+        v.getMoveControl().setWantedPosition(v.getX(),v.getY(),v.getZ(),0);
+        v.setSpeed(0);
         v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         v.getBrain().eraseMemory(MemoryModuleType.PATH);
     }
@@ -435,6 +463,8 @@ public final class FarmerLogistics {
             }
             return false;
         }
+        var daytimeTrip=DAY_DISCARD.remove(v);
+        if(daytimeTrip!=null&&daytimeTrip.active())stopRoute(v);
         if(Employment.fleeing(v)||v.isSleeping()||l.isThundering()
             ||v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced")
             ||v.getLastHurtByMob()!=null&&v.getLastHurtByMob().isAlive())return false;
@@ -466,30 +496,38 @@ public final class FarmerLogistics {
             stopRoute(v);
             s.setChanged();
         }
-        if(now<s.industry.getLong("farmer_discard_until")){
-            var items=offers(s);
-            var tried=new HashSet<Long>();
-            for(long at:s.industry.getLongArray("farmer_discard_tried"))tried.add(at);
-            for(var pos:DiscardChests.destinations(l,s,IndustrialWork.area(l,s))){
-                if(!DiscardChests.hasOffers(items))break;
-                if(tried.contains(pos.asLong())||!DiscardChests.accepts(l,s,v,pos,items))continue;
-                s.industry.putLong("farmer_discard_pos",pos.asLong());
-                int result=approachDiscard(l,v,pos,s,items);
-                if(result==0){s.setChanged();return true;}
-                int offered=Arrays.stream(items).sum();
-                if(result>0)DiscardChests.deposit(l,s,v,pos,items,"deposit");
-                int left=Arrays.stream(items).sum();
-                if(left>0&&left<offered&&DiscardChests.capability(l,pos)!=null){
-                    s.setChanged();
-                    return true;
-                }
-                com.mojang.logging.LogUtils.getLogger().debug("Farmer {} at {} finished discard attempt at {}, arrival={}, remaining={}",
-                    v.getUUID(),v.position(),pos,result,Arrays.stream(items).sum());
-                tried.add(pos.asLong());
-                s.industry.putLongArray("farmer_discard_tried",tried.stream().mapToLong(Long::longValue).toArray());
-            }
-        }
+        var tried=new HashSet<Long>();
+        for(long at:s.industry.getLongArray("farmer_discard_tried"))tried.add(at);
+        if(seekDiscard(l,s,v,tried,true))return true;
         finishClosing(s,v);
+        return false;
+    }
+
+    /** A successful transfer releases the walking command before another task can take control. */
+    private static boolean seekDiscard(ServerLevel level,EmploymentData.Station station,Villager worker,Set<Long> tried,boolean closing){
+        var items=offers(station);
+        if(!DiscardChests.hasOffers(items))return false;
+        for(var pos:DiscardChests.destinations(level,station,IndustrialWork.area(level,station))){
+            if(!DiscardChests.hasOffers(items))break;
+            if(tried.contains(pos.asLong())||!DiscardChests.accepts(level,station,worker,pos,items))continue;
+            if(closing)station.industry.putLong("farmer_discard_pos",pos.asLong());
+            int result=approachDiscard(level,worker,pos,station,items);
+            if(result==0){
+                if(closing)station.setChanged();
+                return true;
+            }
+            int offered=Arrays.stream(items).sum();
+            if(result>0){
+                stopRoute(worker);
+                DiscardChests.deposit(level,station,worker,pos,items,"deposit");
+            }
+            int left=Arrays.stream(items).sum();
+            if(left>0&&left<offered&&DiscardChests.capability(level,pos)!=null)return true;
+            com.mojang.logging.LogUtils.getLogger().debug("Farmer {} at {} finished discard at {}, arrival={}, inserted={}",
+                worker.getUUID(),worker.position(),pos,result,offered-left);
+            tried.add(pos.asLong());
+            if(closing)station.industry.putLongArray("farmer_discard_tried",tried.stream().mapToLong(Long::longValue).toArray());
+        }
         return false;
     }
 

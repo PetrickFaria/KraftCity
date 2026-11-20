@@ -35,14 +35,15 @@ public final class DiscardChests {
         if(!l.hasChunkAt(p))return null;var be=l.getBlockEntity(p);
         // Currency chests retain their specialized residential semantics.
         if(be instanceof br.com.residenciasaldeoes.block.EmeraldChestBlockEntity)return null;
-        if(be instanceof ChestBlockEntity&&l.getBlockState(p).getBlock() instanceof ChestBlock b){
+        var block=l.getBlockState(p).getBlock();
+        if(be instanceof ChestBlockEntity&&(block==Blocks.CHEST||block==Blocks.TRAPPED_CHEST)&&block instanceof ChestBlock b){
             var state=l.getBlockState(p);
             if(!state.hasProperty(ChestBlock.TYPE)||!state.hasProperty(ChestBlock.FACING))return null;
             if(state.getValue(ChestBlock.TYPE)!=net.minecraft.world.level.block.state.properties.ChestType.SINGLE&&!l.hasChunkAt(p.relative(ChestBlock.getConnectedDirection(state))))return null;
             var chest=ChestBlock.getContainer(b,state,l,p,false);
             return chest;
         }
-        return be instanceof BarrelBlockEntity barrel?barrel:null;
+        return block==Blocks.BARREL&&be instanceof BarrelBlockEntity barrel?barrel:null;
     }
     public static List<Access> around(ServerLevel l,EmploymentData.Station s,AABB area){
         var map=CACHE.computeIfAbsent(l,k->new HashMap<>());var cache=map.get(s.id);long now=l.getGameTime();
@@ -111,17 +112,20 @@ public final class DiscardChests {
     public static BlockEntity capability(ServerLevel level,BlockPos pos){
         if(!level.hasChunkAt(pos))return null;
         var be=level.getBlockEntity(pos);
-        if(be==null||at(level,pos)!=null||be instanceof ChestBlockEntity&&level.getBlockState(pos).getBlock() instanceof ChestBlock
+        var state=level.getBlockState(pos);
+        if(be==null||state.is(Blocks.CHEST)||state.is(Blocks.TRAPPED_CHEST)||state.is(Blocks.BARREL)||state.is(Blocks.ENDER_CHEST)
             ||be instanceof br.com.residenciasaldeoes.block.EmeraldChestBlockEntity)return null;
+        if(be instanceof WorkerDiscardAccess)return be;
         for(var side:Direction.values())if(be.getCapability(ForgeCapabilities.ITEM_HANDLER,side).isPresent())return be;
         return be.getCapability(ForgeCapabilities.ITEM_HANDLER).isPresent()?be:null;
     }
 
     public static IItemHandler accessibleHandler(BlockEntity be,Villager worker){
-        return handler(be,interactionSide(be.getBlockPos(),worker));
+        return handler(be,worker,interactionSide(be.getBlockPos(),worker));
     }
 
-    public static IItemHandler handler(BlockEntity be,Direction side){
+    public static IItemHandler handler(BlockEntity be,Villager worker,Direction side){
+        if(be instanceof WorkerDiscardAccess linked)return linked.discardInventory(worker,side);
         var exposed=be.getCapability(ForgeCapabilities.ITEM_HANDLER,side).orElse(null);
         if(exposed!=null)return exposed;
         for(var other:Direction.values())if(be.getCapability(ForgeCapabilities.ITEM_HANDLER,other).isPresent())return null;
@@ -164,7 +168,7 @@ public final class DiscardChests {
         if(container==null&&be==null)return false;
         if(be!=null){
             for(var side:Direction.values()){
-                var handler=handler(be,side);
+                var handler=handler(be,worker,side);
                 if(handler!=null&&accepts(handler,station,offers))return true;
             }
             return false;
@@ -183,7 +187,18 @@ public final class DiscardChests {
         return false;
     }
 
+    private static final Set<UUID> TRANSFERRING=new HashSet<>();
+
     public static void deposit(ServerLevel level,EmploymentData.Station station,Villager worker,BlockPos pos,int[] offers,String action){
+        if(!TRANSFERRING.add(station.id))return;
+        try{
+            transfer(level,station,worker,pos,offers,action);
+        }finally{
+            TRANSFERRING.remove(station.id);
+        }
+    }
+
+    private static void transfer(ServerLevel level,EmploymentData.Station station,Villager worker,BlockPos pos,int[] offers,String action){
         if(!level.hasChunkAt(pos)||!exposed(level,pos)||!IndustrialWork.allowed(level,station,worker,pos,null,action))return;
         var actor=IndustrialWork.actor(level,station,worker);
         if(!level.mayInteract(actor,pos))return;
@@ -200,6 +215,12 @@ public final class DiscardChests {
             if(count==0)continue;
             var stack=station.getItem(i).copy();
             stack.setCount(count);
+            if(handler!=null){
+                int accepted=count-ItemHandlerHelper.insertItemStacked(handler,stack.copy(),true).getCount();
+                if(accepted<=0)continue;
+                count=Math.min(count,accepted);
+                stack.setCount(count);
+            }
             var rest=container==null?ItemHandlerHelper.insertItemStacked(handler,stack,false):IndustrialWork.transfer(container,stack);
             int moved=count-Math.min(count,rest.getCount());
             if(moved>0){station.removeItem(i,moved);offers[i]-=moved;}
