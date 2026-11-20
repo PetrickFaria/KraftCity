@@ -32,6 +32,7 @@ public final class EmploymentEvents {
     public void survival(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent event){
         if(event.getEntity() instanceof Villager v&&v.level instanceof ServerLevel level){
             Employment.flee(level,v);
+            WorkplaceVisits.tick(level,v);
             WorkerGates.openAlongPath(level,v);
         }
     }

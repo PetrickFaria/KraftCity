@@ -10,8 +10,11 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.util.DefaultRandomPos;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.StemBlock;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
@@ -23,7 +26,8 @@ import net.minecraftforge.event.ForgeEventFactory;
 public final class FarmerLogistics {
     private static final Map<Villager,Route> ROUTES=new WeakHashMap<>();
     private static final Map<Villager,Pickup> PICKUPS=new WeakHashMap<>();
-    private record Route(BlockPos target,long since){}
+    private static final Map<Villager,Long> AIRBORNE_SINCE=new WeakHashMap<>();
+    private record Route(BlockPos target,BlockPos endpoint,Vec3 position,long progress,int retries){}
     private record Pickup(UUID item,long nextScan){}
     private FarmerLogistics(){}
 
@@ -39,7 +43,7 @@ public final class FarmerLogistics {
     private static final Map<Villager,Map<BlockPos,Long>> BLOCKED=new WeakHashMap<>();
     private static final Map<Villager,Jump> JUMPS=new WeakHashMap<>();
     private static final Map<Villager,Map<UUID,Long>> UNREACHABLE_ITEMS=new WeakHashMap<>();
-    private record Jump(BlockPos soil,long until){}
+    private record Jump(BlockPos soil,BlockPos stem,long until){}
 
     /** 1 arrived, 0 navigating, -1 inaccessible. */
     static int approachCell(ServerLevel l,Villager v,BlockPos pos,boolean adjacent){
@@ -54,41 +58,49 @@ public final class FarmerLogistics {
         boolean sameColumn=new BlockPos(v.getX(),pos.getY(),v.getZ()).equals(pos);
         if((accuracy!=0||sameColumn)&&dx*dx+dz*dz<=radius*radius&&Math.abs(v.getY()-feet.y)<=.85&&visible(l,v,center,pos)){
             ROUTES.remove(v);
+            AIRBORNE_SINCE.remove(v);
             v.getNavigation().stop();
             v.getLookControl().setLookAt(center.x,center.y,center.z);
             return 1;
         }
         if(v.isNoAi())return -1;
+        // Ground navigation rejects paths before the first physics tick or mid-jump.
+        // A temporary lack of footing does not make a destination inaccessible.
         long now=l.getGameTime();
+        if(!v.isOnGround()&&!v.isInWaterOrBubble()&&!v.isInLava()){
+            return now-AIRBORNE_SINCE.computeIfAbsent(v,key->now)<20?0:-1;
+        }
+        AIRBORNE_SINCE.remove(v);
         var blocked=BLOCKED.computeIfAbsent(v,k->new HashMap<>());
         blocked.values().removeIf(until->until<=now);
         if(blocked.containsKey(pos))return -1;
         var route=ROUTES.get(v);
-        if(route==null||!route.target.equals(pos)){
-            route=new Route(pos.immutable(),now);
+        boolean same=route!=null&&route.target.equals(pos);
+        if(same&&v.position().distanceToSqr(route.position)>=.16){
+            route=new Route(route.target,route.endpoint,v.position(),now,route.retries);
             ROUTES.put(v,route);
-            var path=workPath(l,v,pos,accuracy);
-            com.mojang.logging.LogUtils.getLogger().debug("Farmer {} routing from {} to {} (path {})",
-                v.getUUID(),v.position(),pos,path==null?"missing":path.canReach());
-            if(path==null||!path.canReach()||!v.getNavigation().moveTo(path,.8)){
-                ROUTES.remove(v);
-                blocked.put(pos.immutable(),now+100);
-                return -1;
-            }
         }
-        if(now-route.since>=100||v.getNavigation().isDone()){
-            ROUTES.remove(v);
-            v.getNavigation().stop();
-            blocked.put(pos.immutable(),now+100);
-            return -1;
+        if(same&&!v.getNavigation().isDone()&&now-route.progress<45)return 0;
+        int retries=same?route.retries+1:0;
+        BlockPos avoid=same&&accuracy>0?route.endpoint:null;
+        v.getNavigation().stop();
+        var path=retries<=2?workPath(l,v,pos,accuracy,avoid):null;
+        if(path==null&&avoid!=null&&retries<=2)path=workPath(l,v,pos,accuracy,null);
+        if(path!=null&&path.canReach()&&v.getNavigation().moveTo(path,.8)){
+            ROUTES.put(v,new Route(pos.immutable(),path.getTarget(),v.position(),now,retries));
+            return 0;
         }
-        return 0;
+        ROUTES.remove(v);
+        blocked.put(pos.immutable(),now+(retries==0?40:100));
+        com.mojang.logging.LogUtils.getLogger().debug("Farmer {} at {} released inaccessible route to {} after {} retries",
+            v.getUUID(),v.position(),pos,retries);
+        return -1;
     }
 
-    private static Path workPath(ServerLevel l,Villager v,BlockPos target,int accuracy){
-        if(accuracy==0||l.getBlockState(target).getCollisionShape(l,target).isEmpty())
-            return v.getNavigation().createPath(target,accuracy);
+    private static Path workPath(ServerLevel l,Villager v,BlockPos target,int accuracy,BlockPos avoid){
+        if(accuracy==0)return v.getNavigation().createPath(target,0);
         var options=new ArrayList<BlockPos>();
+        if(l.getBlockState(target).getCollisionShape(l,target).isEmpty())options.add(target);
         for(var direction:Direction.Plane.HORIZONTAL){
             var at=target.relative(direction);
             if(l.hasChunkAt(at)&&l.getBlockState(at).getCollisionShape(l,at).isEmpty()
@@ -97,6 +109,7 @@ public final class FarmerLogistics {
         }
         options.sort(Comparator.comparingDouble(at->v.distanceToSqr(Vec3.atBottomCenterOf(at))));
         for(var at:options){
+            if(at.equals(avoid))continue;
             var path=v.getNavigation().createPath(at,0);
             if(path!=null&&path.canReach())return path;
         }
@@ -110,6 +123,9 @@ public final class FarmerLogistics {
             return;
         }
         if(v.isNoAi())return;
+        var route=ROUTES.get(v);
+        if(route!=null&&!area.contains(Vec3.atCenterOf(route.target))&&v.distanceToSqr(area.getCenter())>400
+            &&approachCell(l,v,route.target,false)==0)return;
         int size=IndustrialRules.size(l,s);
         var cells=FarmerWork.zigzag(s.pos,size);
         var candidates=new ArrayList<BlockPos>();
@@ -121,35 +137,63 @@ public final class FarmerLogistics {
         }
         candidates.sort(Comparator.comparingDouble(pos->v.distanceToSqr(Vec3.atBottomCenterOf(pos))));
         for(var pos:candidates.stream().limit(8).toList())if(approachCell(l,v,pos,false)>=0)return;
+        var center=area.getCenter();
+        if(v.distanceToSqr(center)>400){
+            var waypoint=DefaultRandomPos.getPosTowards(v,16,5,center,Math.PI/4);
+            if(waypoint!=null&&l.hasChunkAt(new BlockPos(waypoint))
+                &&waypoint.distanceToSqr(center)<v.distanceToSqr(center))approachCell(l,v,new BlockPos(waypoint),false);
+        }
     }
 
-    static void jumpOn(Villager v,BlockPos soil){
-        if(!v.isOnGround())return;
+    static boolean jumpOn(Villager v,BlockPos soil,BlockPos stem){
+        if(!v.isOnGround()||BLOCKED.getOrDefault(v,Map.of()).getOrDefault(soil.above(),0L)>v.level.getGameTime())return false;
         v.getNavigation().stop();
-        JUMPS.put(v,new Jump(soil.immutable(),v.level.getGameTime()+30));
+        v.setDeltaMovement(0,v.getDeltaMovement().y,0);
+        JUMPS.put(v,new Jump(soil.immutable(),stem.immutable(),v.level.getGameTime()+30));
         v.getJumpControl().jump();
+        return true;
     }
 
     static boolean isJumping(Villager v){
         var jump=JUMPS.get(v);
         if(jump==null)return false;
-        if(v.level.getGameTime()<=jump.until&&v.level.getBlockState(jump.soil).is(net.minecraft.world.level.block.Blocks.FARMLAND))return true;
+        if(v.level.getGameTime()<=jump.until&&v.level.getBlockState(jump.soil).is(Blocks.FARMLAND))return true;
         JUMPS.remove(v);
         return false;
     }
 
-    public static boolean landOnFruitSoil(ServerLevel level,Villager v,BlockPos soil){
+    public static boolean landOnFruitSoil(ServerLevel level,Villager v,BlockPos soil,float distance){
         var jump=JUMPS.get(v);
         if(jump==null||level.getGameTime()>jump.until||!jump.soil.equals(soil))return false;
         var station=EmploymentData.get(level).assigned(v.getUUID());
-        if(station==null||station.profession!=Profession.FARMER||!IndustrialWork.ownsNavigation(v)
+        if(station==null||station.profession!=Profession.FARMER||!IndustrialWork.day(level)||!IndustrialWork.ownsNavigation(v)
+            ||!FarmerWork.inside(station,IndustrialRules.size(level,station),soil.above())
             ||!level.getBlockState(soil.above()).isAir())return false;
+        if(!level.hasChunkAt(jump.stem))return false;
+        var stem=level.getBlockState(jump.stem);
+        if(!(stem.getBlock() instanceof StemBlock)||stem.getValue(StemBlock.AGE)!=7)return false;
         boolean allowed=ForgeEventFactory.getMobGriefingEvent(level,v)
             &&!net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(new net.minecraftforge.event.level.BlockEvent.FarmlandTrampleEvent(
-                level,soil,net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState(),v.fallDistance,v));
+                level,soil,Blocks.DIRT.defaultBlockState(),distance,v));
         JUMPS.remove(v);
-        return allowed&&level.getBlockState(soil).is(net.minecraft.world.level.block.Blocks.FARMLAND)
+        BLOCKED.computeIfAbsent(v,k->new HashMap<>()).put(soil.above().immutable(),level.getGameTime()+100);
+        com.mojang.logging.LogUtils.getLogger().debug("Farmer {} landed at {} on soil {} with fall distance {}, allowed={}",
+            v.getUUID(),v.position(),soil,distance,allowed);
+        return allowed&&EmploymentData.get(level).assigned(v.getUUID())==station
+            &&level.getBlockState(jump.stem)==stem&&level.getBlockState(soil).is(Blocks.FARMLAND)
             &&level.getBlockState(soil.above()).isAir();
+    }
+
+    public static boolean protectedSoil(ServerLevel level,Villager worker,BlockPos soil){
+        var jobs=EmploymentData.get(level);
+        if(jobs.assigned(worker.getUUID())!=null)return true;
+        for(var station:jobs.stations()){
+            if(station.active&&station.worker!=null&&station.profession==Profession.FARMER
+                &&station.dimension.equals(level.dimension())&&Math.abs(station.pos.getX()-soil.getX())<=6
+                &&Math.abs(station.pos.getZ()-soil.getZ())<=6
+                &&FarmerWork.inside(station,IndustrialRules.size(level,station),soil.above()))return true;
+        }
+        return false;
     }
 
     public static boolean allowsTrample(Villager v,BlockPos soil){
@@ -164,6 +208,7 @@ public final class FarmerLogistics {
         BLOCKED.remove(worker);
         JUMPS.remove(worker);
         UNREACHABLE_ITEMS.remove(worker);
+        AIRBORNE_SINCE.remove(worker);
     }
 
     static void rescan(Villager v){PICKUPS.remove(v);}
@@ -173,7 +218,7 @@ public final class FarmerLogistics {
     private static boolean collect(ServerLevel l,EmploymentData.Station s,Villager v,boolean closing){
         var state=PICKUPS.get(v);
         long now=l.getGameTime();
-        var area=IndustrialWork.area(l,s).inflate(3,1,3);
+        var area=IndustrialWork.area(l,s).inflate(closing?0:3,closing?.125:1,closing?0:3);
         var rejected=UNREACHABLE_ITEMS.computeIfAbsent(v,k->new HashMap<>());
         rejected.values().removeIf(until->until<=now);
         ItemEntity item=state!=null&&state.item!=null&&l.getEntity(state.item) instanceof ItemEntity e?e:null;
@@ -297,6 +342,14 @@ public final class FarmerLogistics {
             &&s.industry.getLong("farmer_discard_until")>l.getGameTime();
     }
 
+    private static void stopRoute(Villager v){
+        ROUTES.remove(v);
+        AIRBORNE_SINCE.remove(v);
+        v.getNavigation().stop();
+        v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        v.getBrain().eraseMemory(MemoryModuleType.PATH);
+    }
+
     /** Called before the resident sleep routine, after emergency navigation. */
     public static boolean beforeHome(ServerLevel l,Villager v){
         if(IndustrialWork.day(l)||Employment.fleeing(v)||v.isSleeping()||v.isNoAi()||l.isThundering()
@@ -312,7 +365,10 @@ public final class FarmerLogistics {
             s.industry.putLong("farmer_pickup_until",now+120);
             s.industry.remove("farmer_discard_pos");
             s.industry.remove("farmer_discard_tried");
+            stopRoute(v);
             rescan(v);
+            com.mojang.logging.LogUtils.getLogger().debug("Farmer {} at {} starts closing at time {}",
+                v.getUUID(),v.position(),l.getDayTime());
             s.setChanged();
         }
         if(!s.industry.contains("farmer_discard_until"))return false;
@@ -321,10 +377,7 @@ public final class FarmerLogistics {
                 if(collect(l,s,v,true))return true;
             }
             s.industry.remove("farmer_pickup_until");
-            ROUTES.remove(v);
-            v.getNavigation().stop();
-            v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-            v.getBrain().eraseMemory(MemoryModuleType.PATH);
+            stopRoute(v);
             s.setChanged();
         }
         if(now<s.industry.getLong("farmer_discard_until")){
@@ -338,10 +391,13 @@ public final class FarmerLogistics {
                 int result=approachDiscard(l,v,pos);
                 if(result==0){s.setChanged();return true;}
                 if(result>0)DiscardChests.deposit(l,s,v,pos,items,"deposit");
+                com.mojang.logging.LogUtils.getLogger().debug("Farmer {} at {} finished discard attempt at {}, arrival={}, remaining={}",
+                    v.getUUID(),v.position(),pos,result,Arrays.stream(items).sum());
                 tried.add(pos.asLong());
                 s.industry.putLongArray("farmer_discard_tried",tried.stream().mapToLong(Long::longValue).toArray());
             }
         }
+        stopRoute(v);
         s.industry.remove("farmer_discard_until");
         s.industry.remove("farmer_discard_pos");
         s.industry.remove("farmer_discard_tried");

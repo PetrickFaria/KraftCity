@@ -4,7 +4,6 @@ import br.com.kraftcity.employment.*;
 import br.com.kraftcity.industry.*;
 import br.com.kraftcity.logistics.DiscardChests;
 import br.com.kraftcity.workforce.WorkforceData;
-import br.com.residenciasaldeoes.data.ResidenceData;
 import java.util.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -46,6 +45,7 @@ public final class CommercialWork {
             if(Math.floorMod(l.getDayTime(),24000)<13000&&!l.isThundering()&&!Employment.fleeing(v)&&!v.isSleeping())evening(l,s,v);
             pause(s);return;
         }
+        if(WorkplaceVisits.leaving(v))return;
         if(!ownsNavigation(v)){state(s,v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")?"Pausa para transporte residencial; progresso preservado.":"Pausa por clima/rotina residencial; progresso preservado.");return;}
         var plans=CommercialRecipes.plans(l,s.profession);
         if(plans.isEmpty()){state(s,"Receita aprovada indisponível.");IndustrialWork.alert(l,s,"recipe","Receita apropriada não encontrada no jogo/datapack.");return;}
@@ -62,6 +62,7 @@ public final class CommercialWork {
             var supply=findSupply(l,s,v,List.of(plan));
             if(supply==null){state(s,"Estoque insuficiente; progresso preservado.");IndustrialWork.alert(l,s,"stock","Faltam insumos necessários no posto e nos descartes industriais carregados.");return;}
             state(s,"Buscando insumos no descarte industrial.");
+            WorkplaceVisits.allowSupplyVisit(v);
             if(!reach(v,supply.chest.pos()))return;
             if(!IndustrialWork.allowed(l,s,v,supply.chest.pos(),null,"commercial_supply")||!stillWorker(l,s,v)||v.distanceToSqr(Vec3.atCenterOf(supply.chest.pos()))>9)return;
             take(l,s,supply,plan.count()-count(s,plan.input()));return;
@@ -171,7 +172,7 @@ public final class CommercialWork {
             s.commerce.remove("discard_tried");
             s.commerce.putLong("deposited_day",day);s.setChanged();
         }
-        var home=ResidenceData.get(l).owner(v.getUUID());if(home!=null)v.getNavigation().moveTo(home.pos.getX()+.5,home.pos.getY()+1,home.pos.getZ()+.5,.85);
+
     }
     public static void cancel(EmploymentData.Station s){s.commerce.remove("recipe");s.commerce.putInt("elapsed",0);s.setChanged();}
     public static void clearSamples(){SAMPLES.clear();}

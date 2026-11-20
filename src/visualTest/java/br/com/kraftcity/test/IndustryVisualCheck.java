@@ -19,7 +19,7 @@ import net.minecraft.world.level.block.*;
 
 /** Six production scenes use the same public server jobs and synchronized menus as real play. */
 public final class IndustryVisualCheck {
-    private static boolean farmerSceneDone;
+    private static boolean farmerSceneDone,blueBoundsCleared;
     private static final Map<Profession,UUID> ids=new EnumMap<>(Profession.class);
     private static void check(boolean value,String message){if(!value)throw new IllegalStateException(message);}
     private static BlockPos post(int i){return new BlockPos(100+i*18,-57,10);}
@@ -83,15 +83,19 @@ public final class IndustryVisualCheck {
             if(phase==0)mc.getSingleplayerServer().execute(()->setup(mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()),i));
             if(phase==45){check(mc.screen instanceof WorkScreen,"Industry menu missing");check(mc.player.containerMenu instanceof WorkMenu m&&m.slots.size()==(i==0?67:68)&&m.snapshot!=null,"Industry menu not synchronized");}
             if(phase==50)Screenshot.grab(new File("../build"),"visual-industry-"+Profession.values()[i].path+".png",mc.getMainRenderTarget(),message->{});
-            if(i==0&&phase==53){check(bounds().stream().anyMatch(b->b.pos().equals(post(0))&&b.size()==5&&b.farmer()),"Blue bounds not synchronized");toggle(mc);}
-            if(i==0&&phase==56){check(bounds().stream().noneMatch(b->b.pos().equals(post(0))),"Blue toggle off left ghost");toggle(mc);}
-            if(phase==60)mc.player.closeContainer();
-            if(i==0&&phase==61)Screenshot.grab(new File("../build"),"visual-farmer-hoe.png",mc.getMainRenderTarget(),message->{});
-            if(i==0&&phase==62)mc.getSingleplayerServer().execute(()->{
+            if(i==0&&phase==51){check(bounds().stream().anyMatch(b->b.pos().equals(post(0))&&b.size()==5&&b.farmer()),"Blue bounds not synchronized");toggle(mc);}
+            if(i==0&&phase>51&&phase<62&&!blueBoundsCleared&&bounds().stream().noneMatch(b->b.pos().equals(post(0)))){
+                blueBoundsCleared=true;
+                toggle(mc);
+            }
+            if(i==0&&phase==62)check(blueBoundsCleared,"Blue toggle off left ghost");
+            if(phase==63)mc.player.closeContainer();
+            if(i==0&&phase==64)Screenshot.grab(new File("../build"),"visual-farmer-hoe.png",mc.getMainRenderTarget(),message->{});
+            if(i==0&&phase==65)mc.getSingleplayerServer().execute(()->{
                 var player=mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());var pos=post(0);
                 player.teleportTo(player.getLevel(),pos.getX()+7.5,pos.getY()+4,pos.getZ()+7.5,135F,35F);
             });
-            if(i==0&&phase==65){check(bounds().stream().anyMatch(b->b.pos().equals(post(0))),"Blue toggle on missing");Screenshot.grab(new File("../build"),"visual-industry-blue-limits.png",mc.getMainRenderTarget(),message->{});System.out.println("INDUSTRY_BLUE_LIMITS_PASSED");}
+            if(i==0&&phase==69){check(bounds().stream().anyMatch(b->b.pos().equals(post(0))),"Blue toggle on missing");Screenshot.grab(new File("../build"),"visual-industry-blue-limits.png",mc.getMainRenderTarget(),message->{});System.out.println("INDUSTRY_BLUE_LIMITS_PASSED");}
         }
         if(elapsed==425)mc.getSingleplayerServer().execute(()->{
             var l=mc.getSingleplayerServer().overworld();

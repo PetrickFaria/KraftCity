@@ -53,8 +53,11 @@ public final class Employment {
             return;
         }
         boolean starting=!fleeing(v);
-        if(starting)com.mojang.logging.LogUtils.getLogger().debug("Worker {} at {} fleeing zombie at {}",
-            v.getUUID(),v.position(),zombie.position());
+        if(starting){
+            br.com.kraftcity.industry.FarmerLogistics.release(v);
+            com.mojang.logging.LogUtils.getLogger().debug("Worker {} at {} fleeing zombie at {}",
+                v.getUUID(),v.position(),zombie.position());
+        }
         FLEE_UNTIL.put(v,level.getGameTime()+40);
         if(starting||v.getNavigation().isDone()||v.tickCount%15==0){
             if(v.isSleeping())v.stopSleeping();

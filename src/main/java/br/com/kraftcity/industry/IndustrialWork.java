@@ -2,7 +2,6 @@ package br.com.kraftcity.industry;
 
 import br.com.kraftcity.employment.*;
 import br.com.kraftcity.logistics.DiscardChests;
-import br.com.residenciasaldeoes.data.ResidenceData;
 import com.mojang.authlib.GameProfile;
 import java.util.*;
 import java.util.function.Predicate;
@@ -56,14 +55,10 @@ public final class IndustrialWork {
                 if(s.industry.getLong("deposited_day")!=Math.floorDiv(l.getDayTime(),24000)+1){
                     deposit(l,s,v);s.industry.putLong("deposited_day",Math.floorDiv(l.getDayTime(),24000)+1);s.setChanged();
                 }
-                // Existing residential lifecycle owns sleeping, rain, doors and bed return.
-                var home=ResidenceData.get(l).owner(v.getUUID());
-                if(home!=null&&Math.floorMod(l.getDayTime(),24000)<13000&&!v.getPersistentData().contains("residenciasaldeoes_night_door_task"))
-                    v.getNavigation().moveTo(home.pos.getX()+.5,home.pos.getY()+1,home.pos.getZ()+.5,.85);
             }
             return;
         }
-        if(!ownsNavigation(v))return;
+        if(!ownsNavigation(v)||br.com.kraftcity.employment.WorkplaceVisits.leaving(v))return;
         long day=Math.floorDiv(l.getDayTime()+1000,24000);
         if((s.profession==Profession.BUTCHER||s.profession==Profession.SHEPHERD)&&s.industry.getLong("supplied_day")!=day+1){
             dawnSupply(l,s,v);s.industry.putLong("supplied_day",day+1);s.setChanged();
@@ -71,7 +66,12 @@ public final class IndustrialWork {
         replenish(s);showTool(v,s);
         if(!ForgeEventFactory.getMobGriefingEvent(l,v)){alert(l,s,"protection","Trabalho bloqueado pela proteção/mobGriefing.");return;}
         switch(s.profession){
-            case FARMER->{if(!FarmerLogistics.isJumping(v)&&!FarmerLogistics.collect(l,s,v))FarmerWork.tick(l,s,v);}
+            case FARMER->{
+                if(!FarmerLogistics.isJumping(v)&&!FarmerLogistics.collect(l,s,v)){
+                    if(v.distanceToSqr(area(l,s).getCenter())>400)FarmerLogistics.stayInField(l,s,v);
+                    else FarmerWork.tick(l,s,v);
+                }
+            }
             case BUTCHER->animals(l,s,v,Profession.BUTCHER);
             case SHEPHERD->animals(l,s,v,Profession.SHEPHERD);
             case FISHERMAN->fish(l,s,v);

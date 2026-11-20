@@ -78,7 +78,10 @@ public final class Military {
     }
     public static void tick(ServerLevel l,EmploymentData.Station s,Villager v){
         if(!Employment.valid(l,v.getUUID())||!l.hasChunkAt(s.pos)&&mode(s)!=Mode.FOLLOW)return;bind(s,v);stats(l,v);
-        if(!onDuty(l,s)){if(!s.military.getBoolean("resting"))v.getNavigation().stop();s.military.putBoolean("resting",true);s.military.remove("target");v.stopUsingItem();sleep(l,s,v);heal(l,s,v);return;}
+        if(!onDuty(l,s)){if(!s.military.getBoolean("resting"))v.getNavigation().stop();s.military.putBoolean("resting",true);s.military.remove("target");v.stopUsingItem();
+            if(!br.com.residenciasaldeoes.VillagerResidenceEvents.ownsWorkerRest(v))sleep(l,s,v);
+            heal(l,s,v);return;
+        }
         s.military.remove("resting");
         if(v.isSleeping()){v.stopSleeping();v.getNavigation().stop();}heal(l,s,v);
         var t=target(l,s,v);

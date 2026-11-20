@@ -33,11 +33,11 @@ public final class IndustryGameTests {
         BlockPos home=h.absolutePos(new BlockPos(2,2,2)),p=h.absolutePos(new BlockPos(8,2,8));
         l.setBlock(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);
         ((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)l.getBlockEntity(home)).setSize(11);
-        l.setBlock(p.below(),Blocks.STONE.defaultBlockState(),3);l.setBlock(p,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);
+        l.setBlock(p.below(),Blocks.STONE.defaultBlockState(),3);l.setBlock(p,WorkModule.generic(profession.sector).defaultBlockState(),3);
         var v=h.spawn(EntityType.VILLAGER,new BlockPos(3,2,2));v.setNoAi(true);v.setAge(0);
         check(ResidenceData.get(l).link(l,home,v).equals("ok"),"residence link");v.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
         var player=FakePlayerFactory.get(l,new GameProfile(UUID.randomUUID(),"IndustryTest"));player.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
-        var s=((WorkBlockEntity)l.getBlockEntity(p)).station();s.setItem(31,new ItemStack(Items.EMERALD,10));
+        var s=((WorkBlockEntity)l.getBlockEntity(p)).station();s.setItem(31,new ItemStack(Items.EMERALD,EmploymentConfig.cost(profession.sector)));
         check(Employment.hire(player,s,v.getUUID(),profession).equals("ok"),"hire "+profession);
         return new F(l,s,v,p);
     }
@@ -387,12 +387,12 @@ public final class IndustryGameTests {
     }
 
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
-    public static void farmer_virtual_cane_and_fruit_keeps_roots_and_neighbor(GameTestHelper h){
+    public static void farmer_rejects_virtual_cane_and_fruit_keeps_roots_and_neighbor(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);
         f.s.setItem(27,new ItemStack(Items.IRON_HOE));f.s.setItem(30,new ItemStack(Items.WATER_BUCKET));
         var root=f.p.east().above();
         f.l.setBlock(root.below(),Blocks.SAND.defaultBlockState(),3);
-        check(Blocks.SUGAR_CANE.defaultBlockState().canSurvive(f.l,root),"bucket did not support adjoining cane");
+        check(!Blocks.SUGAR_CANE.defaultBlockState().canSurvive(f.l,root),"bucket acted as adjoining water");
         check(f.l.getFluidState(f.p).isEmpty(),"virtual irrigation placed water");
         var fruit=f.p.west().above();
         var stem=fruit.north();
@@ -515,19 +515,23 @@ public final class IndustryGameTests {
 
     private static void walkingHarvest(GameTestHelper h,Block kind){
         var f=fixture(h,Profession.FARMER);
-        var target=f.p.offset(-2,1,-2);
-        var start=f.p.offset(2,1,2);
+        boolean regular=kind instanceof CropBlock;
+        int height=regular?1:0;
+        var target=regular?f.p.above(2):f.p.offset(-2,1,-2);
+        var start=f.p.offset(2,1+height,2);
         for(var floor:BlockPos.betweenClosed(f.p.offset(-4,-1,-4),f.p.offset(4,-1,4))){
             f.l.setBlock(floor,Blocks.STONE.defaultBlockState(),3);
         }
         var soil=Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE,7);
         var crop=kind instanceof CropBlock selected?selected:(CropBlock)Blocks.WHEAT;
         var stem=target.east();
-        for(var pos:FarmerWork.zigzag(f.p,5)){
-            if(!pos.below().equals(f.p))f.l.setBlock(pos.below(),soil,3);
-            if(pos.equals(target)||pos.equals(stem)&&!(kind instanceof CropBlock)||pos.below().equals(f.p))continue;
-            var stage=pos.getZ()==target.getZ()+1?crop.getMaxAge():0;
-            f.l.setBlock(pos,crop.getStateForAge(stage),3);
+        for(var base:FarmerWork.zigzag(f.p,5)){
+            var pos=base.above(height);
+            if(pos.below().equals(f.p))continue;
+            if(regular&&!base.below().equals(f.p))f.l.setBlock(base.below(),Blocks.STONE.defaultBlockState(),3);
+            f.l.setBlock(pos.below(),soil,3);
+            if(pos.equals(target)||pos.equals(stem)&&!regular)continue;
+            f.l.setBlock(pos,crop.getStateForAge(0),3);
         }
         if(kind instanceof CropBlock){
             f.l.setBlock(target,crop.getStateForAge(crop.getMaxAge()),3);
@@ -538,7 +542,8 @@ public final class IndustryGameTests {
             f.l.setBlock(stem,attached.defaultBlockState().setValue(AttachedStemBlock.FACING,Direction.WEST),3);
         }
         var before=new HashMap<BlockPos,BlockState>();
-        for(var pos:FarmerWork.zigzag(f.p,5)){
+        for(var base:FarmerWork.zigzag(f.p,5)){
+            var pos=base.above(height);
             before.put(pos,f.l.getBlockState(pos));
             before.put(pos.below(),f.l.getBlockState(pos.below()));
         }
@@ -552,6 +557,10 @@ public final class IndustryGameTests {
             check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.FARMER.id()).xp()>0,"Farm worker has not harvested at "+f.v.position());
             check(f.v.distanceToSqr(from)>4,"harvest did not require walking");
             check(f.v.distanceToSqr(Vec3.atCenterOf(target))<3,"worker was not at the harvest target: "+f.v.position());
+            if(regular)check(f.l.getBlockState(target).is(kind)&&!crop.isMaxAge(f.l.getBlockState(target)),
+                "Selected crop was not harvested at "+target);
+            com.mojang.logging.LogUtils.getLogger().info("Harvest target {} by worker at {}: {} -> {} ({} plot/soil states checked)",
+                target,f.v.position(),before.get(target),f.l.getBlockState(target),before.size());
             for(var entry:before.entrySet()){
                 var pos=entry.getKey();
                 if(pos.equals(target))continue;
@@ -559,7 +568,12 @@ public final class IndustryGameTests {
                 if(!(kind instanceof CropBlock)&&pos.equals(stem)){
                     check(actual.is(kind==Blocks.MELON?Blocks.MELON_STEM:Blocks.PUMPKIN_STEM)
                         &&actual.getValue(StemBlock.AGE)==7,"fruit harvest damaged the mature stem");
-                }else check(actual==entry.getValue(),"harvest changed neighbor "+pos+" from "+entry.getValue()+" to "+actual);
+                }else{
+                    if(actual!=entry.getValue())com.mojang.logging.LogUtils.getLogger().error(
+                        "After harvest at {} by worker at {}, neighbor {} changed from {} to {}",
+                        target,f.v.position(),pos,entry.getValue(),actual);
+                    check(actual==entry.getValue(),"harvest changed neighbor "+pos+" from "+entry.getValue()+" to "+actual);
+                }
             }
         });
     }
@@ -686,7 +700,7 @@ public final class IndustryGameTests {
     }
 
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
-    public static void farmer_plants_one_cane_with_real_and_virtual_water(GameTestHelper h){
+    public static void farmer_plants_one_cane_only_with_real_water(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);
         f.s.setItem(27,new ItemStack(Items.IRON_HOE));
         var root=f.p.east().above();
@@ -699,7 +713,7 @@ public final class IndustryGameTests {
             f.s.setItem(0,new ItemStack(Items.SUGAR_CANE,2));
             f.v.setPos(root.getX()+.5,root.getY(),root.getZ()+.5);
             step(f,1);
-            check(f.l.getBlockState(root).is(Blocks.SUGAR_CANE)&&count(f,Items.SUGAR_CANE)==1,"cane planting failed, virtual="+virtual);
+            check(f.l.getBlockState(root).is(Blocks.SUGAR_CANE)==!virtual&&count(f,Items.SUGAR_CANE)==(virtual?2:1),"cane planting failed, virtual="+virtual);
         }
         h.succeed();
     }
@@ -719,4 +733,262 @@ public final class IndustryGameTests {
         check(f.l.getBlockState(wheat).getValue(CropBlock.AGE)==0&&f.l.getBlockState(empty).isAir(),"sowing outranked harvest");
         h.succeed();
     }
+    @GameTest(template="empty",timeoutTicks=500,batch="farmer_night_lifecycle")
+    public static void farmer_discards_carrots_then_sleeps_until_dawn(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f, home);
+        var bed=home.east(2).above();
+        var state=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
+        f.l.setBlock(bed.west(),state.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.FOOT),3);
+        f.l.setBlock(bed,state.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.HEAD),3);
+        var chestPos=f.p.east(4).above();
+        f.l.setBlock(chestPos,Blocks.CHEST.defaultBlockState(),3);
+        var chest=(ChestBlockEntity)f.l.getBlockEntity(chestPos);
+        f.s.setItem(0,new ItemStack(Items.CARROT,15));
+        var ripe=crop(f,((CropBlock)Blocks.WHEAT).getStateForAge(7));
+        var start=Vec3.atBottomCenterOf(f.p.south().above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        f.v.setNoAi(false);
+        f.l.getServer().getCommands().performPrefixedCommand(f.l.getServer().createCommandSourceStack(),"time set night");
+        h.startSequence().thenWaitUntil(()->{
+            check(f.v.getSleepingPos().filter(bed::equals).isPresent(),"waiting for actual bed sleep, worker at "+f.v.position()
+                +" target "+f.v.getNavigation().getTargetPos()+" claim "+ResidenceData.get(f.l).bedClaim(f.v.getUUID()));
+            check(chest.countItem(Items.CARROT)==5&&count(f,Items.CARROT)==10,"farmer slept before discarding carrots: chest="+chest.countItem(Items.CARROT)+" stock="+count(f,Items.CARROT)
+                +" checked day="+f.s.industry.getLong("farmer_discard_day"));
+        }).thenExecuteFor(35,()->{
+            check(f.v.isSleeping(),"farmer woke during the night");
+            check(f.l.getBlockState(ripe).getValue(CropBlock.AGE)==7,"harvest during rest");
+        }).thenExecute(()->f.l.setDayTime(23000)).thenWaitUntil(()->{
+            check(!f.v.isSleeping(),"farmer still sleeping at dawn");
+            check(f.l.getBlockState(ripe).getValue(CropBlock.AGE)<7,"farmer did not resume work");
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=500,batch="farmer_natural_twilight")
+    public static void blocked_and_full_discard_do_not_delay_bed_or_break_next_route(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var bed=home.east(2).above();
+        var state=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
+        f.l.setBlock(bed.west(),state.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.FOOT),3);
+        f.l.setBlock(bed,state.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.HEAD),3);
+        var blocked=f.p.east(4).above();
+        f.l.setBlock(blocked,Blocks.BARREL.defaultBlockState(),3);
+        for(var side:Direction.Plane.HORIZONTAL){
+            f.l.setBlock(blocked.relative(side),Blocks.STONE.defaultBlockState(),3);
+            f.l.setBlock(blocked.relative(side).above(),Blocks.STONE.defaultBlockState(),3);
+        }
+        var fullPos=f.p.south(4).above();
+        f.l.setBlock(fullPos,Blocks.BARREL.defaultBlockState(),3);
+        var full=(BarrelBlockEntity)f.l.getBlockEntity(fullPos);
+        for(int i=0;i<full.getContainerSize();i++)full.setItem(i,new ItemStack(Items.COBBLESTONE,64));
+        f.s.setItem(0,new ItemStack(Items.CARROT,15));
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        var ripe=crop(f,((CropBlock)Blocks.WHEAT).getStateForAge(7));
+        var start=Vec3.atBottomCenterOf(blocked.east(2));
+        f.v.setPos(start.x,start.y,start.z);
+        f.l.setDayTime(11999);
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->check(f.s.industry.getLong("farmer_discard_day")>0,"Twilight did not start closing"))
+            .thenExecute(()->f.l.setDayTime(13001))
+            .thenWaitUntil(()->{
+                check(f.v.getSleepingPos().filter(bed::equals).isPresent(),"worker never reached bed after inaccessible discard");
+                check(count(f,Items.CARROT)==15,"discard lost carrots");
+            }).thenExecute(()->f.l.setDayTime(23000)).thenWaitUntil(()->{
+                check(!f.v.isSleeping()&&f.l.getBlockState(ripe).getValue(CropBlock.AGE)<7,
+                    "worker did not resume farming after failed discard");
+            }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=300,batch="worker_bed_builder")
+    public static void builder_walks_to_registered_residential_bed(GameTestHelper h){
+        workerSleeps(h,Profession.BUILDER);
+    }
+
+    @GameTest(template="empty",timeoutTicks=300,batch="worker_bed_commerce")
+    public static void baker_walks_to_registered_residential_bed(GameTestHelper h){
+        workerSleeps(h,Profession.BAKER);
+    }
+
+    @GameTest(template="empty",timeoutTicks=300,batch="worker_bed_military")
+    public static void off_duty_soldier_walks_to_registered_residential_bed(GameTestHelper h){
+        workerSleeps(h,Profession.SOLDIER);
+    }
+
+    private static void workerSleeps(GameTestHelper h,Profession profession){
+        var f=fixture(h,profession);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var head=home.east(2).above();
+        var bed=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
+        f.l.setBlock(head.west(),bed.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.FOOT),3);
+        f.l.setBlock(head,bed.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.HEAD),3);
+        var start=Vec3.atBottomCenterOf(f.p.south().above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        f.l.setDayTime(13001);
+        h.startSequence().thenWaitUntil(()->{
+            check(f.v.getSleepingPos().filter(head::equals).isPresent(),profession+" has not reached the bed from "+f.v.position());
+            check(f.l.getBlockState(head).getValue(BedBlock.OCCUPIED),"registered bed not occupied");
+        }).thenExecuteFor(20,()->check(f.v.isSleeping(),profession+" is not staying asleep"))
+            .thenExecute(()->f.l.setDayTime(23000))
+            .thenWaitUntil(()->check(!f.v.isSleeping(),profession+" did not wake at dawn")).thenSucceed();
+    }
+
+    private static void buildWalkableFloor(F f,BlockPos home){
+        for(var floor:BlockPos.betweenClosed(home.offset(-4,0,-4),f.p.offset(6,0,6))){
+            if(floor.equals(home)||floor.equals(f.p))continue;
+            // Lighting gives the navigation and rest scenarios a deterministic field
+            // while the separate threat test continues to exercise real zombies.
+            boolean lamp=Math.floorMod(floor.getX(),4)==0&&Math.floorMod(floor.getZ(),4)==0;
+            f.l.setBlock(floor,(lamp?Blocks.SEA_LANTERN:Blocks.STONE).defaultBlockState(),3);
+        }
+    }
+
+    @GameTest(template="empty",timeoutTicks=220,batch="industry")
+    public static void farmer_jumps_physically_on_only_one_empty_cell_beside_mature_stem(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var stem=f.p.offset(-2,1,0);
+        var empty=stem.north();
+        var neighbor=stem.south();
+        var soil=Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE,7);
+        for(var pos:List.of(stem,empty,neighbor))f.l.setBlock(pos.below(),soil,3);
+        var mature=Blocks.MELON_STEM.defaultBlockState().setValue(StemBlock.AGE,7);
+        var crop=Blocks.CARROTS.defaultBlockState();
+        f.l.setBlock(stem,mature,3);
+        f.l.setBlock(neighbor,crop,3);
+        var start=Vec3.atBottomCenterOf(f.p.east(2).north(2).above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        f.s.setItem(30,new ItemStack(Items.WATER_BUCKET));
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->{
+            check(!f.v.isOnGround()&&f.v.getY()>empty.getY()+.3&&f.v.getX()>=empty.getX()
+                &&f.v.getX()<empty.getX()+1&&f.v.getZ()>=empty.getZ()&&f.v.getZ()<empty.getZ()+1,"waiting for physical jump");
+        }).thenWaitUntil(()->{
+            check(f.l.getBlockState(empty.below()).is(Blocks.DIRT),"jump did not convert the selected cell");
+            check(f.l.getBlockState(neighbor.below())==soil&&f.l.getBlockState(neighbor)==crop,"jump damaged adjacent crop/soil");
+            check(f.l.getBlockState(stem).is(Blocks.MELON_STEM),"jump damaged the stem");
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=160,batch="industry")
+    public static void idle_visitor_leaves_occupied_field_while_farmer_stays(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var visitor=EntityType.VILLAGER.create(f.l);
+        var start=Vec3.atBottomCenterOf(f.p.west().above());
+        visitor.setPos(start.x,start.y,start.z);
+        f.l.addFreshEntity(visitor);
+        var bounds=IndustrialWork.area(f.l,f.s);
+        check(bounds.contains(visitor.position()),"visitor did not start inside");
+        var ownerStart=Vec3.atBottomCenterOf(f.p.south().above());
+        f.v.setPos(ownerStart.x,ownerStart.y,ownerStart.z);
+        f.v.setNoAi(false);
+        h.succeedWhen(()->{
+            check(!bounds.contains(visitor.position().add(0,.125,0)),"visitor has not left at "+visitor.position());
+            check(bounds.contains(f.v.position().add(0,.125,0)),"worker was displaced from the field");
+        });
+    }
+
+    @GameTest(template="empty",timeoutTicks=160,batch="workplace_overlap")
+    public static void another_worker_leaves_foreign_field_but_can_idle_in_its_overlap(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var workplace=f.p.east(3);
+        f.l.setBlock(workplace,WorkModule.COMMERCIAL.get().defaultBlockState(),3);
+        var baker=((WorkBlockEntity)f.l.getBlockEntity(workplace)).station();
+        var guest=EntityType.VILLAGER.create(f.l);
+        var start=Vec3.atBottomCenterOf(f.p.west(2).above());
+        guest.setPos(start.x,start.y,start.z);
+        f.l.addFreshEntity(guest);
+        check(ResidenceData.get(f.l).link(f.l,home,guest).equals("ok"),"link guest to existing home");
+        var player=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"WorkplaceVisitTest"));
+        player.setPos(guest.getX(),guest.getY(),guest.getZ());
+        baker.setItem(31,new ItemStack(Items.EMERALD,EmploymentConfig.cost(Profession.Sector.COMMERCIAL)));
+        check(Employment.hire(player,baker,guest.getUUID(),Profession.BAKER).equals("ok"),"hire visiting baker");
+        // A removed recipe pauses production and supply runs, so the test
+        // observes the idle worker even with other test batches' stock loaded.
+        baker.commerce.putString("recipe","residenciasaldeoes:removed_fixture_recipe");
+        baker.setChanged();
+        var farmArea=IndustrialWork.area(f.l,f.s);
+        var bakeryArea=IndustrialWork.area(f.l,baker);
+        var overlap=Vec3.atBottomCenterOf(f.p.east(2).above());
+        check(farmArea.contains(start)&&!bakeryArea.contains(start)&&farmArea.contains(overlap)&&bakeryArea.contains(overlap),
+            "fixture did not establish exclusive and overlapping areas");
+        h.startSequence().thenWaitUntil(()->check(!farmArea.contains(guest.position()),"baker did not vacate the field"))
+            .thenExecute(()->{
+                guest.getNavigation().stop();
+                guest.setPos(overlap.x,overlap.y,overlap.z);
+                guest.setDeltaMovement(Vec3.ZERO);
+                guest.getMoveControl().setWantedPosition(overlap.x,overlap.y,overlap.z,0);
+            }).thenExecuteFor(30,()->{
+                var feet=guest.position().add(0,.125,0);
+                check(farmArea.contains(feet)&&bakeryArea.contains(feet)&&!WorkplaceVisits.leaving(guest),
+                    "authorized worker left overlap at "+guest.position()+" navigation "+guest.getNavigation().getTargetPos()
+                    +" commercial state "+baker.commerce.getString("status"));
+            }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=280,batch="farmer_forge_closing")
+    public static void farmer_walks_to_sided_forge_inventory_to_discard_at_twilight(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var pos=f.p.east(4).above();
+        var mod=new ModInventory();
+        MinecraftForge.EVENT_BUS.register(mod);
+        try{
+            f.l.setBlock(pos,Blocks.BEACON.defaultBlockState(),3);
+        }finally{
+            MinecraftForge.EVENT_BUS.unregister(mod);
+        }
+        f.s.setItem(0,new ItemStack(Items.CARROT,15));
+        var start=Vec3.atBottomCenterOf(f.p.south().above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        f.l.setDayTime(11999);
+        h.startSequence().thenWaitUntil(()->{
+            check(mod.storage.getStackInSlot(0).getCount()==5&&count(f,Items.CARROT)==10,"waiting for Forge discard");
+            check(f.v.getX()>pos.getX()+1&&f.v.distanceToSqr(start)>9,"discard without reaching the accessible side");
+        }).thenExecute(()->f.l.setDayTime(1000)).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=100,batch="industry")
+    public static void falling_visitor_cannot_destroy_a_crop_in_an_occupied_field(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var crop=crop(f,Blocks.CARROTS.defaultBlockState());
+        var control=crop.south(4);
+        f.v.setPos(f.p.getX()+.5,f.p.getY()+1,f.p.getZ()-1.5);
+        f.l.setBlock(crop.below(2),Blocks.STONE.defaultBlockState(),3);
+        f.l.setBlock(control.below(2),Blocks.STONE.defaultBlockState(),3);
+        f.l.setBlock(control.below(),Blocks.FARMLAND.defaultBlockState(),3);
+        f.l.setBlock(control,Blocks.CARROTS.defaultBlockState(),3);
+        var visitors=new ArrayList<Villager>();
+        for(var pos:List.of(crop,control)){
+            var center=Vec3.atBottomCenterOf(pos);
+            var villager=EntityType.VILLAGER.create(f.l);
+            villager.setPos(center.x,center.y+5,center.z);
+            villager.setDeltaMovement(0,-.5,0);
+            f.l.addFreshEntity(villager);
+            visitors.add(villager);
+        }
+        h.startSequence().thenWaitUntil(()->check(visitors.stream().allMatch(v->v.getY()<=crop.getY()+.1),
+                "visitors have not landed: "+visitors.stream().map(Villager::position).toList()))
+            .thenExecute(()->{
+                var soil=f.l.getBlockState(crop.below());
+                var result=f.l.getBlockState(crop);
+                com.mojang.logging.LogUtils.getLogger().info("Villager landings at {} and {}, farmer at {}, protected plot {}/{} and control {}/{}",
+                    visitors.get(0).position(),visitors.get(1).position(),f.v.position(),soil,result,
+                    f.l.getBlockState(control.below()),f.l.getBlockState(control));
+                check(soil.is(Blocks.FARMLAND)&&result.is(Blocks.CARROTS),"physical visitor fall damaged the plot");
+                check(f.l.getBlockState(control.below()).is(Blocks.DIRT)&&f.l.getBlockState(control).isAir(),
+                    "Control fall did not reproduce soil conversion and loss of the crop above");
+            }).thenSucceed();
+    }
+
 }

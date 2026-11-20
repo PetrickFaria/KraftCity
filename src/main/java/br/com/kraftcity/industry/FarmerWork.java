@@ -8,6 +8,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Registry;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -64,9 +65,9 @@ public final class FarmerWork {
             s.setChanged();
         }
         var path=zigzag(s.pos,size);
+        if(plantCane(l,s,v,size,path,tool))return;
         if(harvest(l,s,v,size,path,tool))return;
         if(clearFruitSpace(l,s,v,size,path))return;
-        if(plantCane(l,s,v,path,tool))return;
         if(sow(l,s,v,size,path,tool,false)||sow(l,s,v,size,path,tool,true))return;
         if(s.getItem(28).is(Items.BONE_MEAL)){
             for(var base:path)for(int y=0;y<HEIGHT;y++){
@@ -198,67 +199,96 @@ public final class FarmerWork {
         l.addFreshEntity(drop);
     }
 
-    private static boolean fruitSoil(ServerLevel l,BlockPos pos){
-        var soil=l.getBlockState(pos.below());
-        return soil.is(Blocks.FARMLAND)||soil.is(net.minecraft.tags.BlockTags.DIRT);
-    }
     private static BlockPos fruitSpace(ServerLevel l,EmploymentData.Station s,int size,BlockPos stem){
+        BlockPos farmland=null;
         for(var direction:Direction.Plane.HORIZONTAL){
             var pos=stem.relative(direction);
-            if(inside(s,size,pos)&&l.hasChunkAt(pos)&&l.getBlockState(pos).isAir()&&fruitSoil(l,pos))return pos;
+            if(!inside(s,size,pos)||!l.hasChunkAt(pos)||!l.getBlockState(pos).isAir())continue;
+            var soil=l.getBlockState(pos.below());
+            if(soil.is(BlockTags.DIRT))return pos;
+            if(farmland==null&&soil.is(Blocks.FARMLAND))farmland=pos;
         }
-        return null;
+        return farmland;
     }
     private static boolean clearFruitSpace(ServerLevel l,EmploymentData.Station s,Villager v,int size,List<BlockPos> path){
         for(var base:path)for(int y=0;y<HEIGHT;y++){
             var stem=base.above(y);
             if(!l.hasChunkAt(stem))continue;
             var state=l.getBlockState(stem);
-            if(!(state.getBlock() instanceof StemBlock)||state.getValue(StemBlock.AGE)!=7||fruitSpace(l,s,size,stem)!=null)continue;
+            if(!(state.getBlock() instanceof StemBlock)||state.getValue(StemBlock.AGE)!=7)continue;
+            BlockPos candidate=null;
+            boolean ready=false;
             for(var direction:Direction.Plane.HORIZONTAL){
                 var pos=stem.relative(direction);
-                if(!inside(s,size,pos)||!l.hasChunkAt(pos)||!l.getBlockState(pos.below()).is(Blocks.FARMLAND))continue;
-                // Vanilla already accepts an empty farmland cell for fruit. Only
-                // clear replaceable vegetation, never a crop, to make room.
+                if(!inside(s,size,pos)||!l.hasChunkAt(pos))continue;
+                var soil=l.getBlockState(pos.below());
                 var obstacle=l.getBlockState(pos);
-                if(!obstacle.is(Blocks.GRASS)&&!obstacle.is(Blocks.FERN)&&!obstacle.is(Blocks.DEAD_BUSH))continue;
-                int travel=FarmerLogistics.approachCell(l,v,pos,false);
-                if(travel<0)continue;
+                if(obstacle.isAir()&&soil.is(BlockTags.DIRT)){
+                    ready=true;
+                    break;
+                }
+                if(!soil.is(Blocks.FARMLAND))continue;
+                if(obstacle.isAir()||candidate==null&&(obstacle.is(Blocks.GRASS)||obstacle.is(Blocks.FERN)||obstacle.is(Blocks.DEAD_BUSH))){
+                    if(candidate==null||!l.getBlockState(candidate).isAir())candidate=pos;
+                }
+            }
+            if(ready)continue;
+            if(candidate!=null){
+                int travel=FarmerLogistics.approachCell(l,v,candidate,false);
                 if(travel==0)return true;
-                if(!IndustrialWork.breakAllowed(l,s,v,pos)
-                    ||!IndustrialWork.allowed(l,s,v,pos.below(),null,"farmer_fruit_space")
-                    ||l.getBlockState(pos)!=obstacle||l.getBlockState(stem)!=state)continue;
-                if(!l.destroyBlock(pos,true,v))continue;
-                FarmerLogistics.jumpOn(v,pos.below());
-                return true;
+                if(travel>0&&v.isOnGround()&&IndustrialWork.allowed(l,s,v,candidate.below(),null,"farmer_fruit_space")){
+                    var obstacle=l.getBlockState(candidate);
+                    if(!obstacle.isAir()){
+                        if(!IndustrialWork.breakAllowed(l,s,v,candidate)||l.getBlockState(candidate)!=obstacle
+                            ||!l.destroyBlock(candidate,true,v))continue;
+                    }
+                    if(l.getBlockState(stem)==state&&l.getBlockState(candidate).isAir()
+                        &&l.getBlockState(candidate.below()).is(Blocks.FARMLAND)
+                        &&FarmerLogistics.jumpOn(v,candidate.below(),stem))return true;
+                }
             }
             IndustrialWork.alert(l,s,"fruit_space","Caule maduro sem espaço lateral livre; cultivos vizinhos preservados.");
         }
         return false;
     }
 
-    private static boolean plantCane(ServerLevel l,EmploymentData.Station s,Villager v,List<BlockPos> path,ItemStack tool){
+    private static boolean plantCane(ServerLevel l,EmploymentData.Station s,Villager v,int size,List<BlockPos> path,ItemStack tool){
         int slot=IndustrialWork.find(s,stack->stack.is(Items.SUGAR_CANE),0,27);
-        if(slot<0)return false;
         var cane=Blocks.SUGAR_CANE.defaultBlockState();
-        for(var base:path)for(int y=0;y<HEIGHT;y++){
+        if(slot>=0)for(var base:path)for(int y=0;y<HEIGHT;y++){
             var pos=base.above(y);
             if(!l.hasChunkAt(pos)||!l.getBlockState(pos).isAir()
                 ||l.getBlockState(pos.below()).is(Blocks.SUGAR_CANE)||!cane.canSurvive(l,pos))continue;
+            if(!hasWater(l,s,size,pos))continue;
             int travel=FarmerLogistics.approachCell(l,v,pos,false);
             if(travel<0)continue;
             if(travel>0&&sowAt(l,s,v,pos,slot,tool)){
-                s.industry.putInt("zigzag_plant",0);
+                s.industry.putBoolean("farmer_cane_planted",true);
                 s.setChanged();
             }
             return true;
+        }
+        if(s.industry.getBoolean("farmer_cane_planted")){
+            s.industry.remove("farmer_cane_planted");
+            s.industry.putInt("zigzag_plant",0);
+            s.industry.putInt("zigzag_harvest",0);
+            s.setChanged();
+        }
+        return false;
+    }
+
+    private static boolean hasWater(ServerLevel l,EmploymentData.Station s,int size,BlockPos crop){
+        for(var side:Direction.Plane.HORIZONTAL){
+            var adjacent=crop.relative(side);
+            var water=adjacent.below();
+            if(inside(s,size,adjacent)&&l.hasChunkAt(water)&&l.getBlockState(water).is(Blocks.WATER))return true;
         }
         return false;
     }
 
     private static void traceHarvest(Villager v,BlockPos pos,BlockState before,BlockState after){
         com.mojang.logging.LogUtils.getLogger().debug(
-            "Farmer {} at {} harvested {}: {} -> {}",v.getUUID(),v.position(),pos,before,after);
+            "Farmer {} at {} harvest changed {}: {} -> {}",v.getUUID(),v.position(),pos,before,after);
     }
 
     private static boolean reservedFruitSpace(ServerLevel l,EmploymentData.Station s,int size,BlockPos pos){

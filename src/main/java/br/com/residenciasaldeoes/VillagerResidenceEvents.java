@@ -1031,15 +1031,36 @@ public class VillagerResidenceEvents {
         }
         br.com.residenciasaldeoes.network.ModNetwork.sendPreviews(player,entries);
     }
+    public static boolean ownsWorkerRest(Villager villager){
+        if(!(villager.level instanceof ServerLevel level)||villager.isNoAi()||villager.isTrading()
+            ||villager.isPassenger()||br.com.kraftcity.employment.Employment.fleeing(villager))return false;
+        long phase=Math.floorMod(level.getDayTime(),DAY_LENGTH);
+        if(phase<NIGHT_START||phase>=NIGHT_END)return false;
+        var station=br.com.kraftcity.employment.EmploymentData.get(level).assigned(villager.getUUID());
+        if(station==null||br.com.kraftcity.military.Military.military(station)
+            &&br.com.kraftcity.military.Military.onDuty(level,station))return false;
+        var home=ResidenceData.get(level).owner(villager.getUUID());
+        return home!=null&&home.dimension.equals(level.dimension())&&level.hasChunkAt(home.pos)
+            &&level.getBlockEntity(home.pos) instanceof ResidentialAnchorBlockEntity;
+    }
+
     @SubscribeEvent public void onVillagerTick(LivingEvent.LivingTickEvent event){
         if(!(event.getEntity() instanceof Villager villager)||!(villager.level instanceof ServerLevel level))return;
-        if(br.com.kraftcity.military.Military.isSoldier(villager)||br.com.kraftcity.employment.Employment.fleeing(villager))return;
+        boolean workerRest=ownsWorkerRest(villager);
+        if(br.com.kraftcity.employment.Employment.fleeing(villager)
+            ||br.com.kraftcity.military.Military.isSoldier(villager)&&!workerRest)return;
         if(villager.tickCount%20==0&&villager.getPersistentData().hasUUID("residenciasaldeoes_resident_identity"))
             ResidenceData.get(level).updateResidentAge(villager);
         if(villager.getPersistentData().contains(EMERALD_TRANSFER)){tickEmeraldTransfer(level,villager);return;}
         if(villager.getPersistentData().contains(NIGHT_DOOR_TASK)){tickNightDoorClosure(level,villager);return;}
         if(br.com.kraftcity.industry.FarmerLogistics.beforeHome(level,villager))return;
         boolean employed=br.com.kraftcity.employment.Employment.active(villager);
+        long time=Math.floorMod(level.getDayTime(),DAY_LENGTH);
+        boolean night=time>=NIGHT_START&&time<NIGHT_END;
+        if(employed&&!night&&villager.isSleeping()){
+            villager.stopSleeping();
+            stabilizeSleepingResident(villager);
+        }
         boolean weather=employed?level.isThundering():level.isRaining();var entityData=villager.getPersistentData();
         boolean doorResume=entityData.getBoolean(NIGHT_DOOR_RESUME);if(doorResume)entityData.remove(NIGHT_DOOR_RESUME);
         boolean forced=entityData.getBoolean(RETURN_FORCED);
@@ -1049,7 +1070,6 @@ public class VillagerResidenceEvents {
         if(!home.dimension.equals(level.dimension())||!level.hasChunkAt(home.pos))return;
         if(!(level.getBlockEntity(home.pos) instanceof ResidentialAnchorBlockEntity)){entityData.remove(NIGHT_DOOR_BED_RETURN);clearNightWander(villager,true);data.unlinkAll(level,home.dimension,home.pos);return;}
 
-        long time=level.getDayTime()%24000L;boolean night=time>=13000L&&time<23000L;
         boolean returningFromNightDoor=entityData.getBoolean(NIGHT_DOOR_BED_RETURN);
         if(!night&&returningFromNightDoor){entityData.remove(NIGHT_DOOR_BED_RETURN);returningFromNightDoor=false;}
         if(weather&&!employed)weather=isRainingAtResidentialArea(level,home);
@@ -1093,7 +1113,7 @@ public class VillagerResidenceEvents {
             clearHomeReturn(entityData);
             clearNightWander(villager,true);
             entityData.remove(NIGHT_DOOR_BED_RETURN);
-            if(villager.tickCount%10==0)data.releaseBed(villager.getUUID());
+            if(!employed&&villager.tickCount%10==0)data.releaseBed(villager.getUUID());
             return;
         }
         if(!forced&&!weather&&time>=12000L&&time<13000L){
@@ -1114,6 +1134,7 @@ public class VillagerResidenceEvents {
             }
             if(!night){if(villager.isSleeping())villager.stopSleeping();return;}
             if(villager.isSleeping()){
+                if(workerRest)stabilizeSleepingResident(villager);
                 clearNightWander(villager,true);
                 ResidenceData.BedClaim claim=data.bedClaim(villager.getUUID());
                 if(sleepingAt!=null&&level.getBlockState(sleepingAt).getBlock() instanceof BedBlock
@@ -1123,7 +1144,7 @@ public class VillagerResidenceEvents {
                     villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
                     villager.getBrain().eraseMemory(MemoryModuleType.PATH);
                 }
-            }else if((doorResume||villager.tickCount%BED_ANCHOR_INTERVAL==0)&&level.getGameTime()>=entityData.getLong(BED_RETRY_AFTER)){
+            }else if((doorResume||villager.tickCount%BED_ANCHOR_INTERVAL==0||workerRest)&&level.getGameTime()>=entityData.getLong(BED_RETRY_AFTER)){
                 ResidenceData.BedClaim claim=data.bedClaim(villager.getUUID());BlockPos bed=claim!=null&&claim.dimension().equals(level.dimension())&&claim.home().equals(home.pos)?claim.bed():null;
                 if(bed!=null&&!data.ownsBed(level.dimension(),bed,villager.getUUID())){
                     data.releaseBed(villager.getUUID());bed=null;
@@ -1163,6 +1184,7 @@ public class VillagerResidenceEvents {
                             villager.getBrain().setMemory(MemoryModuleType.HOME,net.minecraft.core.GlobalPos.of(level.dimension(),bed));
                         }
                         if(villager.blockPosition().equals(bedApproach)){
+                            if(workerRest)stabilizeSleepingResident(villager);
                             villager.startSleeping(bed);
                             if(villager.isSleeping()){
                                 entityData.remove(BED_RETRY_AFTER);
@@ -1224,18 +1246,19 @@ public class VillagerResidenceEvents {
     private void returnResidentToHome(ServerLevel level,ResidenceData data,Villager villager,ResidenceData.Home home,
                                       boolean preserveBedReservation,boolean returningFromNightDoor){
         beginHomeReturn(villager,level,home,false);var tag=villager.getPersistentData();
+        boolean workerRest=ownsWorkerRest(villager);
         if(villager.isSleeping())villager.stopSleeping();
-        if(!preserveBedReservation)data.releaseBed(villager.getUUID());
+        if(!preserveBedReservation&&!workerRest)data.releaseBed(villager.getUUID());
         long now=level.getGameTime(),elapsed=Math.max(0L,now-tag.getLong(RETURN_STARTED));
         BlockPos target=readReturnTarget(tag);
         if((target==null||!isSafeDestination(level,villager,target,home))&&now-tag.getLong(RETURN_LAST_SEARCH)>=RETURN_RETRY_TICKS){
             tag.putLong(RETURN_LAST_SEARCH,now);
-            target=findSafeSpot(level,villager,home.pos,home.size);
+            target=findSafeSpot(level,villager,home.pos,home.size,false,workerRest);
             if(target!=null)writeReturnTarget(tag,target);
         }
 
         long returnTimeout=hasNearbyPerceivedThreat(villager)?THREAT_RETURN_TIMEOUT_TICKS:RETURN_TIMEOUT_TICKS;
-        if(!returningFromNightDoor&&elapsed>=returnTimeout&&target!=null&&isSafeDestination(level,villager,target,home)){
+        if(!returningFromNightDoor&&elapsed>=returnTimeout&&!workerRest&&target!=null&&isSafeDestination(level,villager,target,home)){
             villager.getNavigation().stop();villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
             villager.teleportTo(target.getX()+0.5D,target.getY(),target.getZ()+0.5D);
             clearHomeReturn(tag);return;
@@ -1256,6 +1279,10 @@ public class VillagerResidenceEvents {
             villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
             Path destinationPath=villager.getNavigation().createPath(target,0);
             double speed=returningFromNightDoor?NIGHT_DOOR_WALK_SPEED:0.85D;
+            if(workerRest&&(destinationPath==null||!destinationPath.canReach())){
+                tag.remove(RETURN_TARGET);
+                return;
+            }
             if(destinationPath!=null)villager.getNavigation().moveTo(destinationPath,speed);
             else villager.getNavigation().moveTo(target.getX()+0.5D,target.getY(),target.getZ()+0.5D,speed);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,new WalkTarget(target,(float)speed,0));
@@ -1567,6 +1594,9 @@ public class VillagerResidenceEvents {
             if(!isSafeDestination(level,villager,approach,home))continue;
             approaches.add(approach);
         }
+        var nav=villager.getNavigation();
+        if(ownsWorkerRest(villager)&&!nav.isDone()&&approaches.contains(nav.getTargetPos())
+            &&pathStaysInside(nav.getPath(),home))return nav.getTargetPos();
         approaches.sort(Comparator.comparingDouble(villager.blockPosition()::distSqr));
         for(BlockPos approach:approaches){
             Path path=villager.getNavigation().createPath(approach,0);
@@ -1597,6 +1627,12 @@ public class VillagerResidenceEvents {
     }
 
     private static BlockPos findSafeSpot(ServerLevel level,Villager v,BlockPos anchor,int size,boolean covered){
+        return findSafeSpot(level,v,anchor,size,covered,false);
+    }
+
+    private static BlockPos findSafeSpot(ServerLevel level,Villager v,BlockPos anchor,int size,boolean covered,boolean reachable){
+        if(reachable&&!v.isOnGround()&&!v.isInWaterOrBubble())return null;
+        int paths=0;
         int r=size/2;List<BlockPos> bedApproaches=new ArrayList<>(),candidates=new ArrayList<>();
         for(int y=anchor.getY()+1;y<anchor.getY()+size+1;y++)for(int x=anchor.getX()-r;x<=anchor.getX()+r;x++)for(int z=anchor.getZ()-r;z<=anchor.getZ()+r;z++){
             BlockPos floor=new BlockPos(x,y,z);if(!level.hasChunkAt(floor))continue;
@@ -1613,6 +1649,11 @@ public class VillagerResidenceEvents {
             if(!floor.isFaceSturdy(level,feet.below(),Direction.UP)||!a.getCollisionShape(level,feet).isEmpty()||!b.getCollisionShape(level,feet.above()).isEmpty())continue;
             if(!a.getFluidState().isEmpty()||!b.getFluidState().isEmpty()||a.isBurning(level,feet)||b.isBurning(level,feet.above()))continue;
             if(!level.noCollision(v,new AABB(fx+.15,fy,fz+.15,fx+.85,fy+1.95,fz+.85)))continue;
+            if(reachable){
+                if(++paths>12)return null;
+                var path=v.getNavigation().createPath(feet,0);
+                if(path==null||!path.canReach())continue;
+            }
             return feet;
         }
         return null;
