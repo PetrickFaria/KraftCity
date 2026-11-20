@@ -113,8 +113,11 @@ public final class DiscardChests {
         if(!level.hasChunkAt(pos))return null;
         var be=level.getBlockEntity(pos);
         var state=level.getBlockState(pos);
-        if(be==null||state.is(Blocks.CHEST)||state.is(Blocks.TRAPPED_CHEST)||state.is(Blocks.BARREL)||state.is(Blocks.ENDER_CHEST)
+        if(be==null||state.is(Blocks.CHEST)||state.is(Blocks.TRAPPED_CHEST)||state.is(Blocks.BARREL)
             ||be instanceof br.com.residenciasaldeoes.block.EmeraldChestBlockEntity)return null;
+        if(state.is(Blocks.ENDER_CHEST)){
+            return be instanceof EnderChestBlockEntity chest&&EnderDiscard.inventory(chest)!=null?be:null;
+        }
         if(be instanceof WorkerDiscardAccess)return be;
         for(var side:Direction.values())if(be.getCapability(ForgeCapabilities.ITEM_HANDLER,side).isPresent())return be;
         return be.getCapability(ForgeCapabilities.ITEM_HANDLER).isPresent()?be:null;
@@ -125,6 +128,10 @@ public final class DiscardChests {
     }
 
     public static IItemHandler handler(BlockEntity be,Villager worker,Direction side){
+        if(be instanceof EnderChestBlockEntity chest&&be.getBlockState().is(Blocks.ENDER_CHEST)){
+            var station=worker.level instanceof ServerLevel level?EmploymentData.get(level).assigned(worker.getUUID()):null;
+            return station!=null&&station.profession==br.com.kraftcity.employment.Profession.FARMER?EnderDiscard.inventory(chest):null;
+        }
         if(be instanceof WorkerDiscardAccess linked)return linked.discardInventory(worker,side);
         var exposed=be.getCapability(ForgeCapabilities.ITEM_HANDLER,side).orElse(null);
         if(exposed!=null)return exposed;

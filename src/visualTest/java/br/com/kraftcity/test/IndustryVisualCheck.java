@@ -58,6 +58,7 @@ public final class IndustryVisualCheck {
         if(profession==Profession.FARMER)v.setPos(target.getX()+.5,target.getY()+1,target.getZ()+.5);
         if(profession==Profession.BEEKEEPER)s.industry.putInt("cursor",67);
         IndustrialWork.tick(l,s);
+        if(profession==Profession.FARMER)for(int action=0;action<3;action++)IndustrialWork.tick(l,s);
         boolean worked=switch(profession){
             case FARMER->count(s,Items.WHEAT)>0;
             case BUTCHER->count(s,Items.BEEF)>0;

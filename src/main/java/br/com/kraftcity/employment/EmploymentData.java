@@ -26,6 +26,7 @@ public final class EmploymentData extends SavedData {
     public CompoundTag detachedSoldier(UUID id){return detachedSoldiers.getCompound(id.toString()).copy();}
     public void forgetDetachedSoldier(UUID id){if(detachedSoldiers.contains(id.toString())){detachedSoldiers.remove(id.toString());setDirty();}}
     public Collection<Station> stations(){return List.copyOf(stations.values());}
+    void remove(UUID id){if(stations.remove(id)!=null){revision++;setDirty();}}
     public Station station(UUID id){return stations.get(id);}
     public Station assigned(UUID worker){return stations.values().stream().filter(s->s.active&&worker.equals(s.worker)).findFirst().orElse(null);}
     public Station create(Profession.Sector sector,ServerLevel level,BlockPos pos){

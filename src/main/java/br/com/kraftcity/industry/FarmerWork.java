@@ -19,6 +19,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 public final class FarmerWork {
     public static final int HEIGHT=3;
+    private static final int HARVEST_UPDATE=Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE;
     private FarmerWork(){}
 
     public static List<BlockPos> zigzag(BlockPos post,int size){
@@ -41,12 +42,10 @@ public final class FarmerWork {
         Block block=seed.getItem() instanceof BlockItem item?item.getBlock():Blocks.AIR;
         return block instanceof CropBlock||block instanceof StemBlock||block==Blocks.SUGAR_CANE?block.defaultBlockState():null;
     }
-    private static Item seed(BlockState crop){
-        if(crop.is(Blocks.WHEAT))return Items.WHEAT_SEEDS;
-        if(crop.is(Blocks.BEETROOTS))return Items.BEETROOT_SEEDS;
-        if(crop.is(Blocks.POTATOES))return Items.POTATO;
-        if(crop.is(Blocks.CARROTS))return Items.CARROT;
-        return Items.AIR;
+    private static Item seed(ServerLevel level,BlockPos pos,BlockState state){
+        var stack=state.getBlock().getCloneItemStack(level,pos,state);
+        var planted=plant(stack);
+        return planted!=null&&planted.getBlock()==state.getBlock()?stack.getItem():Items.AIR;
     }
 
     static void tick(ServerLevel l,EmploymentData.Station s,Villager v){
@@ -68,13 +67,13 @@ public final class FarmerWork {
         if(plantCane(l,s,v,size,path,tool))return;
         if(harvest(l,s,v,size,path,tool))return;
         if(clearFruitSpace(l,s,v,size,path))return;
-        if(sow(l,s,v,size,path,tool,false)||sow(l,s,v,size,path,tool,true))return;
+        if(sow(l,s,v,size,path,tool))return;
         if(s.getItem(28).is(Items.BONE_MEAL)){
             for(var base:path)for(int y=0;y<HEIGHT;y++){
                 var pos=base.above(y);
                 if(!l.hasChunkAt(pos))continue;
                 var state=l.getBlockState(pos);
-                if(!(state.getBlock() instanceof CropBlock crop)||crop.isMaxAge(state)||seed(state)==Items.AIR)continue;
+                if(!(state.getBlock() instanceof CropBlock crop)||crop.isMaxAge(state)||seed(l,pos,state)==Items.AIR)continue;
                 int travel=FarmerLogistics.approachCell(l,v,pos,false);
                 if(travel<0)continue;
                 if(travel>0)harvestCrop(l,s,v,pos,state,crop,tool);
@@ -92,10 +91,8 @@ public final class FarmerWork {
             var pos=path.get(index/HEIGHT).above(index%HEIGHT);
             if(!l.hasChunkAt(pos))continue;
             var state=l.getBlockState(pos);
-            boolean crop=seed(state)!=Items.AIR&&state.getBlock() instanceof CropBlock c&&c.isMaxAge(state);
-            boolean cane=state.is(Blocks.SUGAR_CANE)&&inside(s,size,pos.below())&&inside(s,size,pos.above())
-                &&l.getBlockState(pos.below()).is(Blocks.SUGAR_CANE)&&!l.getBlockState(pos.below(2)).is(Blocks.SUGAR_CANE)
-                &&l.getBlockState(pos.above()).is(Blocks.SUGAR_CANE)&&!l.getBlockState(pos.above(2)).is(Blocks.SUGAR_CANE);
+            boolean crop=state.getBlock() instanceof CropBlock c&&c.isMaxAge(state)&&seed(l,pos,state)!=Items.AIR;
+            boolean cane=state.is(Blocks.SUGAR_CANE)&&ripeCane(l,s,size,pos);
             boolean fruit=stemForFruit(l,s,size,pos,state);
             if(!crop&&!cane&&!fruit)continue;
             int travel=FarmerLogistics.approachCell(l,v,cane?pos.below():pos,cane||fruit);
@@ -109,6 +106,14 @@ public final class FarmerWork {
             return true;
         }
         return false;
+    }
+
+    private static boolean ripeCane(ServerLevel level,EmploymentData.Station station,int size,BlockPos middle){
+        var root=middle.below();
+        return inside(station,size,root)&&inside(station,size,middle.above())
+            &&level.getBlockState(root).is(Blocks.SUGAR_CANE)&&!level.getBlockState(root.below()).is(Blocks.SUGAR_CANE)
+            &&level.getBlockState(root).canSurvive(level,root)
+            &&level.getBlockState(middle.above()).is(Blocks.SUGAR_CANE)&&!level.getBlockState(middle.above(2)).is(Blocks.SUGAR_CANE);
     }
 
     private static boolean same(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos pos,BlockState state,ItemStack tool){
@@ -127,22 +132,26 @@ public final class FarmerWork {
         }
         if(!IndustrialWork.breakAllowed(l,s,v,pos)||!same(l,s,v,pos,state,tool))return;
         var replanted=crop.getStateForAge(0);
-        if(!replanted.canSurvive(l,pos)||!IndustrialWork.placeAllowed(l,s,v,pos,replanted)||!same(l,s,v,pos,state,tool))return;
+        if(!replanted.canSurvive(l,pos)||!IndustrialWork.placeAllowed(l,s,v,pos,replanted)||!same(l,s,v,pos,state,tool)
+            ||!replanted.canSurvive(l,pos))return;
         var drops=new ArrayList<>(Block.getDrops(state,l,pos,l.getBlockEntity(pos),v,tool));
-        Item seed=seed(state);
+        Item seed=seed(l,pos,state);
         var naturalSeed=drops.stream().filter(x->x.is(seed)&&!x.isEmpty()).findFirst().orElse(ItemStack.EMPTY);
         boolean fromDrop=!naturalSeed.isEmpty();
         if(fromDrop)naturalSeed.shrink(1);
         int input=fromDrop?-1:IndustrialWork.find(s,x->x.is(seed),0,27);
-        Item produce=state.is(Blocks.WHEAT)?Items.WHEAT:state.is(Blocks.BEETROOTS)?Items.BEETROOT:seed;
-        drops.removeIf(x->x.is(produce)||x.isEmpty());
-        drops.add(new ItemStack(produce,1+l.random.nextInt(IndustrialTools.tier(tool)+1)));
+        Item produce=state.is(Blocks.WHEAT)?Items.WHEAT:state.is(Blocks.BEETROOTS)?Items.BEETROOT:
+            state.is(Blocks.CARROTS)||state.is(Blocks.POTATOES)?seed:Items.AIR;
+        drops.removeIf(x->x.isEmpty()||produce!=Items.AIR&&x.is(produce));
+        if(produce!=Items.AIR)drops.add(new ItemStack(produce,1+l.random.nextInt(IndustrialTools.tier(tool)+1)));
         boolean replant=fromDrop||input>=0;
         if(!IndustrialWork.exchange(s,input,1,drops,false)){
             IndustrialWork.alert(l,s,"space","Inventário cheio; colheita preservada no terreno.");return;
         }
-        if(!l.setBlock(pos,replant?replanted:Blocks.AIR.defaultBlockState(),Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE))return;
-        IndustrialWork.exchange(s,input,1,drops,true);
+        if(!l.setBlock(pos,replant?replanted:Blocks.AIR.defaultBlockState(),HARVEST_UPDATE))return;
+        if(input>=0)s.removeItem(input,1);
+        for(var stack:drops)dropHarvest(l,pos,stack,false);
+        FarmerLogistics.rescan(v);
         if(!replant){
             var pending=s.industry.getCompound("farmer_replant");
             pending.putString(Long.toString(pos.asLong()),Registry.BLOCK.getKey(crop).toString());
@@ -169,20 +178,22 @@ public final class FarmerWork {
     private static void harvestSpecial(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos pos,BlockState state,boolean cane,ItemStack tool){
         var upper=l.getBlockState(pos.above());
         if(!IndustrialWork.breakAllowed(l,s,v,pos)||cane&&!IndustrialWork.breakAllowed(l,s,v,pos.above())
-            ||!same(l,s,v,pos,state,tool)||cane&&(l.getBlockState(pos.above())!=upper||!l.getBlockState(pos.below()).is(Blocks.SUGAR_CANE)))return;
+            ||!same(l,s,v,pos,state,tool)||cane&&(l.getBlockState(pos.above())!=upper||!ripeCane(l,s,IndustrialRules.size(l,s),pos))
+            ||!cane&&!stemForFruit(l,s,IndustrialRules.size(l,s),pos,state))return;
         var drops=cane?List.of(new ItemStack(Items.SUGAR_CANE,2)):Block.getDrops(state,l,pos,null,v,tool);
         if(!IndustrialWork.outputs(s,drops,false)){
             IndustrialWork.alert(l,s,"space","Inventário cheio; colheita preservada no terreno.");return;
         }
-        if(cane&&!l.setBlock(pos.above(),Blocks.AIR.defaultBlockState(),2))return;
-        if(!l.setBlock(pos,Blocks.AIR.defaultBlockState(),Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE)){
-            if(cane)l.setBlock(pos.above(),upper,3);
+        if(cane&&!l.setBlock(pos.above(),Blocks.AIR.defaultBlockState(),HARVEST_UPDATE))return;
+        if(!l.setBlock(pos,Blocks.AIR.defaultBlockState(),HARVEST_UPDATE)){
+            if(cane)l.setBlock(pos.above(),upper,HARVEST_UPDATE);
             return;
         }
         if(cane){
+            traceHarvest(v,pos.above(),upper,l.getBlockState(pos.above()));
             if(l.getGameRules().getBoolean(GameRules.RULE_DOBLOCKDROPS)){
-                dropCane(l,pos);
-                dropCane(l,pos.above());
+                dropHarvest(l,pos,new ItemStack(Items.SUGAR_CANE),true);
+                dropHarvest(l,pos.above(),new ItemStack(Items.SUGAR_CANE),true);
             }
             FarmerLogistics.rescan(v);
         }else{
@@ -193,11 +204,12 @@ public final class FarmerWork {
                 if(!l.hasChunkAt(stem)||!inside(s,IndustrialRules.size(l,s),stem))continue;
                 var before=l.getBlockState(stem);
                 if(before.is(attached)&&before.getValue(AttachedStemBlock.FACING)==side.getOpposite()){
-                    l.setBlock(stem,mature,Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE);
+                    l.setBlock(stem,mature,HARVEST_UPDATE);
                     traceHarvest(v,stem,before,mature);
                 }
             }
-            IndustrialWork.outputs(s,drops,true);
+            for(var stack:drops)dropHarvest(l,pos,stack,false);
+            FarmerLogistics.rescan(v);
         }
         traceHarvest(v,pos,state,l.getBlockState(pos));
         v.swing(InteractionHand.MAIN_HAND,true);
@@ -205,11 +217,12 @@ public final class FarmerWork {
         IndustrialRules.progress(l,s);
     }
 
-    private static void dropCane(ServerLevel l,BlockPos pos){
-        var drop=new ItemEntity(l,pos.getX()+.5,pos.getY()+.4,pos.getZ()+.5,new ItemStack(Items.SUGAR_CANE));
-        drop.setDeltaMovement(0,.075,0);
-        drop.setDefaultPickUpDelay();
-        l.addFreshEntity(drop);
+    private static void dropHarvest(ServerLevel level,BlockPos pos,ItemStack stack,boolean raised){
+        if(stack.isEmpty())return;
+        var drop=new ItemEntity(level,pos.getX()+.5,pos.getY()+(raised?.4:.2),pos.getZ()+.5,stack);
+        drop.setDeltaMovement(0,raised?.075:0,0);
+        if(raised)drop.setDefaultPickUpDelay();
+        level.addFreshEntity(drop);
     }
 
     private static BlockPos fruitSpace(ServerLevel l,EmploymentData.Station s,int size,BlockPos stem){
@@ -312,7 +325,7 @@ public final class FarmerWork {
         }
         return false;
     }
-    private static boolean sow(ServerLevel l,EmploymentData.Station s,Villager v,int size,List<BlockPos> path,ItemStack tool,boolean till){
+    private static boolean sow(ServerLevel l,EmploymentData.Station s,Villager v,int size,List<BlockPos> path,ItemStack tool){
         if(IndustrialWork.find(s,x->plant(x)!=null,0,27)<0)return false;
         var pending=s.industry.getCompound("farmer_replant");
         int total=path.size()*HEIGHT;
@@ -331,7 +344,7 @@ public final class FarmerWork {
                     continue;
                 }
                 if(reservedFruitSpace(l,s,size,pos))continue;
-                int slot=sowingSlot(l,s,size,pos,till);
+                int slot=sowingSlot(l,s,size,pos);
                 if(slot<0)continue;
                 int travel=FarmerLogistics.approachCell(l,v,pos,false);
                 if(travel<0)continue;
@@ -343,15 +356,16 @@ public final class FarmerWork {
         }
         return false;
     }
-    private static int sowingSlot(ServerLevel l,EmploymentData.Station s,int size,BlockPos pos,boolean till){
+    private static int sowingSlot(ServerLevel l,EmploymentData.Station s,int size,BlockPos pos){
         var key=Long.toString(pos.asLong());
         var pending=s.industry.getCompound("farmer_replant").getString(key);
         var soil=l.getBlockState(pos.below());
+        if(!soil.is(Blocks.FARMLAND)&&!tillable(soil))return -1;
         int slot=-1,best=0;
         for(int i=0;i<27;i++){
             var candidate=plant(s.getItem(i));
             if(candidate==null||!pending.isEmpty()&&!Registry.BLOCK.getKey(candidate.getBlock()).toString().equals(pending))continue;
-            if(candidate.is(Blocks.SUGAR_CANE)||(till?!tillable(soil):!soil.is(Blocks.FARMLAND)))continue;
+            if(candidate.is(Blocks.SUGAR_CANE))continue;
             boolean stem=candidate.getBlock() instanceof StemBlock;
             int border=Math.max(Math.abs(pos.getX()-s.pos.getX()),Math.abs(pos.getZ()-s.pos.getZ()));
             if(stem&&(border!=size/2||fruitSpace(l,s,size,pos)==null))continue;

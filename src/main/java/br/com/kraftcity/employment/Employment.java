@@ -6,6 +6,8 @@ import java.util.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.*;
 import net.minecraft.world.entity.npc.*;
+import net.minecraft.world.Containers;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -33,6 +35,7 @@ public final class Employment {
         return v.level instanceof ServerLevel level&&EmploymentData.get(level).assigned(v.getUUID())!=null;
     }
     private static final Map<Villager,Long> FLEE_UNTIL=new WeakHashMap<>();
+    private static final Map<Villager,net.minecraft.world.phys.AABB> ESCAPE_BOUNDS=new WeakHashMap<>();
     private static final Set<Villager> NIGHT_DETOUR=Collections.newSetFromMap(new WeakHashMap<>());
     private static final Set<Villager> HOMEWARD_ESCAPE=Collections.newSetFromMap(new WeakHashMap<>());
 
@@ -52,6 +55,7 @@ public final class Employment {
             HOMEWARD_ESCAPE.remove(v);
             NIGHT_DETOUR.remove(v);
             if(!fleeing(v)&&FLEE_UNTIL.remove(v)!=null){
+                ESCAPE_BOUNDS.remove(v);
                 v.getNavigation().stop();
                 v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
                 v.getBrain().eraseMemory(MemoryModuleType.PATH);
@@ -65,6 +69,20 @@ public final class Employment {
             br.com.kraftcity.industry.FarmerLogistics.release(v);
             com.mojang.logging.LogUtils.getLogger().debug("Worker {} at {} fleeing zombie at {}",
                 v.getUUID(),v.position(),zombie.position());
+        }
+        if(starting)ESCAPE_BOUNDS.remove(v);
+        var bounds=escapeBounds(level,v,nightShelter);
+        if(bounds!=null){
+            ESCAPE_BOUNDS.put(v,bounds);
+            HOMEWARD_ESCAPE.remove(v);
+            NIGHT_DETOUR.remove(v);
+            FLEE_UNTIL.put(v,level.getGameTime()+40);
+            if(v.isSleeping())v.stopSleeping();
+            v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+            v.getBrain().eraseMemory(MemoryModuleType.PATH);
+            if(starting||v.getNavigation().isDone()||v.tickCount%15==0
+                ||!within(v.getNavigation().getPath(),bounds))boundedEscape(level,v,zombie,bounds);
+            return;
         }
         if(br.com.residenciasaldeoes.VillagerResidenceEvents.seekResidentialSafety(level,v,zombie)){
             HOMEWARD_ESCAPE.add(v);
@@ -90,6 +108,65 @@ public final class Employment {
             }
             else if(starting)v.getNavigation().stop();
         }
+    }
+
+    private static net.minecraft.world.phys.AABB escapeBounds(ServerLevel level,Villager worker,boolean nightShelter){
+        net.minecraft.world.phys.AABB area=null;
+        if(nightShelter){
+            var home=ResidenceData.get(level).owner(worker.getUUID());
+            int r=home.size/2;
+            area=new net.minecraft.world.phys.AABB(home.pos.offset(-r,1,-r),home.pos.offset(r+1,home.size+1,r+1));
+        }else if(br.com.kraftcity.industry.IndustrialWork.day(level)){
+            var station=EmploymentData.get(level).assigned(worker.getUUID());
+            if(station!=null&&station.sector==Profession.Sector.INDUSTRIAL){
+                area=br.com.kraftcity.industry.IndustrialWork.area(level,station);
+            }
+        }
+        if(area==null)return null;
+        return area.contains(worker.position().add(0,.125,0))||area.equals(ESCAPE_BOUNDS.get(worker))?area:null;
+    }
+
+    private static boolean within(net.minecraft.world.level.pathfinder.Path path,net.minecraft.world.phys.AABB bounds){
+        if(path==null||!path.canReach())return false;
+        for(int i=path.getNextNodeIndex();i<path.getNodeCount();i++)
+            if(!bounds.contains(net.minecraft.world.phys.Vec3.atBottomCenterOf(path.getNode(i).asBlockPos())))return false;
+        return true;
+    }
+
+    private static void boundedEscape(ServerLevel level,Villager worker,net.minecraft.world.entity.LivingEntity threat,
+                                      net.minecraft.world.phys.AABB bounds){
+        var origin=worker.blockPosition();
+        var candidates=new ArrayList<BlockPos>();
+        var interior=bounds.deflate(.85,0,.85);
+        for(var at:BlockPos.betweenClosed(origin.offset(-7,-1,-7),origin.offset(7,1,7))){
+            var feet=net.minecraft.world.phys.Vec3.atBottomCenterOf(at);
+            if(!interior.contains(feet)||!level.hasChunkAt(at)||!level.getFluidState(at).isEmpty()
+                ||!level.noCollision(worker,worker.getBoundingBox().move(feet.subtract(worker.position())))
+                ||level.getBlockState(at.below()).getCollisionShape(level,at.below()).isEmpty())continue;
+            candidates.add(at.immutable());
+        }
+        candidates.sort(Comparator.<BlockPos>comparingDouble(at->threat.distanceToSqr(net.minecraft.world.phys.Vec3.atBottomCenterOf(at))).reversed());
+        var nav=worker.getNavigation();
+        for(int i=0;i<Math.min(20,candidates.size());i++){
+            var path=nav.createPath(candidates.get(i),0);
+            if(within(path,bounds)&&!path.getTarget().equals(origin)&&nav.moveTo(path,1.25))return;
+        }
+        if(!within(nav.getPath(),bounds)){
+            nav.stop();
+            worker.getMoveControl().setWantedPosition(worker.getX(),worker.getY(),worker.getZ(),0);
+            worker.setSpeed(0);
+        }
+    }
+
+    static void recoverFarmerStation(ServerLevel level,EmploymentData.Station station){
+        if(!station.active)return;
+        if(station.worker!=null)release(level,station.worker);
+        station.active=false;
+        EmploymentData.get(level).remove(station.id);
+        var recovery=new SimpleContainer(EmploymentData.SLOTS);
+        for(int slot=0;slot<EmploymentData.SLOTS;slot++)recovery.setItem(slot,station.removeItemNoUpdate(slot));
+        Containers.dropContents(level,station.pos,recovery);
+        net.minecraft.world.level.block.Block.popResource(level,station.pos,new ItemStack(WorkModule.INDUSTRIAL.get()));
     }
 
     public static void makePortable(ServerLevel level,EmploymentData.Station s){

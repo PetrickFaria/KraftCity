@@ -195,7 +195,7 @@ public final class CommerceGameTests {
     public static void complete_farmer_to_baker_chain_uses_real_mature_crop_and_discard(GameTestHelper h){
         var f=fixture(h,Profession.BAKER);var farm=industrialSource(h,f,Profession.FARMER);var chestPos=farm.p.west();var chest=barrel(f,chestPos);chest.clearContent();
         farm.s.setItem(27,new ItemStack(Items.NETHERITE_HOE));farm.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,25));var crop=farm.p.east().above();farm.l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);
-        for(int i=0;i<3&&count(farm,Items.WHEAT)<3;i++){farm.l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);farm.v.setPos(crop.getX()+.5,crop.getY(),crop.getZ()+.5);IndustrialWork.tick(farm.l,farm.s);}
+        for(int i=0;i<3&&count(farm,Items.WHEAT)<3;i++){farm.l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);farm.v.setPos(crop.getX()+.5,crop.getY(),crop.getZ()+.5);for(int action=0;action<3;action++)IndustrialWork.tick(farm.l,farm.s);}
         int produced=count(farm,Items.WHEAT);check(produced>=3,"real farmer wheat production");IndustrialWork.deposit(farm.l,farm.s,farm.v);
         takeAndProduce(f,chestPos);check(count(f,Items.BREAD)==1,"real farmer-baker chain output");int left=0;for(int slot=0;slot<27;slot++)if(chest.getItem(slot).is(Items.WHEAT))left+=chest.getItem(slot).getCount();check(left+3==produced,"wheat conservation");h.succeed();
     }

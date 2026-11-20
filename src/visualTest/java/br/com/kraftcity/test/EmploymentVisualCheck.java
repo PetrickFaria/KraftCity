@@ -166,12 +166,34 @@ public final class EmploymentVisualCheck {
         if(ticks==935)server.execute(()->{
             var level=server.overworld();var player=server.getPlayerList().getPlayer(playerId);var s=station(level,POST);
             level.destroyBlock(POST,true);check(!s.active&&s.worker==null,"Broken workstation still employed worker");
-            var drops=level.getEntitiesOfClass(ItemEntity.class,new AABB(POST).inflate(2),e->e.getItem().hasTag()&&e.getItem().getTag().hasUUID("KraftCityStation")&&e.getItem().getTag().getUUID("KraftCityStation").equals(s.id));
-            check(drops.size()==1,"Break yielded duplicate/missing recovery objects");var token=drops.get(0).getItem().copy();drops.get(0).discard();player.setItemInHand(InteractionHand.MAIN_HAND,token);
+            var drops=level.getEntitiesOfClass(ItemEntity.class,new AABB(POST).inflate(2));
+            var recovery=drops.stream().filter(e->e.getItem().is(WorkModule.INDUSTRIAL.get().asItem())).toList();
+            check(recovery.size()==1&&EmploymentData.get(level).station(s.id)==null,"Missing generic recovery or stale identity");
+            var token=recovery.get(0).getItem().copy();
+            recovery.get(0).discard();
+            player.setItemInHand(InteractionHand.MAIN_HAND,token);
             var context=new BlockPlaceContext(player,InteractionHand.MAIN_HAND,token,new BlockHitResult(Vec3.atCenterOf(POST.below()),Direction.UP,POST.below(),false));
-            check(((BlockItem)token.getItem()).place(context).consumesAction(),"Professional recovery placement failed");
-            check(station(level,POST)==s&&s.getItem(0).getCount()==13&&s.getItem(27).is(Items.IRON_HOE),"Recovery lost/copied inventory");
-            open(player,POST);portable=true;System.out.println("EMPLOYMENT_PORTABLE_INVENTORY_PASSED");
+            check(((BlockItem)token.getItem()).place(context).consumesAction(),"Generic recovery placement failed");
+            var replacement=station(level,POST);
+            int restored=0;
+            for(var drop:drops){
+                var item=drop.getItem();
+                int slot=item.is(Items.IRON_HOE)?27:item.is(Items.BONE_MEAL)?28:item.is(Items.PUMPKIN_SEEDS)?29:item.is(Items.WATER_BUCKET)?30:-1;
+                if(slot>=0){replacement.setItem(slot,item.copy());drop.discard();}
+            }
+            for(var drop:drops){
+                if(!drop.isAlive()||!drop.getItem().is(Items.APPLE))continue;
+                restored+=drop.getItem().getCount();drop.discard();
+            }
+            check(restored==13&&replacement.getItem(27).is(Items.IRON_HOE),"Recovery lost or copied inventory");
+            replacement.setItem(0,new ItemStack(Items.APPLE,restored));
+            replacement.setItem(31,new ItemStack(Items.EMERALD));
+            var helper=net.minecraftforge.common.util.FakePlayerFactory.get(level,
+                new com.mojang.authlib.GameProfile(UUID.randomUUID(),"RecoveryTest"));
+            helper.setPos(POST.getX()+.5,POST.getY()+1,POST.getZ()+1.5);
+            check(Employment.hire(helper,replacement,worker,Profession.FARMER).equals("ok"),"Generic post could not rehire worker");
+            Employment.release(level,worker);
+            open(player,POST);portable=true;System.out.println("EMPLOYMENT_FARMER_RECOVERY_DROPS_PASSED");
         });
         if(ticks==945){check(portable&&mc.player.containerMenu.slots.get(0).getItem().getCount()==13,"Recovered inventory did not sync");capture(mc,"visual-replaced-workstation.png");}
         if(ticks==950)mc.player.closeContainer();

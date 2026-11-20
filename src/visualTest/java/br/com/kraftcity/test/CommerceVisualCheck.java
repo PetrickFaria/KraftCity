@@ -60,7 +60,7 @@ public final class CommerceVisualCheck {
         if(i==0){
             src.setItem(27,new ItemStack(Items.WOODEN_HOE));src.setItem(0,new ItemStack(Items.WHEAT_SEEDS,25));
             int[][] plots={{-2,1},{-1,1},{0,1},{1,1},{2,1},{2,0}};
-            for(var plot:plots){var crop=sourcePos.offset(plot[0],1,plot[1]);l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);supplier.setPos(crop.getX()+.5,crop.getY(),crop.getZ()+.5);IndustrialWork.tick(l,src);}
+            for(var plot:plots){var crop=sourcePos.offset(plot[0],1,plot[1]);l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);supplier.setPos(crop.getX()+.5,crop.getY(),crop.getZ()+.5);for(int action=0;action<3;action++)IndustrialWork.tick(l,src);}
             check(count(src,Items.WHEAT)==6,"Real wheat harvest for baker");
         }else if(i==1){
             src.setItem(27,new ItemStack(Items.WOODEN_HOE));src.setItem(0,new ItemStack(Items.SUGAR_CANE,10));

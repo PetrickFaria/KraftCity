@@ -40,7 +40,8 @@ public final class WorkModule {
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER,EmploymentConfig.SPEC,"kraftcity-employment-server.toml");
         MinecraftForge.EVENT_BUS.register(new br.com.kraftcity.industry.IndustrialEvents());
         MinecraftForge.EVENT_BUS.register(new br.com.kraftcity.commerce.CommercialEvents());
-        MinecraftForge.EVENT_BUS.register(new EmploymentEvents());WorkNetwork.register();br.com.kraftcity.industry.IndustryNetwork.register();
+        MinecraftForge.EVENT_BUS.register(new EmploymentEvents());
+        MinecraftForge.EVENT_BUS.register(br.com.kraftcity.logistics.EnderDiscard.class);WorkNetwork.register();br.com.kraftcity.industry.IndustryNetwork.register();
     }
     private WorkModule(){}
 }

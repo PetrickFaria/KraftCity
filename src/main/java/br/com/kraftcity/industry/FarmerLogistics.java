@@ -27,10 +27,6 @@ public final class FarmerLogistics {
     private static final Map<Villager,Pickup> PICKUPS=new WeakHashMap<>();
     private static final Map<Villager,Long> AIRBORNE_SINCE=new WeakHashMap<>();
     private record Route(BlockPos target,BlockPos endpoint,double remaining,long progress,int retries){}
-    private record DayDiscard(long until,Set<Long> tried){
-        boolean active(){return tried!=null;}
-    }
-    private static final Map<Villager,DayDiscard> DAY_DISCARD=new WeakHashMap<>();
     private record Pickup(UUID item,long nextScan){}
     private FarmerLogistics(){}
 
@@ -112,32 +108,35 @@ public final class FarmerLogistics {
 
     /** Keep the ground navigator and jump controller in charge of climbing the bank. */
     public static boolean leaveWater(ServerLevel level,Villager worker){
-        if(!worker.isInWaterOrBubble()||worker.isPassenger()||worker.isSleeping())return false;
+        if(!worker.isInWaterOrBubble()||worker.isPassenger()||worker.isSleeping()||worker.isNoAi())return false;
         var station=EmploymentData.get(level).assigned(worker.getUUID());
         if(station==null||station.profession!=Profession.FARMER)return false;
+        worker.getJumpControl().jump();
         var route=ROUTES.get(worker);
-        if(route!=null&&isBank(level,route.target,worker.blockPosition())&&approachCell(level,worker,route.target,false)==0){
-            worker.getJumpControl().jump();
-            return true;
-        }
+        if(route!=null&&isBank(level,route.target,worker.blockPosition())&&approachCell(level,worker,route.target,false)==0)return true;
+        if(worker.tickCount%4!=0)return true;
         var origin=worker.blockPosition();
         var banks=new ArrayList<BlockPos>();
-        for(var at:BlockPos.betweenClosed(origin.offset(-4,0,-4),origin.offset(4,1,4))){
+        for(var at:BlockPos.betweenClosed(origin.offset(-4,0,-4),origin.offset(4,2,4))){
             if(!isBank(level,at,origin))continue;
             banks.add(at.immutable());
         }
         banks.sort(Comparator.comparingDouble(at->worker.distanceToSqr(Vec3.atBottomCenterOf(at))));
         for(var bank:banks.stream().limit(12).toList()){
-            if(approachCell(level,worker,bank,false)==0){
-                worker.getJumpControl().jump();
-                return true;
+            if(approachCell(level,worker,bank,false)==0)return true;
+        }
+        if(!banks.isEmpty()){
+            var bank=Vec3.atBottomCenterOf(banks.get(0));
+            var across=new Vec3(bank.x,worker.getY()+.5,bank.z);
+            if(worker.position().distanceToSqr(bank)<4&&visible(level,worker,across,null)){
+                worker.getMoveControl().setWantedPosition(bank.x,worker.getY(),bank.z,.8);
             }
         }
-        return false;
+        return true;
     }
 
     private static boolean isBank(ServerLevel level,BlockPos pos,BlockPos origin){
-        return Math.abs(pos.getY()-origin.getY())<=1&&level.hasChunkAt(pos)
+        return Math.abs(pos.getY()-origin.getY())<=2&&level.hasChunkAt(pos)
             &&level.getFluidState(pos).isEmpty()&&level.getBlockState(pos).getCollisionShape(level,pos).isEmpty()
             &&level.getBlockState(pos.above()).getCollisionShape(level,pos.above()).isEmpty()
             &&level.getBlockState(pos.below()).isFaceSturdy(level,pos.below(),Direction.UP);
@@ -252,8 +251,6 @@ public final class FarmerLogistics {
     }
 
     public static void release(Villager worker){
-        var trip=DAY_DISCARD.remove(worker);
-        if(trip!=null&&trip.active())stopRoute(worker);
         ROUTES.remove(worker);
         PICKUPS.remove(worker);
         BLOCKED.remove(worker);
@@ -288,23 +285,18 @@ public final class FarmerLogistics {
             if(pending)PICKUPS.put(v,new Pickup(null,now+5));
             return pending;
         }
-        boolean close=v.distanceToSqr(item)<=1.21&&visible(l,v,item.position().add(0,.1,0),null);
-        if(!close){
-            var pending=PICKUPS.get(v);
-            if(!item.isOnGround()&&Math.abs(item.getY()-v.getY())>.85&&pending!=null&&now<pending.nextScan)return true;
-            // The ItemEntity can stand below the integer top of farmland or a
-            // slab. Request the walking cell above that partial collision surface.
-            var pickupCell=new BlockPos(item.position().add(0,.2,0));
-            int travel=approach(l,v,pickupCell,.9,1);
+        if(!pickupReach(l,v,item)){
+            int travel=approachPickup(l,v,item);
             if(travel==0)return true;
-            if(travel<0||v.distanceToSqr(item)>1.21||!visible(l,v,item.position().add(0,.1,0),null)){
-                rejected.put(item.getUUID(),now+100);
+            if(!pickupReach(l,v,item)){
+                rejected.put(item.getUUID(),now+30);
                 rescan(v);
                 return closing;
             }
         }
         if(IndustrialWork.allowed(l,s,v,item.blockPosition(),item,"farmer_collect")
-            &&eligible(l,s,area,item)&&Employment.valid(l,v.getUUID())&&v.getUUID().equals(s.worker)){
+            &&eligible(l,s,area,item)&&pickupReach(l,v,item)
+            &&Employment.valid(l,v.getUUID())&&v.getUUID().equals(s.worker)){
             var take=item.getItem().copy();
             while(!take.isEmpty()&&!IndustrialWork.insert(s,take,false))take.shrink(1);
             if(!take.isEmpty()&&IndustrialWork.insert(s,take,true)){
@@ -320,6 +312,51 @@ public final class FarmerLogistics {
         rescan(v);
         return closing;
     }
+    private static boolean pickupReach(ServerLevel level,Villager worker,ItemEntity item){
+        var box=item.getBoundingBox();
+        var position=worker.position();
+        double x=net.minecraft.util.Mth.clamp(position.x,box.minX,box.maxX);
+        double y=net.minecraft.util.Mth.clamp(position.y+.45,box.minY,box.maxY);
+        double z=net.minecraft.util.Mth.clamp(position.z,box.minZ,box.maxZ);
+        return position.add(0,.45,0).distanceToSqr(x,y,z)<=1.21
+            &&(visible(level,worker,new Vec3(x,y,z),null)||visible(level,worker,box.getCenter(),null));
+    }
+
+    private static int approachPickup(ServerLevel level,Villager worker,ItemEntity item){
+        var origin=new BlockPos(item.position().add(0,.2,0));
+        var current=ROUTES.get(worker);
+        var cells=new ArrayList<BlockPos>();
+        for(var mutable:BlockPos.betweenClosed(origin.offset(-1,-1,-1),origin.offset(1,1,1))){
+            var at=mutable.immutable();
+            if(!level.hasChunkAt(at)||!level.getFluidState(at).isEmpty())continue;
+            var foot=Vec3.atBottomCenterOf(at);
+            if(Math.abs(item.getY()-foot.y)>.95||item.position().distanceToSqr(foot.x,item.getY(),foot.z)>1.56
+                ||!level.noCollision(worker,worker.getBoundingBox().move(foot.subtract(worker.position())))
+                ||level.getBlockState(at.below()).getCollisionShape(level,at.below()).isEmpty())continue;
+            cells.add(at);
+        }
+        cells.sort(Comparator.<BlockPos>comparingInt(at->current!=null&&current.target.equals(at)?0:1)
+            .thenComparingDouble(at->worker.distanceToSqr(Vec3.atBottomCenterOf(at))));
+        for(var at:cells){
+            int travel=approachCell(level,worker,at,false);
+            if(travel==0||travel==1&&moveToPickupEdge(level,worker,item,at))return 0;
+        }
+        return -1;
+    }
+
+    private static boolean moveToPickupEdge(ServerLevel level,Villager worker,ItemEntity item,BlockPos cell){
+        if(!worker.isOnGround())return false;
+        var foot=Vec3.atBottomCenterOf(cell);
+        var horizontal=new Vec3(item.getX()-foot.x,0,item.getZ()-foot.z);
+        if(horizontal.lengthSqr()<.2)return false;
+        var edge=foot.add(horizontal.normalize().scale(.36));
+        var offset=new Vec3(edge.x-worker.getX(),0,edge.z-worker.getZ());
+        if(offset.lengthSqr()<.013||!level.noCollision(worker,worker.getBoundingBox().move(offset))
+            ||!visible(level,worker,worker.getEyePosition().add(offset),null))return false;
+        worker.getMoveControl().setWantedPosition(edge.x,worker.getY(),edge.z,.55);
+        return true;
+    }
+
     private static boolean eligible(ServerLevel l,EmploymentData.Station s,net.minecraft.world.phys.AABB area,ItemEntity e){
         return eligible(l,s,area,e,false);
     }
@@ -405,26 +442,6 @@ public final class FarmerLogistics {
         }
     }
 
-    static boolean discardDuringWork(ServerLevel level,EmploymentData.Station station,Villager worker){
-        if(worker.isNoAi())return false;
-        long now=level.getGameTime();
-        var trip=DAY_DISCARD.get(worker);
-        if(trip!=null&&!trip.active()&&now<trip.until)return false;
-        boolean continuing=trip!=null&&trip.active();
-        if(!continuing){
-            if(!DiscardChests.hasOffers(offers(station))){
-                DAY_DISCARD.put(worker,new DayDiscard(now+100,null));
-                return false;
-            }
-            trip=new DayDiscard(now+220,new HashSet<>());
-            DAY_DISCARD.put(worker,trip);
-        }
-        if(now<trip.until&&seekDiscard(level,station,worker,trip.tried,false))return true;
-        if(continuing||!trip.tried.isEmpty())stopRoute(worker);
-        DAY_DISCARD.put(worker,new DayDiscard(now+100,null));
-        return false;
-    }
-
     public static boolean ending(Villager v){
         if(!(v.level instanceof ServerLevel l))return false;
         var s=EmploymentData.get(l).assigned(v.getUUID());
@@ -463,8 +480,6 @@ public final class FarmerLogistics {
             }
             return false;
         }
-        var daytimeTrip=DAY_DISCARD.remove(v);
-        if(daytimeTrip!=null&&daytimeTrip.active())stopRoute(v);
         if(Employment.fleeing(v)||v.isSleeping()||l.isThundering()
             ||v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced")
             ||v.getLastHurtByMob()!=null&&v.getLastHurtByMob().isAlive())return false;
@@ -498,22 +513,22 @@ public final class FarmerLogistics {
         }
         var tried=new HashSet<Long>();
         for(long at:s.industry.getLongArray("farmer_discard_tried"))tried.add(at);
-        if(seekDiscard(l,s,v,tried,true))return true;
+        if(seekDiscard(l,s,v,tried))return true;
         finishClosing(s,v);
         return false;
     }
 
     /** A successful transfer releases the walking command before another task can take control. */
-    private static boolean seekDiscard(ServerLevel level,EmploymentData.Station station,Villager worker,Set<Long> tried,boolean closing){
+    private static boolean seekDiscard(ServerLevel level,EmploymentData.Station station,Villager worker,Set<Long> tried){
         var items=offers(station);
         if(!DiscardChests.hasOffers(items))return false;
         for(var pos:DiscardChests.destinations(level,station,IndustrialWork.area(level,station))){
             if(!DiscardChests.hasOffers(items))break;
             if(tried.contains(pos.asLong())||!DiscardChests.accepts(level,station,worker,pos,items))continue;
-            if(closing)station.industry.putLong("farmer_discard_pos",pos.asLong());
+            station.industry.putLong("farmer_discard_pos",pos.asLong());
             int result=approachDiscard(level,worker,pos,station,items);
             if(result==0){
-                if(closing)station.setChanged();
+                station.setChanged();
                 return true;
             }
             int offered=Arrays.stream(items).sum();
@@ -526,7 +541,7 @@ public final class FarmerLogistics {
             com.mojang.logging.LogUtils.getLogger().debug("Farmer {} at {} finished discard at {}, arrival={}, inserted={}",
                 worker.getUUID(),worker.position(),pos,result,offered-left);
             tried.add(pos.asLong());
-            if(closing)station.industry.putLongArray("farmer_discard_tried",tried.stream().mapToLong(Long::longValue).toArray());
+            station.industry.putLongArray("farmer_discard_tried",tried.stream().mapToLong(Long::longValue).toArray());
         }
         return false;
     }

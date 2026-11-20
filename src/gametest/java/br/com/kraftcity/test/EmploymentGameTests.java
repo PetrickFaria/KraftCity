@@ -198,15 +198,15 @@ public final class EmploymentGameTests {
     @GameTest(template="empty",timeoutTicks=40,batch="employment")
     public static void block_break_and_replacement_preserve_one_inventory_and_reject_token_clones(GameTestHelper h){
         var f=fixture(h,Profession.Sector.INDUSTRIAL);
-        check(attempt(f,Profession.FARMER).equals("ok"),"Hire failed");
-        f.station.setItem(0,new ItemStack(Items.APPLE,13));f.station.setItem(27,new ItemStack(Items.IRON_HOE));
+        check(attempt(f,Profession.BUTCHER).equals("ok"),"Hire failed");
+        f.station.setItem(0,new ItemStack(Items.APPLE,13));f.station.setItem(27,new ItemStack(Items.IRON_AXE));
         f.level.destroyBlock(f.pos,true);
         check(!f.station.active&&f.station.worker==null,"Broken post remained active/employed");
         var items=f.level.getEntitiesOfClass(ItemEntity.class,new AABB(f.pos).inflate(2),e->e.getItem().hasTag()&&e.getItem().getTag().hasUUID("KraftCityStation")&&e.getItem().getTag().getUUID("KraftCityStation").equals(f.station.id));
         check(items.size()==1,"Break did not yield exactly one recovery token");ItemStack token=items.get(0).getItem().copy();items.get(0).discard();
         check(!token.getTag().contains("Items")&&!token.getTag().contains("BlockEntityTag"),"Token copied item contents");
         var stored=EmploymentData.load(EmploymentData.get(f.level).save(new CompoundTag())).station(f.station.id);
-        check(stored.getItem(0).getCount()==13&&stored.getItem(27).is(Items.IRON_HOE)&&stored.getItem(31).getCount()==20,"Portable inventory persistence failed");
+        check(stored.getItem(0).getCount()==13&&stored.getItem(27).is(Items.IRON_AXE)&&stored.getItem(31).getCount()==20,"Portable inventory persistence failed");
         f.player.setItemInHand(InteractionHand.MAIN_HAND,token.copy());
         ItemStack duplicate=token.copy();
         var hit=new BlockHitResult(Vec3.atCenterOf(f.pos.below()),Direction.UP,f.pos.below(),false);

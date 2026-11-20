@@ -55,6 +55,7 @@ public final class IndustryGameTests {
             f.l.setBlock(p,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);f.s.industry.putInt("cursor",index(f,p));step(f,1);
             check(f.l.getBlockState(p).is(Blocks.WHEAT)&&f.l.getBlockState(p).getValue(CropBlock.AGE)==0,"crop not replanted #"+i);
             var progress=WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.FARMER.id());check(progress.xp()==i,"harvest xp #"+i);
+            step(f,3);
             if(i%25==0)check(progress.level()==Math.min(5,1+i/25),"wrong level threshold #"+i);
         }
         check(IndustrialRules.size(f.l,f.s)==13,"Lv5 area");h.succeed();
@@ -367,6 +368,7 @@ public final class IndustryGameTests {
         step(f,1);
         check(f.l.getBlockState(center).is(Blocks.WHEAT)&&f.l.getBlockState(center).getValue(CropBlock.AGE)==0,"iron hoe did not replant wheat");
         check(f.l.getBlockState(near)==carrots,"manual adjacent crop damaged");
+        step(f,3);
         check(count(f,Items.WHEAT)>=1&&count(f,Items.WHEAT)<=2,"incorrect iron hoe yield");
         check(f.l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,new net.minecraft.world.phys.AABB(center).inflate(1)).isEmpty(),"duplicate world drops");
         h.succeed();
@@ -403,6 +405,7 @@ public final class IndustryGameTests {
         f.v.setPos(fruit.getX()+.5,fruit.getY(),fruit.getZ()+1.5);
         f.s.industry.putInt("cursor",index(f,fruit));
         step(f,1);
+        step(f,2);
         check(f.l.getBlockState(fruit).isAir()&&count(f,Items.PUMPKIN)==1,"fruit did not go to shared inventory");
         check(f.l.getBlockState(stem).is(Blocks.PUMPKIN_STEM),"fruit harvest destroyed its stem");
         h.succeed();
@@ -492,6 +495,7 @@ public final class IndustryGameTests {
             f.v.setPos(center.getX()+.5,center.getY(),center.getZ()+.5);
             step(f,1);
             check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.FARMER.id()).xp()==xp+1,"more or fewer than one harvest");
+            step(f,3);
             for(var at:BlockPos.betweenClosed(center.offset(-2,0,-2),center.offset(2,0,2))){
                 check(f.l.getBlockState(at)==crop.getStateForAge(0),"neighbor crop changed: "+at);
                 check(f.l.getBlockState(at.below()).is(Blocks.FARMLAND),"neighbor soil changed: "+at);
@@ -569,8 +573,11 @@ public final class IndustryGameTests {
                 }
             }
         };
-        var drop=new net.minecraft.world.entity.item.ItemEntity(f.l,from.x,from.y+.1,from.z,new ItemStack(Items.STICK));
-        drop.setDeltaMovement(Vec3.ZERO);
+        var produce=kind==Blocks.WHEAT?Items.WHEAT:kind==Blocks.CARROTS?Items.CARROT:
+            kind==Blocks.POTATOES?Items.POTATO:kind==Blocks.BEETROOTS?Items.BEETROOT:
+            kind==Blocks.MELON?Items.MELON_SLICE:Items.PUMPKIN;
+        var stock=new int[1];
+        var actualDrops=new java.util.ArrayList<net.minecraft.world.entity.item.ItemEntity>();
         h.startSequence().thenWaitUntil(()->{
             check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.FARMER.id()).xp()>0,"Farm worker has not harvested at "+f.v.position());
             check(f.v.distanceToSqr(from)>4,"harvest did not require walking");
@@ -580,11 +587,15 @@ public final class IndustryGameTests {
             com.mojang.logging.LogUtils.getLogger().info("Harvest target {} by worker at {}: {} -> {} ({} plot/soil states checked)",
                 target,f.v.position(),before.get(target),f.l.getBlockState(target),before.size());
             audit.run();
-        }).thenExecute(()->f.l.addFreshEntity(drop)).thenWaitUntil(()->{
-            check(!drop.isAlive()&&count(f,Items.STICK)==1,"worker did not collect the ground item");
-            check(f.v.distanceToSqr(from)<2,"item was collected without reaching it");
+            stock[0]=count(f,produce);
+            actualDrops.addAll(f.l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                new net.minecraft.world.phys.AABB(target).inflate(1),e->e.getItem().is(produce)));
+            check(!actualDrops.isEmpty(),"no actual harvest drops at "+target);
+        }).thenWaitUntil(()->{
+            check(actualDrops.stream().noneMatch(net.minecraft.world.entity.item.ItemEntity::isAlive)
+                &&count(f,produce)>stock[0],"worker did not collect the drops produced by harvest");
             audit.run();
-        }).thenSucceed();
+        }).thenExecuteFor(15,audit).thenSucceed();
     }
 
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
@@ -634,7 +645,7 @@ public final class IndustryGameTests {
     }
 
     @GameTest(template="empty",timeoutTicks=200,batch="industry")
-    public static void farmer_flees_beyond_field_and_returns_to_work(GameTestHelper h){
+    public static void farmer_flees_within_field_and_returns_to_work(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);
         var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
         for(var pos:BlockPos.betweenClosed(f.p.offset(-9,0,-9),f.p.offset(9,0,9))){
@@ -656,7 +667,8 @@ public final class IndustryGameTests {
             "worker did not detect zombie: worker="+f.v.position()+" zombie="+zombie.position()
             +" alive="+zombie.isAlive()+" target="+zombie.getTarget()))
         .thenWaitUntil(()->{
-            check(!IndustrialWork.area(f.l,f.s).contains(f.v.position().add(0,.125,0)),"worker has not fled beyond the field");
+            check(IndustrialWork.area(f.l,f.s).contains(f.v.position().add(0,.125,0)),"worker fled beyond the field");
+            check(f.v.distanceToSqr(start)>.9,"worker has not moved away from the zombie");
             check(f.l.getBlockState(wheat).getValue(CropBlock.AGE)==7,"harvest continued during danger");
         }).thenExecute(zombie::discard).thenWaitUntil(()->{
             check(!Employment.fleeing(f.v),"worker resumed before the danger expired");
@@ -1160,7 +1172,7 @@ public final class IndustryGameTests {
     }
 
     @GameTest(template="empty",timeoutTicks=400,batch="farmer_day_linked_discard")
-    public static void daytime_shared_inventory_accepts_only_authorized_excess_and_worker_returns_to_harvest(GameTestHelper h){
+    public static void closing_shared_inventory_accepts_only_authorized_excess_and_worker_returns_to_harvest(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);
         buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
         var wheat=crop(f,((CropBlock)Blocks.WHEAT).getStateForAge(7));
@@ -1189,9 +1201,14 @@ public final class IndustryGameTests {
         var start=Vec3.atBottomCenterOf(f.p.south().above());
         f.v.setPos(start.x,start.y,start.z);
         f.v.setNoAi(false);
-        h.startSequence().thenWaitUntil(()->{
+        h.startSequence().thenExecuteFor(35,()->{
+            check(shared.getStackInSlot(0).getCount()==62&&count(f,Items.CARROT)==15,"a farmer discarded during the day");
+        }).thenExecute(()->f.l.setDayTime(12000)).thenWaitUntil(()->{
             check(shared.getStackInSlot(0).getCount()==64,"waiting for physical partial transfer into linked channel");
             check(count(f,Items.CARROT)==13&&count(f,Items.STICK)==2,"linked endpoints consumed the rejected items");
+        }).thenExecute(()->{
+            f.l.setBlock(wheat,((CropBlock)Blocks.WHEAT).getStateForAge(7),3);
+            f.l.setDayTime(23000);
         }).thenWaitUntil(()->{
             check(f.l.getBlockState(wheat).getValue(CropBlock.AGE)==0,"worker did not leave linked chest to resume harvest");
             check(IndustrialWork.area(f.l,f.s).contains(f.v.position().add(0,.125,0)),"worker stayed outside the field");
@@ -1238,7 +1255,8 @@ public final class IndustryGameTests {
         zombie.setItemSlot(EquipmentSlot.HEAD,new ItemStack(Items.IRON_HELMET));
         var atTransfer=new Vec3[1];
         float health=f.v.getHealth();
-        h.startSequence().thenWaitUntil(()->check(barrel.countItem(Items.COBBLESTONE)==3,"daytime discard did not reach the barrel"))
+        f.l.setDayTime(13000);
+        h.startSequence().thenWaitUntil(()->check(barrel.countItem(Items.COBBLESTONE)==3,"closing discard did not reach the barrel"))
             .thenExecute(()->{
                 atTransfer[0]=f.v.position();
                 zombie.setPos(f.v.getX()+1.5,f.v.getY(),f.v.getZ()+1.5);
@@ -1247,7 +1265,7 @@ public final class IndustryGameTests {
             }).thenWaitUntil(()->{
                 check(Employment.fleeing(f.v)&&f.v.distanceToSqr(atTransfer[0])>4,"farmer remained stopped at the barrel");
                 check(f.v.getHealth()==health&&f.v.getLastHurtByMob()==null,"escape depended on damage");
-            }).thenExecute(zombie::discard).thenSucceed();
+            }).thenExecute(()->{zombie.discard();f.l.setDayTime(1000);}).thenSucceed();
     }
 
     public static final class PlacementObserver {
@@ -1304,6 +1322,177 @@ public final class IndustryGameTests {
             check(count(f,Items.WHEAT)==0,"cancelled replant credited an uncommitted harvest");
             MinecraftForge.EVENT_BUS.unregister(observer);
         });
+    }
+
+    @GameTest(template="empty",timeoutTicks=220,batch="farmer_cane_column")
+    public static void farmer_harvests_only_the_center_cane_and_collects_both_segments(GameTestHelper h){
+        caneColumns(h,new int[]{2,3,2});
+    }
+
+    @GameTest(template="empty",timeoutTicks=220,batch="farmer_cane_column")
+    public static void farmer_preserves_other_adjacent_cane_of_multiple_heights(GameTestHelper h){
+        caneColumns(h,new int[]{1,2,3,2,1});
+    }
+
+    private static void caneColumns(GameTestHelper h,int[] heights){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var middle=f.p.north(2).above();
+        var cane=Blocks.SUGAR_CANE.defaultBlockState();
+        for(int i=0;i<heights.length;i++){
+            var root=middle.east(i-heights.length/2);
+            f.l.setBlock(root.below(2),Blocks.STONE.defaultBlockState(),3);
+            f.l.setBlock(root.below(2).north(),Blocks.STONE.defaultBlockState(),3);
+            f.l.setBlock(root.below(),Blocks.SAND.defaultBlockState(),3);
+            f.l.setBlock(root.below().north(),Blocks.WATER.defaultBlockState(),3);
+            check(cane.canSurvive(f.l,root),"invalid cane fixture at "+root);
+            for(int y=0;y<heights[i];y++)f.l.setBlock(root.above(y),cane,3);
+        }
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        var start=Vec3.atBottomCenterOf(f.p.south(2).above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        Runnable audit=()->{
+            for(int i=0;i<heights.length;i++){
+                var root=middle.east(i-heights.length/2);
+                int expected=i==heights.length/2?1:heights[i];
+                for(int y=0;y<3;y++)check(f.l.getBlockState(root.above(y)).is(Blocks.SUGAR_CANE)==(y<expected),
+                    "cane at "+root.above(y)+" is "+f.l.getBlockState(root.above(y))+" with support "+f.l.getBlockState(root.below())
+                    +" and water "+f.l.getFluidState(root.below().north())+" differs from expected height "+expected);
+                check(f.l.getBlockState(root.below()).is(Blocks.SAND),"cane support changed");
+            }
+        };
+        h.startSequence().thenWaitUntil(()->{
+            check(f.l.getBlockState(middle.above()).isAir(),"selected cane has not been harvested");
+            check(f.v.distanceToSqr(start)>4,"worker did not walk to the cane");
+            audit.run();
+        }).thenWaitUntil(()->{
+            check(count(f,Items.SUGAR_CANE)==2,"worker has not picked up both actual cane drops");
+            audit.run();
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_post_drops_generic_block_and_contents_and_keeps_history(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        level(f,2,36);
+        f.s.setItem(0,new ItemStack(Items.CARROT,15));
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        check(f.l.destroyBlock(f.p,true),"farmer post could not be removed");
+        var drops=f.l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,new net.minecraft.world.phys.AABB(f.p).inflate(2));
+        check(drops.stream().filter(e->e.getItem().is(WorkModule.INDUSTRIAL.get().asItem())).mapToInt(e->e.getItem().getCount()).sum()==1,
+            "missing or duplicated industrial block");
+        check(drops.stream().filter(e->e.getItem().is(Items.CARROT)).mapToInt(e->e.getItem().getCount()).sum()==15,"lost or duplicated carrots");
+        check(drops.stream().filter(e->e.getItem().is(Items.IRON_HOE)).count()==1,"lost or duplicated tool");
+        check(drops.stream().noneMatch(e->e.getItem().is(WorkModule.PROFESSIONAL.get(Profession.FARMER).get().asItem())),"professional token still dropped");
+        check(EmploymentData.get(f.l).station(f.s.id)==null&&!Employment.active(f.v),"stale station identity");
+        check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.FARMER.id()).xp()==36,"employment history was lost");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=230,batch="farmer_water_day_deep")
+    public static void farmer_surfaces_from_two_blocks_of_water_and_resumes_work(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var ripe=crop(f,((CropBlock)Blocks.WHEAT).getStateForAge(7));
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,3));
+        var bottom=f.p.south(2).below();
+        for(var at:BlockPos.betweenClosed(bottom.offset(-1,0,-1),bottom.offset(1,1,1))){
+            var wall=!at.equals(bottom)&&!at.equals(bottom.above());
+            f.l.setBlock(at,wall?Blocks.STONE.defaultBlockState():Blocks.WATER.defaultBlockState(),3);
+        }
+        f.l.setBlock(bottom.below(),Blocks.STONE.defaultBlockState(),3);
+        var start=Vec3.atBottomCenterOf(bottom);
+        f.v.setPos(start.x,start.y+.05,start.z);
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->{
+            check(!f.v.isInWaterOrBubble()&&f.v.getY()>start.y+1.8,"farmer has not surfaced from the deep channel at "+f.v.position());
+        }).thenWaitUntil(()->check(f.l.getBlockState(ripe).getValue(CropBlock.AGE)==0,"farmer did not return to work after surfacing"))
+            .thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=200,batch="farmer_pickup_by_fence")
+    public static void farmer_collects_a_moving_item_at_a_fence_corner_without_collecting_through_wall(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var fence=f.p.east(2).north().above();
+        f.l.setBlock(fence,Blocks.OAK_FENCE.defaultBlockState(),3);
+        f.l.setBlock(fence.north(),Blocks.OAK_FENCE.defaultBlockState(),3);
+        var stone=fence.east(2);
+        f.l.setBlock(stone,Blocks.STONE.defaultBlockState(),3);
+        f.l.setBlock(stone.above(),Blocks.STONE.defaultBlockState(),3);
+        var start=Vec3.atBottomCenterOf(f.p.west().south().above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        var moved=new net.minecraft.world.entity.item.ItemEntity(f.l,fence.getX()-.8,fence.getY()+.1,fence.getZ()+.12,new ItemStack(Items.STICK));
+        moved.setDeltaMovement(.17,0,0);
+        f.l.addFreshEntity(moved);
+        var buried=new net.minecraft.world.entity.item.ItemEntity(f.l,stone.getX()+.5,stone.getY()+.5,stone.getZ()+.5,new ItemStack(Items.DIAMOND));
+        buried.setNoGravity(true);
+        buried.setDeltaMovement(Vec3.ZERO);
+        f.l.addFreshEntity(buried);
+        h.startSequence().thenWaitUntil(()->{
+            check(!moved.isAlive()&&count(f,Items.STICK)==1,"moving item near fence was not reached");
+            check(f.v.distanceToSqr(start)>2,"worker collected from its starting position");
+            check(count(f,Items.DIAMOND)==0,"worker collected through the solid barrier");
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=260,batch="farmer_residential_escape")
+    public static void farmer_evades_zombie_inside_residence_and_then_sleeps(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID());
+        buildWalkableFloor(f,home.pos);
+        var bed=placeBed(f.l,home.pos.east(2).above());
+        var start=Vec3.atBottomCenterOf(home.pos.south(3).above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.l.setDayTime(13000);
+        f.v.setNoAi(false);
+        var zombie=EntityType.ZOMBIE.create(f.l);
+        zombie.setNoAi(true);
+        zombie.setPos(start.x,start.y,start.z-1.5);
+        f.l.addFreshEntity(zombie);
+        zombie.setTarget(f.v);
+        Runnable bounds=()->{
+            double limit=home.size/2+.5;
+            check(Math.abs(f.v.getX()-home.pos.getX()-.5)<limit&&Math.abs(f.v.getZ()-home.pos.getZ()-.5)<limit,
+                "worker left the residential boundary at "+f.v.position());
+        };
+        h.startSequence().thenWaitUntil(()->{
+            bounds.run();
+            check(Employment.fleeing(f.v)&&f.v.distanceToSqr(start)>1,"night worker did not evade the zombie");
+            check(f.v.getLastHurtByMob()==null,"escape required damage");
+        }).thenExecuteFor(15,bounds).thenExecute(zombie::discard).thenWaitUntil(()->{
+            bounds.run();
+            check(f.v.getSleepingPos().filter(bed::equals).isPresent(),"farmer did not return to its bed");
+        }).thenExecute(()->f.l.setDayTime(1000)).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=240,batch="farmer_collect_in_current")
+    public static void farmer_reaches_item_carried_by_a_current_from_the_bank(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var source=f.p.east(2).north(2);
+        for(int i=0;i<4;i++){
+            var water=source.south(i);
+            f.l.setBlock(water,Blocks.AIR.defaultBlockState(),3);
+            f.l.setBlock(water.below(),Blocks.STONE.defaultBlockState(),3);
+        }
+        f.l.setBlock(source,Blocks.WATER.defaultBlockState(),3);
+        var start=Vec3.atBottomCenterOf(f.p.west(2).above());
+        f.v.setPos(start.x,start.y,start.z);
+        var drop=new net.minecraft.world.entity.item.ItemEntity(f.l,source.getX()+.5,source.getY()+.65,source.getZ()+1.3,
+            new ItemStack(Items.FLINT));
+        drop.setDeltaMovement(0,0,0);
+        h.startSequence().thenWaitUntil(()->check(f.l.getFluidState(source.south(2)).is(net.minecraft.tags.FluidTags.WATER),"no flowing water"))
+            .thenExecute(()->f.l.addFreshEntity(drop)).thenWaitUntil(()->{
+                check(drop.getZ()>source.getZ()+1.38,"item has not moved along the current: "+drop.position());
+            }).thenExecute(()->f.v.setNoAi(false)).thenWaitUntil(()->{
+                check(!drop.isAlive()&&count(f,Items.FLINT)==1,"worker at "+f.v.position()+" did not reach drifting item at "+drop.position());
+                check(f.v.distanceToSqr(start)>2,"distant water pickup bypassed walking");
+            }).thenSucceed();
     }
 
 }

@@ -55,13 +55,13 @@ if result.returncode and 'Gradle build daemon disappeared unexpectedly' not in t
     fail(result.returncode)
 for marker in ['COURIER_PLAYER_OVERLAP_PASSED','COURIER_CLIENT_OPEN_CLOSE_PASSED','COURIER_GRAPHICAL_DEPOSIT_PASSED','STEVE_WORLD_OPACITY_50_PASSED','STEVE_WORLD_OPACITY_PERCENTAGES_PASSED','STEVE_MULTI_RESIDENT_OPACITY_SYNC_PASSED','STEVE_MULTI_RESIDENT_OPACITY_CAPTURED']:
     if marker not in text:fail('Minecraft client check missing '+marker)
-for marker in ['EMPLOYMENT_GRAPHICAL_CONTRACT_PASSED','EMPLOYMENT_INVENTORY_SHARED_PASSED','EMPLOYMENT_DISMISS_GRAPHICAL_PASSED','EMPLOYMENT_PORTABLE_INVENTORY_PASSED','COMMERCIAL_PENDING_NO_CHARGE_PASSED','EMPLOYMENT_REHIRE_PROGRESS_PASSED','EMPLOYMENT_RESIDENTIAL_INDICATOR_PASSED']:
+for marker in ['EMPLOYMENT_GRAPHICAL_CONTRACT_PASSED','EMPLOYMENT_INVENTORY_SHARED_PASSED','EMPLOYMENT_DISMISS_GRAPHICAL_PASSED','EMPLOYMENT_FARMER_RECOVERY_DROPS_PASSED','COMMERCIAL_PENDING_NO_CHARGE_PASSED','EMPLOYMENT_REHIRE_PROGRESS_PASSED','EMPLOYMENT_RESIDENTIAL_INDICATOR_PASSED']:
     if marker not in text:fail('Employment client check missing '+marker)
 if 'INDUSTRY_BLUE_LIMITS_PASSED' not in text:fail('Blue work area toggle was not validated.')
 for marker in ('FARMER_HELD_HOE_RENDERED_AT_DOUBLE_SCALE','FARMER_ZIGZAG_HARVEST_JUMP_DISCARD_AND_SLEEP_PASSED',
                'FARMER_VISITOR_EXIT_AND_BLOCKED_ROUTE_RECOVERY_PASSED','FARMER_THREE_DISTINCT_BEDS_PASSED',
-               'FARMER_FLOWING_CHANNEL_EXIT_PASSED','FARMER_FORGE_INVENTORY_PARTIAL_PASSED',
-               'FARMER_NIGHT_PURSUIT_HOME_RETURN_PASSED','FARMER_THREE_DISCARDS_AND_SHARED_FORGE_PASSED'):
+               'FARMER_FLOWING_CHANNEL_EXIT_PASSED','FARMER_MIXED_SOIL_ZIGZAG_PASSED','FARMER_FORGE_INVENTORY_PARTIAL_PASSED',
+               'FARMER_NIGHT_PURSUIT_HOME_RETURN_PASSED','FARMER_THREE_DISCARDS_AND_SHARED_FORGE_PASSED','FARMER_AUTHORIZED_ENDER_DISCARD_PASSED'):
     if marker not in text:fail('Farmer client check missing '+marker)
 for job in ('FARMER','BUTCHER','SHEPHERD','FISHERMAN','BREEDER','BEEKEEPER'):
     if f'INDUSTRY_{job}_FUNCTIONAL_PASSED' not in text:fail('Industry client check missing '+job)
@@ -90,6 +90,7 @@ if 'EMPLOYMENT_WORLD_RESTART_PASSED' not in restored_text:
 if 'WORKFORCE_WORLD_RESTART_PASSED' not in restored_text:
     fail('Workforce state did not survive a complete Minecraft process restart.')
 if 'FARMER_SAME_WORLD_RESTART_PASSED' not in restored_text:fail('Farmer persistence did not survive process restart.')
+if 'FARMER_AUTHORIZED_ENDER_RESTART_PASSED' not in restored_text:fail('The authorized Ender chest did not survive reopening.')
 if 'FARMER_THREE_SLEEP_AFTER_RESTART_PASSED' not in restored_text:fail('The three saved farmers did not sleep again after reopening.')
 if 'INDUSTRY_SIX_JOBS_WORLD_RESTART_PASSED' not in restored_text:
     fail('Six industrial jobs did not survive process restart.')

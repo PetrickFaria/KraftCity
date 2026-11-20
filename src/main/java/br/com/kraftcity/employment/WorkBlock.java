@@ -63,7 +63,8 @@ public final class WorkBlock extends BaseEntityBlock {
                 &&!(Employment.CONVERTING.get()&&next.getBlock() instanceof WorkBlock)
                 &&level.getBlockEntity(pos) instanceof WorkBlockEntity be){
             var s=be.station();if(s!=null){
-                Employment.makePortable(server,s);
+                if(profession==Profession.FARMER)Employment.recoverFarmerStation(server,s);
+                else Employment.makePortable(server,s);
             }
         }
         super.onRemove(state,level,pos,next,moving);

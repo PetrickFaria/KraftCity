@@ -58,6 +58,7 @@ public final class FarmerVisualCheck {
     private static int ticks;
     private static int capturedStage=-1,visibleStage=-1,stageTicks;
     private static long nightStarted;
+    private static int recordedPlots;
     private FarmerVisualCheck(){}
 
     private static EmploymentData.Station station(ServerLevel l){
@@ -85,7 +86,10 @@ public final class FarmerVisualCheck {
         l.getEntitiesOfClass(Villager.class,new AABB(HOME).inflate(7)).forEach(Villager::discard);
         l.setBlock(HOME,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);
         check(((ResidentialAnchorBlockEntity)l.getBlockEntity(HOME)).setSize(11),"home size configuration");
-        for(var at:ROW)l.setBlock(at.below(),Blocks.DIRT.defaultBlockState(),3);
+        for(int i=0;i<ROW.size();i++){
+            var soil=i%2==0?Blocks.DIRT.defaultBlockState():Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE,7);
+            l.setBlock(ROW.get(i).below(),soil,3);
+        }
         var v=EntityType.VILLAGER.create(l);
         v.setAge(0);v.setInvulnerable(true);
         v.setPos(POST.getX()+1.5,POST.getY()+1,POST.getZ()+2.5);
@@ -136,7 +140,11 @@ public final class FarmerVisualCheck {
                 check(!planted||previous,"new crops skipped a reachable zigzag position");
                 previous=planted;
             }
+            while(recordedPlots<ROW.size()&&l.getBlockState(ROW.get(recordedPlots)).is(Blocks.WHEAT)){
+                System.out.println("FARMER_ZIGZAG_PLOT "+(++recordedPlots)+" "+ROW.get(recordedPlots-1));
+            }
             if(!previous||!visitorLeft)return;
+            System.out.println("FARMER_MIXED_SOIL_ZIGZAG_PASSED");
             l.setBlock(ROW.get(0),Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);
             s.setItem(0,new ItemStack(Items.WHEAT_SEEDS));
             for(int height=1;height<3;height++)l.setBlock(CANE.above(height),Blocks.SUGAR_CANE.defaultBlockState(),3);
@@ -217,8 +225,22 @@ public final class FarmerVisualCheck {
                     job.setItem(0,new ItemStack(Items.CARROT,15));
                     job.setItem(1,new ItemStack(Items.STICK,2));
                 }else{
-                    l.setBlock(COMPANION_CHEST,Blocks.CHEST.defaultBlockState(),3);
+                    l.setBlock(COMPANION_CHEST,Blocks.ENDER_CHEST.defaultBlockState(),3);
+                    var offered=new int[27];offered[0]=3;
                     job.setItem(0,new ItemStack(Items.COBBLESTONE,3));
+                    check(!br.com.kraftcity.logistics.DiscardChests.accepts(l,job,companion,COMPANION_CHEST,offered),
+                        "personal Ender chest accepted items before consent");
+                    var held=p.getMainHandItem().copy();
+                    boolean crouched=p.isShiftKeyDown();
+                    p.setShiftKeyDown(true);
+                    p.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,new ItemStack(Items.ENDER_EYE));
+                    var permission=net.minecraftforge.common.ForgeHooks.onRightClickBlock(p,net.minecraft.world.InteractionHand.MAIN_HAND,
+                        COMPANION_CHEST,new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(COMPANION_CHEST),
+                            Direction.UP,COMPANION_CHEST,false));
+                    p.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,held);
+                    p.setShiftKeyDown(crouched);
+                    check(permission.isCanceled()&&br.com.kraftcity.logistics.DiscardChests.accepts(l,job,companion,COMPANION_CHEST,offered),
+                        "explicit owner consent did not authorize Ender transfer");
                 }
                 var head=BED.south(i==0?-2:2);
                 var state=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
@@ -281,8 +303,8 @@ public final class FarmerVisualCheck {
             var forgeJob=EmploymentData.get(l).assigned(companions.get(1));
             check(forgeStorage.getStackInSlot(0).getCount()==64&&forgeJob.countItem(Items.CARROT)==13
                 &&forgeJob.countItem(Items.STICK)==2,"Forge partial insert or filter failed: shared="+forgeStorage.getStackInSlot(0)+" carrots="+forgeJob.countItem(Items.CARROT)+" sticks="+forgeJob.countItem(Items.STICK));
-            var third=(net.minecraft.world.level.block.entity.ChestBlockEntity)l.getBlockEntity(COMPANION_CHEST);
-            check(third.countItem(Items.COBBLESTONE)==3,"third farmer did not finish its discard");
+            check(p.getEnderChestInventory().countItem(Items.COBBLESTONE)==3,"third farmer did not finish its authorized Ender discard");
+            System.out.println("FARMER_AUTHORIZED_ENDER_DISCARD_PASSED");
             System.out.println("FARMER_FORGE_INVENTORY_PARTIAL_PASSED");
             System.out.println("FARMER_THREE_DISCARDS_AND_SHARED_FORGE_PASSED");
             var sleepingBeds=new HashSet<BlockPos>();
@@ -402,6 +424,7 @@ public final class FarmerVisualCheck {
             }));
         }
         if(tick%10==0&&!restoredSleeping){
+            var ownerId=mc.player.getUUID();
             server.execute(()->recordFailure(()->{
                 var level=server.overworld();
                 var station=station(level);
@@ -414,6 +437,11 @@ public final class FarmerVisualCheck {
                     check(beds.add(bed)&&ResidenceData.get(level).ownsBed(level.dimension(),bed,id),
                         "reopened farm has a conflicting bed");
                 }
+                var owner=server.getPlayerList().getPlayer(ownerId);
+                check(owner.getEnderChestInventory().countItem(Items.COBBLESTONE)==3
+                    &&br.com.kraftcity.logistics.DiscardChests.capability(level,COMPANION_CHEST)!=null,
+                    "explicit Ender link or deposited items were lost on restart");
+                System.out.println("FARMER_AUTHORIZED_ENDER_RESTART_PASSED");
                 restoredSleeping=true;
             }));
         }
@@ -439,7 +467,8 @@ public final class FarmerVisualCheck {
         check(s.industry.getInt("zigzag_harvest")==s.industry.getInt("visual_saved_harvest_cursor")
             &&s.industry.getInt("zigzag_plant")==s.industry.getInt("visual_saved_plant_cursor"),"saved zigzag cursors changed");
         check(((BarrelBlockEntity)l.getBlockEntity(CHEST)).countItem(Items.COBBLESTONE)==6,"saved discard changed");
-        for(var at:ROW)check(l.getBlockState(at).is(Blocks.WHEAT),"saved crop changed");
+        for(var at:ROW)check(l.getBlockState(at).is(Blocks.WHEAT)&&l.getBlockState(at.below()).is(Blocks.FARMLAND),
+            "saved crop or soil changed at "+at);
         System.out.println("FARMER_SAME_WORLD_RESTART_PASSED");
     }
 }
