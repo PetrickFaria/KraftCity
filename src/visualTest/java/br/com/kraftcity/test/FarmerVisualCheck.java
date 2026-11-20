@@ -27,7 +27,8 @@ import net.minecraft.world.level.block.state.properties.BedPart;
 
 @net.minecraftforge.fml.common.Mod.EventBusSubscriber(modid="residenciasaldeoes",value=net.minecraftforge.api.distmarker.Dist.CLIENT)
 public final class FarmerVisualCheck {
-    private static final BlockPos POST=new BlockPos(79,-61,60);
+    // This scenario has its own containers and neighbors, away from the GameTest grid.
+    private static final BlockPos POST=new BlockPos(79,-61,-120);
     private static final BlockPos HOME=POST.offset(-7,0,-1);
     private static final BlockPos BED=HOME.east(3).above();
     private static final BlockPos CHEST=POST.offset(-5,1,2);
@@ -211,7 +212,7 @@ public final class FarmerVisualCheck {
             check(l.getGameTime()-nightStarted<480,"night sequence did not finish: "+progressDetail);
             if(!v.isSleeping())return;
             check(v.getSleepingPos().filter(BED::equals).isPresent(),"farmer slept outside its own bed");
-            check(seenPhysicalDeposit&&deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding");
+            check(seenPhysicalDeposit&&deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding: "+progressDetail+" at designated barrel="+seenPhysicalDeposit);
             s.industry.putBoolean("visual_farmer_night",true);
             s.industry.putInt("visual_saved_harvest_cursor",s.industry.getInt("zigzag_harvest"));
             s.industry.putInt("visual_saved_plant_cursor",s.industry.getInt("zigzag_plant"));
