@@ -26,6 +26,10 @@ public final class EmploymentEvents {
         if(event.getEntity() instanceof Villager v&&event.getLevel() instanceof ServerLevel l
                 &&!br.com.kraftcity.military.Military.transferring(v.getUUID())&&v.getRemovalReason()!=null&&v.getRemovalReason().shouldDestroy())Employment.release(l,v.getUUID());
     }
+    @SubscribeEvent public void workerBreeding(net.minecraftforge.event.entity.living.BabyEntitySpawnEvent event){
+        if(event.getParentA() instanceof Villager first&&Employment.active(first)
+            ||event.getParentB() instanceof Villager second&&Employment.active(second))event.setCanceled(true);
+    }
     @SubscribeEvent public void died(LivingDeathEvent event){if(event.getEntity() instanceof Villager v&&v.level instanceof ServerLevel l)Employment.release(l,v.getUUID());}
     @SubscribeEvent public void joined(EntityJoinLevelEvent event){if(event.getEntity() instanceof Villager v&&event.getLevel() instanceof ServerLevel l){var s=EmploymentData.get(l).assigned(v.getUUID());if(s!=null&&!s.dimension.equals(l.dimension()))Employment.release(l,v.getUUID());else Employment.valid(l,v.getUUID());}}
     @SubscribeEvent(priority=EventPriority.HIGHEST)

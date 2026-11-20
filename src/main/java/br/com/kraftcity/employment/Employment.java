@@ -160,13 +160,16 @@ public final class Employment {
 
     static void recoverFarmerStation(ServerLevel level,EmploymentData.Station station){
         if(!station.active)return;
+        int area=br.com.kraftcity.industry.IndustrialRules.size(level,station);
         if(station.worker!=null)release(level,station.worker);
         station.active=false;
         EmploymentData.get(level).remove(station.id);
         var recovery=new SimpleContainer(EmploymentData.SLOTS);
         for(int slot=0;slot<EmploymentData.SLOTS;slot++)recovery.setItem(slot,station.removeItemNoUpdate(slot));
         Containers.dropContents(level,station.pos,recovery);
-        net.minecraft.world.level.block.Block.popResource(level,station.pos,new ItemStack(WorkModule.INDUSTRIAL.get()));
+        var block=new ItemStack(WorkModule.INDUSTRIAL.get());
+        if(area>5)block.getOrCreateTag().putInt("KraftCityFarmerArea",area);
+        net.minecraft.world.level.block.Block.popResource(level,station.pos,block);
     }
 
     public static void makePortable(ServerLevel level,EmploymentData.Station s){
@@ -191,7 +194,9 @@ public final class Employment {
         br.com.kraftcity.military.Military.release(level,worker);
         var data=EmploymentData.get(level);
         for(ServerLevel world:level.getServer().getAllLevels())if(world.getEntity(worker) instanceof Villager v)br.com.kraftcity.industry.IndustrialWork.restoreHand(v);
-        for(var s:data.stations())if(worker.equals(s.worker)){s.worker=null;s.industry.putLong("employment_epoch",epoch(s)+1);if(s.sector==Profession.Sector.COMMERCIAL)s.commerce.putLong("epoch",s.commerce.getLong("epoch")+1);s.setChanged();}
+        for(var s:data.stations())if(worker.equals(s.worker)){
+            if(s.profession==Profession.FARMER)br.com.kraftcity.industry.IndustrialRules.size(level,s);
+            s.worker=null;s.industry.putLong("employment_epoch",epoch(s)+1);if(s.sector==Profession.Sector.COMMERCIAL)s.commerce.putLong("epoch",s.commerce.getLong("epoch")+1);s.setChanged();}
         var workforce=WorkforceData.get(level);var old=workforce.worker(worker).orElse(null);
         if(old!=null&&old.workstation().isPresent()){
             old.profession().ifPresent(p->{var progress=workforce.progress(worker,p);workforce.setProgress(worker,p,old.level(),progress.xp());});
@@ -282,6 +287,7 @@ public final class Employment {
             finally { CONVERTING.remove(); }
         }
         if(!(level.getBlockEntity(s.pos) instanceof WorkBlockEntity converted))throw new IllegalStateException("Missing professional block entity");
+        if(profession==Profession.FARMER&&s.profession==null&&!s.industry.contains("size"))s.industry.putInt("size",5);
         converted.bind(s.id);s.profession=profession;s.worker=worker;s.industry.putLong("employment_epoch",epoch(s)+1);s.setChanged();
         var workforce=WorkforceData.get(level);var progress=workforce.progress(worker,profession.id());
         var previous=workforce.worker(worker).orElse(null);

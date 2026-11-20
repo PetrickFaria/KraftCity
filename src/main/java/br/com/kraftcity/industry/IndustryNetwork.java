@@ -19,7 +19,11 @@ public final class IndustryNetwork {
         public void handle(Supplier<NetworkEvent.Context> c){var p=c.get().getSender();
             if(p!=null&&p.containerMenu instanceof WorkMenu m&&m.containerId==menu&&m.stationId.equals(station)&&!m.hiring&&m.stillValid(p)){
                 var s=m.station();if(s!=null&&s.profession!=null){
-                    if(command==0)IndustrialRules.selectSize(p.getLevel(),s,size);
+                    if(command==0&&IndustrialRules.selectSize(p.getLevel(),s,size)){
+                        if(s.profession==Profession.FARMER&&s.worker!=null
+                            &&p.getLevel().getEntity(s.worker) instanceof net.minecraft.world.entity.npc.Villager worker)FarmerLogistics.areaChanged(worker);
+                        sendBounds(p);
+                    }
                     else if(command==1){s.industry.putBoolean("preview",!s.industry.getBoolean("preview"));s.setChanged();sendBounds(p);}
                     else if(command==4&&s.sector==Profession.Sector.COMMERCIAL){br.com.kraftcity.commerce.CommercialWork.cancel(s);}
                     else if(command==3&&s.profession==Profession.BUTCHER){p.getPersistentData().putUUID("KCRegisterAnimal",station);p.closeContainer();p.sendSystemMessage(Component.literal("Clique nos animais que você colocou na área. Agache e clique no posto para encerrar."));}

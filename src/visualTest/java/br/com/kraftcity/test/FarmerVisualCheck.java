@@ -35,7 +35,7 @@ public final class FarmerVisualCheck {
     private static final BlockPos POST=new BlockPos(79,-61,-120);
     private static final BlockPos HOME=POST.offset(-7,0,-1);
     private static final BlockPos BED=HOME.east(3).above();
-    private static final BlockPos CHEST=POST.offset(-5,1,2);
+    private static final BlockPos CHEST=POST.offset(-5,1,4);
     private static final BlockPos CANE=POST.offset(2,1,1);
     private static final BlockPos STEM=POST.offset(-1,1,1);
     private static final BlockPos FRUIT=STEM.south();
@@ -44,6 +44,7 @@ public final class FarmerVisualCheck {
     private static final BlockPos FORGE_CHEST=POST.offset(4,1,-4);
     private static final BlockPos FORGE_ALIAS=FORGE_CHEST.north(2);
     private static final BlockPos COMPANION_CHEST=POST.offset(-6,1,-5);
+    private static final BlockPos ENDER_ALIAS=POST.offset(-7,1,-6);
     private static net.minecraftforge.items.ItemStackHandler forgeStorage;
     private static final BlockPos CARROTS=POST.offset(-2,1,-1);
     private static final BlockPos POTATOES=POST.offset(2,1,0);
@@ -114,6 +115,19 @@ public final class FarmerVisualCheck {
         s.setChanged();
         IndustryNetwork.sendBounds(p);
         stage=1;
+    }
+
+    private static void bindEnder(ServerPlayer player,BlockPos chest) {
+        var hand=net.minecraft.world.InteractionHand.MAIN_HAND;
+        var held=player.getMainHandItem().copy();
+        boolean crouched=player.isShiftKeyDown();
+        player.setShiftKeyDown(true);
+        player.setItemInHand(hand,new ItemStack(Items.ENDER_EYE));
+        var event=net.minecraftforge.common.ForgeHooks.onRightClickBlock(player,hand,chest,
+            new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(chest),Direction.UP,chest,false));
+        player.setItemInHand(hand,held);
+        player.setShiftKeyDown(crouched);
+        check(event.isCanceled(),"explicit Ender consent did not register");
     }
 
     private static void progress(ServerPlayer p){
@@ -230,17 +244,15 @@ public final class FarmerVisualCheck {
                     job.setItem(0,new ItemStack(Items.COBBLESTONE,3));
                     check(!br.com.kraftcity.logistics.DiscardChests.accepts(l,job,companion,COMPANION_CHEST,offered),
                         "personal Ender chest accepted items before consent");
-                    var held=p.getMainHandItem().copy();
-                    boolean crouched=p.isShiftKeyDown();
-                    p.setShiftKeyDown(true);
-                    p.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,new ItemStack(Items.ENDER_EYE));
-                    var permission=net.minecraftforge.common.ForgeHooks.onRightClickBlock(p,net.minecraft.world.InteractionHand.MAIN_HAND,
-                        COMPANION_CHEST,new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(COMPANION_CHEST),
-                            Direction.UP,COMPANION_CHEST,false));
-                    p.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,held);
-                    p.setShiftKeyDown(crouched);
-                    check(permission.isCanceled()&&br.com.kraftcity.logistics.DiscardChests.accepts(l,job,companion,COMPANION_CHEST,offered),
-                        "explicit owner consent did not authorize Ender transfer");
+                    bindEnder(p,COMPANION_CHEST);
+                    l.setBlock(ENDER_ALIAS,Blocks.ENDER_CHEST.defaultBlockState(),3);
+                    bindEnder(p,ENDER_ALIAS);
+                    var ender=p.getEnderChestInventory();
+                    for(int slot=1;slot<ender.getContainerSize();slot++)ender.setItem(slot,new ItemStack(Items.DEEPSLATE,64));
+                    ender.setItem(0,new ItemStack(Items.COBBLESTONE,62));
+                    check(br.com.kraftcity.logistics.DiscardChests.accepts(l,job,companion,COMPANION_CHEST,offered)
+                        &&br.com.kraftcity.logistics.DiscardChests.accepts(l,job,companion,ENDER_ALIAS,offered),
+                        "authorized Ender chests did not share the owner's inventory");
                 }
                 var head=BED.south(i==0?-2:2);
                 var state=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
@@ -303,7 +315,12 @@ public final class FarmerVisualCheck {
             var forgeJob=EmploymentData.get(l).assigned(companions.get(1));
             check(forgeStorage.getStackInSlot(0).getCount()==64&&forgeJob.countItem(Items.CARROT)==13
                 &&forgeJob.countItem(Items.STICK)==2,"Forge partial insert or filter failed: shared="+forgeStorage.getStackInSlot(0)+" carrots="+forgeJob.countItem(Items.CARROT)+" sticks="+forgeJob.countItem(Items.STICK));
-            check(p.getEnderChestInventory().countItem(Items.COBBLESTONE)==3,"third farmer did not finish its authorized Ender discard");
+            var enderJob=EmploymentData.get(l).assigned(companions.get(0));
+            check(p.getEnderChestInventory().countItem(Items.COBBLESTONE)==64&&enderJob.countItem(Items.COBBLESTONE)==1,
+                "partial Ender discard lost items or inserted twice through the alias");
+            var rest=new int[27];rest[0]=1;
+            var enderWorker=(Villager)l.getEntity(companions.get(0));
+            check(!br.com.kraftcity.logistics.DiscardChests.accepts(l,enderJob,enderWorker,ENDER_ALIAS,rest),"full alias accepted an item");
             System.out.println("FARMER_AUTHORIZED_ENDER_DISCARD_PASSED");
             System.out.println("FARMER_FORGE_INVENTORY_PARTIAL_PASSED");
             System.out.println("FARMER_THREE_DISCARDS_AND_SHARED_FORGE_PASSED");
@@ -438,8 +455,9 @@ public final class FarmerVisualCheck {
                         "reopened farm has a conflicting bed");
                 }
                 var owner=server.getPlayerList().getPlayer(ownerId);
-                check(owner.getEnderChestInventory().countItem(Items.COBBLESTONE)==3
-                    &&br.com.kraftcity.logistics.DiscardChests.capability(level,COMPANION_CHEST)!=null,
+                check(owner.getEnderChestInventory().countItem(Items.COBBLESTONE)==64
+                    &&br.com.kraftcity.logistics.DiscardChests.capability(level,COMPANION_CHEST)!=null
+                    &&br.com.kraftcity.logistics.DiscardChests.capability(level,ENDER_ALIAS)!=null,
                     "explicit Ender link or deposited items were lost on restart");
                 System.out.println("FARMER_AUTHORIZED_ENDER_RESTART_PASSED");
                 restoredSleeping=true;

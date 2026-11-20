@@ -55,7 +55,16 @@ public final class WorkBlock extends BaseEntityBlock {
                 var s=EmploymentData.get(server).station(stack.getTag().getUUID("KraftCityStation"));
                 if(s==null||s.active)throw new IllegalStateException("Invalid portable station placement");
                 s.active=true;s.dimension=server.dimension();s.pos=pos.immutable();s.setChanged();be.bind(s.id);
-            }else be.station();
+            }else{
+                var station=be.station();
+                if(sector==Profession.Sector.INDUSTRIAL&&profession==null&&stack.hasTag()){
+                    int area=stack.getTag().getInt("KraftCityFarmerArea");
+                    if(area>=7&&area<=13&&area%2==1){
+                        station.industry.putInt("size",area);
+                        station.setChanged();
+                    }
+                }
+            }
         }
     }
     @Override public void onRemove(BlockState state,Level level,BlockPos pos,BlockState next,boolean moving){

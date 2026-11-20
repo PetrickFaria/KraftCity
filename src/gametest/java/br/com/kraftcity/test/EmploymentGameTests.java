@@ -271,4 +271,35 @@ public final class EmploymentGameTests {
         f.resident.hurt(net.minecraft.world.damagesource.DamageSource.GENERIC,Float.MAX_VALUE);
         check(f.station.worker==null&&WorkforceData.get(f.level).progress(id,Profession.FARMER.id()).level()==2,"Death left job or erased history");h.succeed();
     }
+    @GameTest(template="empty",timeoutTicks=40,batch="employment")
+    public static void generic_work_blocks_stack_to_64_and_recovery_tokens_stay_individual(GameTestHelper h){
+        var level=h.getLevel();
+        var player=FakePlayerFactory.get(level,new GameProfile(UUID.randomUUID(),"StackingTest"));
+        int index=0;
+        for(var sector:Profession.Sector.values()){
+            var stack=new ItemStack(WorkModule.generic(sector),64);
+            check(stack.getMaxStackSize()==64&&stack.isStackable(),"generic "+sector+" does not stack");
+            var part=stack.split(12);
+            check(stack.getCount()==52&&part.getCount()==12,"stack split lost blocks");
+            var first=h.absolutePos(new BlockPos(3+index++,2,2));
+            UUID previous=null;
+            player.setItemInHand(InteractionHand.MAIN_HAND,stack);
+            for(int i=0;i<2;i++){
+                var at=first.south(i);
+                level.setBlock(at.below(),Blocks.STONE.defaultBlockState(),3);
+                var hit=new BlockHitResult(Vec3.atCenterOf(at.below()),Direction.UP,at.below(),false);
+                check(((BlockItem)stack.getItem()).place(new BlockPlaceContext(player,InteractionHand.MAIN_HAND,stack,hit)).consumesAction(),"stacked generic block failed to place");
+                var placed=((WorkBlockEntity)level.getBlockEntity(at)).station();
+                check(!placed.id.equals(previous)&&placed.sector==sector&&placed.profession==null&&placed.worker==null,
+                    "stacked placements shared a ledger identity");
+                previous=placed.id;
+            }
+            check(stack.getCount()==50,"placing two generic blocks consumed the wrong count");
+            part.getOrCreateTag().putUUID("KraftCityStation",UUID.randomUUID());
+            part.setCount(1);
+            check(part.getMaxStackSize()==1&&!part.isStackable(),"recovery token became stackable");
+        }
+        h.succeed();
+    }
+
 }

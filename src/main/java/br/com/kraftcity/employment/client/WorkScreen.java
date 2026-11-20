@@ -81,7 +81,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
             int size=5+i*2;
             var button=addRenderableWidget(new Button(leftPos+FARM_AREA_X+i*35,topPos+FARM_AREA_Y,32,17,
                 Component.literal(size+"×"+size),b->option(size,0)));
-            button.active=state!=null&&(state.level()>=IndustrialRules.MAX_LEVEL||size==IndustrialRules.maximumSize(state.level()));
+            button.active=state!=null&&size<=IndustrialRules.maximumSize(state.level());
         }
         addRenderableWidget(new Button(leftPos+246,topPos+FARM_AREA_Y,51,17,
             Component.literal("Limites"),b->option(0,1)));

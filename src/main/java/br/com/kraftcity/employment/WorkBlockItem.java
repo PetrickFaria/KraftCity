@@ -7,7 +7,10 @@ import net.minecraft.server.level.ServerLevel;
 
 /** Even creative-mode copies of a recovery token can activate its ledger only once. */
 public final class WorkBlockItem extends BlockItem {
-    public WorkBlockItem(WorkBlock block){super(block,new Item.Properties().stacksTo(1));}
+    public WorkBlockItem(WorkBlock block){super(block,new Item.Properties().stacksTo(block.profession==null?64:1));}
+    @Override public int getMaxStackSize(ItemStack stack){
+        return stack.hasTag()&&!stack.getTag().isEmpty()?1:super.getMaxStackSize(stack);
+    }
     @Override public InteractionResult place(BlockPlaceContext context){
         ItemStack stack=context.getItemInHand();
         if(context.getLevel() instanceof ServerLevel level&&stack.hasTag()&&stack.getTag().hasUUID("KraftCityStation")){

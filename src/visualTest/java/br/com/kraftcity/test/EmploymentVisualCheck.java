@@ -115,7 +115,7 @@ public final class EmploymentVisualCheck {
         });
         if(ticks==870){check(hired&&mc.player.containerMenu instanceof WorkMenu m&&!m.hiring&&m.slots.get(0).getItem().getCount()==13,"Professional menu inventory did not sync");checkFarmerHeader(screen(mc),"Steve (Fazendeiro) - Lv. 3",50);
             checkCompactFarmer(mc,screen(mc),(WorkMenu)mc.player.containerMenu);
-            check(!button(screen(mc),"5×5").active&&button(screen(mc),"9×9").active&&!button(screen(mc),"13×13").active,"Farmer area level lock");
+            check(button(screen(mc),"5×5").active&&button(screen(mc),"7×7").active&&button(screen(mc),"9×9").active&&!button(screen(mc),"13×13").active,"Farmer area level lock");
             capture(mc,"visual-farmer-inventory.png");}
         if(ticks==875)server.execute(()->{
             var player=server.getPlayerList().getPlayer(playerId);var resident=(Villager)player.getLevel().getEntity(worker);
@@ -175,6 +175,7 @@ public final class EmploymentVisualCheck {
             var context=new BlockPlaceContext(player,InteractionHand.MAIN_HAND,token,new BlockHitResult(Vec3.atCenterOf(POST.below()),Direction.UP,POST.below(),false));
             check(((BlockItem)token.getItem()).place(context).consumesAction(),"Generic recovery placement failed");
             var replacement=station(level,POST);
+            check(replacement.industry.getInt("size")==11,"recovered post lost its manually selected area");
             int restored=0;
             for(var drop:drops){
                 var item=drop.getItem();

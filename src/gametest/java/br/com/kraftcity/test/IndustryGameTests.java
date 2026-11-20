@@ -58,7 +58,7 @@ public final class IndustryGameTests {
             step(f,3);
             if(i%25==0)check(progress.level()==Math.min(5,1+i/25),"wrong level threshold #"+i);
         }
-        check(IndustrialRules.size(f.l,f.s)==13,"Lv5 area");h.succeed();
+        check(IndustrialRules.size(f.l,f.s)==5,"level progression changed the chosen area");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void farmer_automatic_inputs_irrigation_and_no_source_water(GameTestHelper h){
@@ -66,7 +66,7 @@ public final class IndustryGameTests {
         var p=crop(f,Blocks.WHEAT.defaultBlockState());step(f,1);
         check(f.s.getItem(27).is(Items.IRON_HOE)&&f.s.getItem(28).is(Items.BONE_MEAL)&&f.s.getItem(30).is(Items.WATER_BUCKET),"input migration");
         check(f.s.getItem(28).getCount()==7,"bone meal not consumed exactly once");check(Irrigation.hydrates(f.l,p.below()),"hydration missing");
-        level(f,5,100);check(Irrigation.hydrates(f.l,f.p.offset(4,0,4))&&!Irrigation.hydrates(f.l,f.p.offset(5,0,0)),"vanilla four-block water range");
+        level(f,5,100);check(IndustrialRules.selectSize(f.l,f.s,13),"large irrigation fixture");check(Irrigation.hydrates(f.l,f.p.offset(4,0,4))&&!Irrigation.hydrates(f.l,f.p.offset(5,0,0)),"vanilla four-block water range");
         check(f.l.getFluidState(f.p).isEmpty(),"created water source");
         f.s.setItem(30,ItemStack.EMPTY);check(!Irrigation.hydrates(f.l,p.below()),"ghost irrigation");h.succeed();
     }
@@ -204,8 +204,19 @@ public final class IndustryGameTests {
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void area_selection_respects_level_and_lv5_smaller_options(GameTestHelper h){
-        var f=fixture(h,Profession.FARMER);for(int lv=1;lv<=5;lv++){level(f,lv,0);check(IndustrialRules.size(f.l,f.s)==3+lv*2,"level size");check(!IndustrialRules.selectSize(f.l,f.s,15),"oversize accepted");if(lv<5)check(!IndustrialRules.selectSize(f.l,f.s,3+lv*2-2),"smaller early area accepted");}
-        check(IndustrialRules.selectSize(f.l,f.s,5)&&IndustrialRules.size(f.l,f.s)==5,"Lv5 smaller area");h.succeed();
+        var f=fixture(h,Profession.FARMER);
+        for(int lv=1;lv<=5;lv++){
+            level(f,lv,0);
+            check(IndustrialRules.size(f.l,f.s)==5,"level expanded the selected area");
+            check(!IndustrialRules.selectSize(f.l,f.s,5+lv*2),"locked area accepted");
+            check(IndustrialRules.selectSize(f.l,f.s,3+lv*2),"unlocked area rejected");
+            check(IndustrialRules.size(f.l,f.s)==3+lv*2,"manual size did not take effect");
+            check(IndustrialRules.selectSize(f.l,f.s,5),"cannot reselect the smallest area");
+        }
+        f.s.industry.remove("size");
+        f.s.industry.putInt("zigzag_size",11);
+        check(IndustrialRules.size(f.l,f.s)==11,"legacy active area lost during migration");
+        h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void discard_keeps_plantable_reserve_and_transfers_excess_exactly(GameTestHelper h){
@@ -348,7 +359,10 @@ public final class IndustryGameTests {
         f.s.setItem(27,new ItemStack(Items.IRON_HOE));f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,1));
         step(f,1);check(f.s.industry.getInt("zigzag_size")==5,"missing saved size");
         level(f,5,100);step(f,1);
-        check(f.s.industry.getInt("zigzag_size")==13,"zigzag not invalidated by level growth");
+        check(f.s.industry.getInt("zigzag_size")==5,"level reset the selected zigzag");
+        check(IndustrialRules.selectSize(f.l,f.s,13),"level-five size still locked");
+        step(f,1);
+        check(f.s.industry.getInt("zigzag_size")==13,"zigzag not invalidated by manual resize");
         h.succeed();
     }
 
@@ -377,7 +391,7 @@ public final class IndustryGameTests {
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void farmer_collects_mod_agnostic_ground_items_at_border(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);
-        var at=f.p.east(5).above();
+        var at=f.p.east(3).above();
         f.v.setPos(at.getX()+.5,at.getY(),at.getZ()+.5);
         var inside=new net.minecraft.world.entity.item.ItemEntity(f.l,at.getX()+.5,at.getY(),at.getZ()+.5,new ItemStack(Items.COBBLESTONE,3));
         var outside=new net.minecraft.world.entity.item.ItemEntity(f.l,at.getX()+1.5,at.getY(),at.getZ()+.5,new ItemStack(Items.GOLD_INGOT));
@@ -538,6 +552,13 @@ public final class IndustryGameTests {
             f.l.setBlock(pos,crop.getStateForAge(0),3);
         }
         if(kind instanceof CropBlock){
+            // This raised layer is above the water bucket's irrigation height.
+            // Feed both edges with actual water so moisture is stable during the audit.
+            for(int z:new int[]{-3,3}){
+                var water=f.p.offset(0,1,z);
+                f.l.setBlock(water.below(),Blocks.STONE.defaultBlockState(),3);
+                f.l.setBlock(water,Blocks.WATER.defaultBlockState(),3);
+            }
             f.l.setBlock(target,crop.getStateForAge(crop.getMaxAge()),3);
         }else{
             f.l.setBlock(target.below(),Blocks.DIRT.defaultBlockState(),3);
@@ -1452,6 +1473,9 @@ public final class IndustryGameTests {
         f.v.setNoAi(false);
         var zombie=EntityType.ZOMBIE.create(f.l);
         zombie.setNoAi(true);
+        zombie.setPersistenceRequired();
+        zombie.setInvulnerable(true);
+        zombie.setItemSlot(EquipmentSlot.HEAD,new ItemStack(Items.IRON_HELMET));
         zombie.setPos(start.x,start.y,start.z-1.5);
         f.l.addFreshEntity(zombie);
         zombie.setTarget(f.v);
@@ -1462,7 +1486,8 @@ public final class IndustryGameTests {
         };
         h.startSequence().thenWaitUntil(()->{
             bounds.run();
-            check(Employment.fleeing(f.v)&&f.v.distanceToSqr(start)>1,"night worker did not evade the zombie");
+            check(Employment.fleeing(f.v)&&f.v.distanceToSqr(start)>1,"night worker did not evade the zombie, farmer="+f.v.position()
+                +" threatAlive="+zombie.isAlive()+" target="+zombie.getTarget()+" day="+f.l.getDayTime());
             check(f.v.getLastHurtByMob()==null,"escape required damage");
         }).thenExecuteFor(15,bounds).thenExecute(zombie::discard).thenWaitUntil(()->{
             bounds.run();
@@ -1568,6 +1593,148 @@ public final class IndustryGameTests {
             check(f.l.getBlockState(target)==wheat.getStateForAge(0),"target harvest not committed");
         }).thenWaitUntil(()->check(count(f,Items.WHEAT)>0,"farmer did not collect wheat"))
             .thenExecute(()->MinecraftForge.EVENT_BUS.unregister(observer)).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=120,batch="industry")
+    public static void contracted_farmer_never_breeds_and_neighbor_cannot_pocket_tagged_food(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var normal=EntityType.VILLAGER.create(f.l);
+        normal.setAge(0);
+        normal.setCanPickUpLoot(true);
+        var at=Vec3.atBottomCenterOf(f.p.east().above());
+        normal.setPos(at.x,at.y,at.z);
+        f.l.setBlock(f.p.east(),Blocks.STONE.defaultBlockState(),3);
+        f.l.addFreshEntity(normal);
+        f.v.getInventory().setItem(0,new ItemStack(Items.CARROT,24));
+        for(int slot=0;slot<27;slot++)f.s.setItem(slot,new ItemStack(Items.STONE,64));
+        normal.getInventory().setItem(0,new ItemStack(Items.CARROT,24));
+        check(!f.v.canBreed()&&normal.canBreed(),"employment changed ordinary villager breeding or allowed hired villager");
+        var drop=new net.minecraft.world.entity.item.ItemEntity(f.l,at.x,at.y+.05,at.z,new ItemStack(Items.CARROT,3));
+        drop.getPersistentData().putUUID(br.com.kraftcity.industry.FarmerLogistics.HARVEST_STATION,f.s.id);
+        drop.setDeltaMovement(Vec3.ZERO);
+        f.l.addFreshEntity(drop);
+        h.startSequence().thenExecuteFor(4,()->check(drop.isAlive()&&normal.getInventory().countItem(Items.CARROT)==24,
+            "nearby villager took the tagged professional drop")).thenExecute(()->{
+                f.v.setPos(at.x,at.y,at.z);
+                f.v.setCanPickUpLoot(true);
+                f.s.setItem(0,new ItemStack(Items.CARROT,63));
+            }).thenWaitUntil(()->{
+                check(count(f,Items.CARROT)==64&&drop.getItem().getCount()==2&&drop.isAlive(),
+                    "partial pickup stock="+count(f,Items.CARROT)+" drop="+drop.getItem()+" alive="+drop.isAlive());
+                check(f.v.getInventory().countItem(Items.CARROT)==24,"professional pickup used private inventory");
+            }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void bordering_farmer_picks_from_own_field_and_leaves_neighbor_items(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var otherPos=f.p.east(5);
+        f.l.setBlock(otherPos,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);
+        var other=((WorkBlockEntity)f.l.getBlockEntity(otherPos)).station();
+        other.profession=Profession.FARMER;
+        other.worker=UUID.randomUUID();
+        other.industry.putInt("size",5);
+        var border=f.p.east(2).above();
+        f.v.setPos(border.getX()+.9,border.getY(),border.getZ()+.5);
+        var own=new net.minecraft.world.entity.item.ItemEntity(f.l,border.getX()+.7,border.getY(),border.getZ()+.5,new ItemStack(Items.WHEAT));
+        var foreign=new net.minecraft.world.entity.item.ItemEntity(f.l,border.getX()+1.1,border.getY(),border.getZ()+.5,new ItemStack(Items.CARROT));
+        f.l.addFreshEntity(own);
+        f.l.addFreshEntity(foreign);
+        step(f,2);
+        check(!own.isAlive()&&count(f,Items.WHEAT)==1&&foreign.isAlive()&&count(f,Items.CARROT)==0,"farmer stole the neighbor's core drop");
+        h.succeed();
+    }
+
+    public static final class FarmYieldAudit {
+        final F farm;
+        final Set<BlockPos> targets;
+        final Map<Item,Integer> drops=new HashMap<>();
+        int sounds;
+
+        FarmYieldAudit(F farm,Set<BlockPos> targets){this.farm=farm;this.targets=targets;}
+
+        @net.minecraftforge.eventbus.api.SubscribeEvent
+        public void drop(net.minecraftforge.event.entity.EntityJoinLevelEvent event){
+            if(event.getLevel()!=farm.l||!(event.getEntity() instanceof net.minecraft.world.entity.item.ItemEntity entity))return;
+            var data=entity.getPersistentData();
+            var key=br.com.kraftcity.industry.FarmerLogistics.HARVEST_STATION;
+            if(data.hasUUID(key)&&data.getUUID(key).equals(farm.s.id))drops.merge(entity.getItem().getItem(),entity.getItem().getCount(),Integer::sum);
+        }
+
+        @net.minecraftforge.eventbus.api.SubscribeEvent
+        public void sound(net.minecraftforge.event.PlayLevelSoundEvent.AtPosition event){
+            if(event.getLevel()==farm.l&&targets.contains(new BlockPos(event.getPosition()))
+                &&event.getSource()==net.minecraft.sounds.SoundSource.BLOCKS)sounds++;
+        }
+    }
+
+    @GameTest(template="empty",timeoutTicks=1500,batch="farmer_yield_conservation")
+    public static void physical_harvest_conserves_ten_carrots_ten_potatoes_and_wheat_separately(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var soil=Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE,7);
+        var plots=new LinkedHashMap<BlockPos,Block>();
+        for(var pos:FarmerWork.zigzag(f.p,5)){
+            if(pos.below().equals(f.p))continue;
+            int index=plots.size();
+            if(index==21)break;
+            var crop=(CropBlock)(index<10?Blocks.CARROTS:index<20?Blocks.POTATOES:Blocks.WHEAT);
+            plots.put(pos,crop);
+            f.l.setBlock(pos.below(),soil,3);
+            f.l.setBlock(pos,crop.getStateForAge(crop.getMaxAge()),3);
+        }
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        f.s.setItem(30,new ItemStack(Items.WATER_BUCKET));
+        level(f,1,4);
+        var secondPos=f.p.east(5);
+        f.l.setBlock(secondPos,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);
+        var second=((WorkBlockEntity)f.l.getBlockEntity(secondPos)).station();
+        var caneWorker=EntityType.VILLAGER.create(f.l);
+        var caneStart=Vec3.atBottomCenterOf(secondPos.south(2).above());
+        caneWorker.setPos(caneStart.x,caneStart.y,caneStart.z);
+        f.l.addFreshEntity(caneWorker);
+        check(ResidenceData.get(f.l).link(f.l,ResidenceData.get(f.l).owner(f.v.getUUID()).pos,caneWorker).equals("ok"),"second farmer has no home");
+        var player=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"HarvestAudit"));
+        player.setPos(caneStart.x,caneStart.y,caneStart.z);
+        second.setItem(31,new ItemStack(Items.EMERALD,10));
+        check(Employment.hire(player,second,caneWorker.getUUID(),Profession.FARMER).equals("ok"),"second farmer was not hired");
+        second.setItem(27,new ItemStack(Items.IRON_HOE));
+        var cane=secondPos.east().north().above();
+        f.l.setBlock(cane.below(2),Blocks.STONE.defaultBlockState(),3);
+        f.l.setBlock(cane.below().north().below(),Blocks.STONE.defaultBlockState(),3);
+        f.l.setBlock(cane.below().north(),Blocks.WATER.defaultBlockState(),3);
+        f.l.setBlock(cane.below(),Blocks.SAND.defaultBlockState(),3);
+        for(int y=0;y<3;y++)f.l.setBlock(cane.above(y),Blocks.SUGAR_CANE.defaultBlockState(),3);
+        var caneFarm=new F(f.l,second,caneWorker,secondPos);
+        var caneAudit=new FarmYieldAudit(caneFarm,Set.of(cane.above()));
+        MinecraftForge.EVENT_BUS.register(caneAudit);
+        var audit=new FarmYieldAudit(f,plots.keySet());
+        MinecraftForge.EVENT_BUS.register(audit);
+        var start=Vec3.atBottomCenterOf(f.p.south(3).above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        h.runAfterDelay(1490,()->{
+            MinecraftForge.EVENT_BUS.unregister(audit);
+            MinecraftForge.EVENT_BUS.unregister(caneAudit);
+        });
+        h.startSequence().thenWaitUntil(()->{
+            check(caneAudit.sounds==1&&count(caneFarm,Items.SUGAR_CANE)==2&&f.l.getBlockState(cane).is(Blocks.SUGAR_CANE),
+                "second farmer did not complete a physical cane harvest with one sound and two drops");
+            check(count(f,Items.SUGAR_CANE)==0&&count(caneFarm,Items.CARROT)==0&&!f.v.canBreed()&&!caneWorker.canBreed(),
+                "workers crossed harvest ownership or could breed");
+            check(audit.sounds==21,"expected one break sound per committed harvest, heard "+audit.sounds);
+            check(plots.keySet().stream().allMatch(pos->f.l.getBlockState(pos.below())==soil),"field supports were changed");
+            for(var item:List.of(Items.CARROT,Items.POTATO,Items.WHEAT,Items.WHEAT_SEEDS)){
+                check(count(f,item)==audit.drops.getOrDefault(item,0),"stock differs from physical drops for "+item);
+            }
+            check(count(f,Items.CARROT)>=10&&count(f,Items.POTATO)>=10&&count(f,Items.WHEAT)>0,
+                "some of the mature crops did not produce items");
+            check(IndustrialRules.level(f.l,f.s)==2&&IndustrialRules.size(f.l,f.s)==5,"area changed when the worker reached Lv2");
+            check(IndustrialRules.selectSize(f.l,f.s,7)&&IndustrialRules.size(f.l,f.s)==7,"manual resize to 7 failed");
+        }).thenExecute(()->{
+            MinecraftForge.EVENT_BUS.unregister(audit);
+            MinecraftForge.EVENT_BUS.unregister(caneAudit);
+        }).thenSucceed();
     }
 
 }

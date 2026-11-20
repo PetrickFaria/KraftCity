@@ -27,6 +27,8 @@
     "IndustrialIrrigationMixin",
     "FarmerSoilMixin",
     "HarvestTraceMixin",
+    "ProfessionalFoodMixin",
+    "HarvestItemMergeMixin",
     "WorkerGatePathMixin",
     "MilitaryEquipmentMixin",
     "MilitaryCureMixin"

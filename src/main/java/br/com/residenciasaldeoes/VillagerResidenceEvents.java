@@ -759,6 +759,7 @@ public class VillagerResidenceEvents {
             for(UUID id:home.residents){
                 if(!(level.getEntity(id) instanceof Villager villager)||!villager.isAlive()||villager.isBaby()
                         ||villager.isNoAi()||br.com.kraftcity.military.Military.isSoldier(villager)||villager.isSleeping()||villager.isTrading()
+                        ||br.com.kraftcity.industry.FarmerLogistics.nightFarmer(level,villager)
                         ||currentGameTime<villager.getPersistentData().getLong("residenciasaldeoes_courier_retry_after"))continue;
                 BlockPos homeApproach=findApproach(level,home.pos,villager);
                 if(homeApproach==null)continue;
@@ -1087,9 +1088,14 @@ public class VillagerResidenceEvents {
             ||br.com.kraftcity.military.Military.isSoldier(villager)&&!workerRest)return;
         if(villager.tickCount%20==0&&villager.getPersistentData().hasUUID("residenciasaldeoes_resident_identity"))
             ResidenceData.get(level).updateResidentAge(villager);
+        var farmerNight=br.com.kraftcity.industry.FarmerLogistics.nightFarmer(level,villager);
+        if(farmerNight&&villager.getPersistentData().contains(EMERALD_TRANSFER)){
+            finishEmeraldTransfer(level,villager,villager.getPersistentData().getCompound(EMERALD_TRANSFER),true);
+        }
+        if(farmerNight&&br.com.kraftcity.industry.FarmerLogistics.beforeHome(level,villager))return;
         if(villager.getPersistentData().contains(EMERALD_TRANSFER)){tickEmeraldTransfer(level,villager);return;}
         if(villager.getPersistentData().contains(NIGHT_DOOR_TASK)){tickNightDoorClosure(level,villager);return;}
-        if(br.com.kraftcity.industry.FarmerLogistics.beforeHome(level,villager))return;
+        if(!farmerNight&&br.com.kraftcity.industry.FarmerLogistics.beforeHome(level,villager))return;
         if(workerRest&&br.com.kraftcity.industry.FarmerLogistics.leaveWater(level,villager))return;
         boolean employed=br.com.kraftcity.employment.Employment.active(villager);
         long time=Math.floorMod(level.getDayTime(),DAY_LENGTH);

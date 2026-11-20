@@ -58,7 +58,10 @@ public final class IndustryVisualCheck {
         if(profession==Profession.FARMER)v.setPos(target.getX()+.5,target.getY()+1,target.getZ()+.5);
         if(profession==Profession.BEEKEEPER)s.industry.putInt("cursor",67);
         IndustrialWork.tick(l,s);
-        if(profession==Profession.FARMER)for(int action=0;action<3;action++)IndustrialWork.tick(l,s);
+        if(profession==Profession.FARMER){
+            for(int action=0;action<3;action++)IndustrialWork.tick(l,s);
+            WorkforceData.get(l).setProgress(v.getUUID(),profession.id(),2,25);
+        }
         boolean worked=switch(profession){
             case FARMER->count(s,Items.WHEAT)>0;
             case BUTCHER->count(s,Items.BEEF)>0;
@@ -85,8 +88,22 @@ public final class IndustryVisualCheck {
         if(i<6){
             if(phase==0)mc.getSingleplayerServer().execute(()->setup(mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()),i));
             if(phase==45){check(mc.screen instanceof WorkScreen,"Industry menu missing");check(mc.player.containerMenu instanceof WorkMenu m&&m.slots.size()==(i==0?67:68)&&m.snapshot!=null,"Industry menu not synchronized");}
+            if(i==0&&phase==35){
+                var menu=(WorkMenu)mc.player.containerMenu;
+                check(menu.snapshot.level()==2&&menu.snapshot.size()==5,"Lv2 changed the active area");
+                var buttons=mc.screen.children().stream().filter(w->w instanceof net.minecraft.client.gui.components.Button)
+                    .map(w->(net.minecraft.client.gui.components.Button)w).toList();
+                check(buttons.stream().anyMatch(button->button.getMessage().getString().equals("9×9")&&!button.active),"Lv2 unlocked 9×9");
+                var seven=buttons.stream().filter(button->button.getMessage().getString().equals("7×7")).findFirst().orElseThrow();
+                check(seven.active,"Lv2 did not unlock 7×7");
+                seven.onPress();
+            }
             if(phase==50)Screenshot.grab(new File("../build"),"visual-industry-"+Profession.values()[i].path+".png",mc.getMainRenderTarget(),message->{});
-            if(i==0&&phase==51){check(bounds().stream().anyMatch(b->b.pos().equals(post(0))&&b.size()==5&&b.farmer()),"Blue bounds not synchronized");toggle(mc);}
+            if(i==0&&phase==51){
+                check(((WorkMenu)mc.player.containerMenu).snapshot.size()==7
+                    &&bounds().stream().anyMatch(b->b.pos().equals(post(0))&&b.size()==7&&b.farmer()),"Selected 7×7 area did not synchronize");
+                System.out.println("FARMER_MANUAL_AREA_SELECTION_PASSED");toggle(mc);
+            }
             if(i==0&&phase>51&&phase<62&&!blueBoundsCleared&&bounds().stream().noneMatch(b->b.pos().equals(post(0)))){
                 blueBoundsCleared=true;
                 toggle(mc);
@@ -116,7 +133,8 @@ public final class IndustryVisualCheck {
         for(int i=0;i<6;i++){
             var s=station(l,i);check(s!=null&&s.active&&s.worker!=null&&s.profession==Profession.values()[i]&&s.industry.getString("visual_test").equals("six_jobs_passed"),"Industry post state lost #"+i);
             var progress=WorkforceData.get(l).progress(s.worker,s.profession.id());check(progress.xp()>=1,"Industry progression lost #"+i);
-            if(i==0)check(count(s,Items.WHEAT)>0&&s.getItem(30).is(Items.WATER_BUCKET),"Farmer production/water lost");
+            if(i==0)check(count(s,Items.WHEAT)>0&&s.getItem(30).is(Items.WATER_BUCKET)
+                &&IndustrialRules.size(l,s)==7,"Farmer production, water or selected area lost");
             if(i==1)check(count(s,Items.BEEF)>0,"Butcher output lost");
             if(i==2)check(count(s,Items.WHITE_WOOL)>0,"Shepherd output lost");
             if(i==3)check(count(s,Items.COD)+count(s,Items.SALMON)+count(s,Items.TROPICAL_FISH)+count(s,Items.PUFFERFISH)>0,"Fish output lost");

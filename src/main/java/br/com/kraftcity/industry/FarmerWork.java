@@ -151,7 +151,7 @@ public final class FarmerWork {
         }
         if(!l.setBlock(pos,replant?replanted:Blocks.AIR.defaultBlockState(),HARVEST_UPDATE))return;
         if(input>=0)s.removeItem(input,1);
-        for(var stack:drops)dropHarvest(l,pos,stack,false);
+        for(var stack:drops)dropHarvest(l,s,pos,stack,false);
         FarmerLogistics.rescan(v);
         if(!replant){
             var pending=s.industry.getCompound("farmer_replant");
@@ -159,6 +159,7 @@ public final class FarmerWork {
             s.industry.put("farmer_replant",pending);
             IndustrialWork.alert(l,s,"seed","Falta semente para replantar a mesma cultura.");
         }
+        l.playSound(null,pos,state.getSoundType(l,pos,v).getBreakSound(),net.minecraft.sounds.SoundSource.BLOCKS,.8F,1F);
         traceHarvest(v,pos,state,l.getBlockState(pos));
         v.swing(InteractionHand.MAIN_HAND,true);
         IndustrialRules.wear(l,s,tool);
@@ -194,8 +195,8 @@ public final class FarmerWork {
         if(cane){
             traceHarvest(v,pos.above(),upper,l.getBlockState(pos.above()));
             if(l.getGameRules().getBoolean(GameRules.RULE_DOBLOCKDROPS)){
-                dropHarvest(l,pos,new ItemStack(Items.SUGAR_CANE),true);
-                dropHarvest(l,pos.above(),new ItemStack(Items.SUGAR_CANE),true);
+                dropHarvest(l,s,pos,new ItemStack(Items.SUGAR_CANE),true);
+                dropHarvest(l,s,pos.above(),new ItemStack(Items.SUGAR_CANE),true);
             }
             FarmerLogistics.rescan(v);
         }else{
@@ -210,20 +211,22 @@ public final class FarmerWork {
                     traceHarvest(v,stem,before,mature);
                 }
             }
-            for(var stack:drops)dropHarvest(l,pos,stack,false);
+            for(var stack:drops)dropHarvest(l,s,pos,stack,false);
             FarmerLogistics.rescan(v);
         }
+        l.playSound(null,pos,state.getSoundType(l,pos,v).getBreakSound(),net.minecraft.sounds.SoundSource.BLOCKS,.8F,1F);
         traceHarvest(v,pos,state,l.getBlockState(pos));
         v.swing(InteractionHand.MAIN_HAND,true);
         IndustrialRules.wear(l,s,tool);
         IndustrialRules.progress(l,s);
     }
 
-    private static void dropHarvest(ServerLevel level,BlockPos pos,ItemStack stack,boolean raised){
+    private static void dropHarvest(ServerLevel level,EmploymentData.Station station,BlockPos pos,ItemStack stack,boolean raised){
         if(stack.isEmpty())return;
         var drop=new ItemEntity(level,pos.getX()+.5,pos.getY()+(raised?.4:.2),pos.getZ()+.5,stack);
         drop.setDeltaMovement(0,raised?.075:0,0);
         if(raised)drop.setDefaultPickUpDelay();
+        drop.getPersistentData().putUUID(FarmerLogistics.HARVEST_STATION,station.id);
         level.addFreshEntity(drop);
     }
 
