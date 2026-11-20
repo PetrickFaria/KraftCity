@@ -1,0 +1,26 @@
+name: Publish verified KraftCity 1.1.06
+on:
+  push:
+    branches: [release/upload-1.1.06]
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the artifact from the approved workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: 9f6735e65ad1965235d123186f0751247c8d6f5b
+          VALIDATED_RUN: '44680853525'
+        run: |
+          set -euo pipefail
+          test "$(gh run view "$VALIDATED_RUN" -R "$GITHUB_REPOSITORY" --json conclusion,headSha --jq '.conclusion+" "+.headSha')" = "success $TARGET"
+          test "$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/feature/kraftcity-builder | cut -f1)" = "$TARGET"
+          gh run download "$VALIDATED_RUN" -R "$GITHUB_REPOSITORY" -n kraftcity-1.1.06 -D delivery
+          cd delivery/artifact-output
+          sha256sum --check SHA256SUMS.txt
+          grep -Fx "6cd2214577ecac138b728ae374f817e38a461f59365b4f2ba14ddacf330b76bb  kraftcity-1.1.06.jar" SHA256SUMS.txt
+          grep -F "$TARGET" relatorio-1.1.06.md
+          gh release create v1.1.06 -R "$GITHUB_REPOSITORY" --target "$TARGET" --title 'KraftCity 1.1.06' --notes-file relatorio-1.1.06.md --latest kraftcity-1.1.06.jar SHA256SUMS.txt relatorio-1.1.06.md
