@@ -33,6 +33,10 @@ public final class Employment {
         return v.level instanceof ServerLevel level&&EmploymentData.get(level).assigned(v.getUUID())!=null;
     }
     private static final Map<Villager,Long> FLEE_UNTIL=new WeakHashMap<>();
+    private static final Set<Villager> NIGHT_DETOUR=Collections.newSetFromMap(new WeakHashMap<>());
+    private static final Set<Villager> HOMEWARD_ESCAPE=Collections.newSetFromMap(new WeakHashMap<>());
+
+    static boolean seekingShelter(Villager worker){return HOMEWARD_ESCAPE.contains(worker)&&fleeing(worker);}
 
     public static boolean fleeing(Villager v){
         return FLEE_UNTIL.getOrDefault(v,Long.MIN_VALUE)>v.level.getGameTime();
@@ -45,6 +49,8 @@ public final class Employment {
                 &&(z.getTarget()==v||v.hasLineOfSight(z))).stream()
             .min(Comparator.comparingDouble(v::distanceToSqr)).orElse(null);
         if(zombie==null){
+            HOMEWARD_ESCAPE.remove(v);
+            NIGHT_DETOUR.remove(v);
             if(!fleeing(v)&&FLEE_UNTIL.remove(v)!=null){
                 v.getNavigation().stop();
                 v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
@@ -53,18 +59,35 @@ public final class Employment {
             return;
         }
         boolean starting=!fleeing(v);
+        boolean nightShelter=br.com.residenciasaldeoes.VillagerResidenceEvents.hasNightShelter(level,v);
         if(starting){
+            if(nightShelter)br.com.kraftcity.industry.FarmerLogistics.cancelClosingForDanger(level,v);
             br.com.kraftcity.industry.FarmerLogistics.release(v);
             com.mojang.logging.LogUtils.getLogger().debug("Worker {} at {} fleeing zombie at {}",
                 v.getUUID(),v.position(),zombie.position());
         }
+        if(br.com.residenciasaldeoes.VillagerResidenceEvents.seekResidentialSafety(level,v,zombie)){
+            HOMEWARD_ESCAPE.add(v);
+            if(!v.hasLineOfSight(zombie)&&zombie.distanceToSqr(v)>9){
+                FLEE_UNTIL.remove(v);
+                return;
+            }
+            if(v.isSleeping())v.stopSleeping();
+            FLEE_UNTIL.put(v,level.getGameTime()+20);
+            return;
+        }
+        HOMEWARD_ESCAPE.remove(v);
         FLEE_UNTIL.put(v,level.getGameTime()+40);
+        if(!nightShelter)NIGHT_DETOUR.remove(v);
+        if(nightShelter&&NIGHT_DETOUR.contains(v))return;
         if(starting||v.getNavigation().isDone()||v.tickCount%15==0){
             if(v.isSleeping())v.stopSleeping();
             v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
             v.getBrain().eraseMemory(MemoryModuleType.PATH);
             var away=net.minecraft.world.entity.ai.util.DefaultRandomPos.getPosAway(v,12,5,zombie.position());
-            if(away!=null)v.getNavigation().moveTo(away.x,away.y,away.z,1.25);
+            if(away!=null){
+                if(v.getNavigation().moveTo(away.x,away.y,away.z,1.25)&&nightShelter)NIGHT_DETOUR.add(v);
+            }
             else if(starting)v.getNavigation().stop();
         }
     }

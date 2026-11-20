@@ -175,7 +175,7 @@ public final class FarmerWork {
             IndustrialWork.alert(l,s,"space","Inventário cheio; colheita preservada no terreno.");return;
         }
         if(cane&&!l.setBlock(pos.above(),Blocks.AIR.defaultBlockState(),2))return;
-        if(!l.setBlock(pos,Blocks.AIR.defaultBlockState(),cane?Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE:Block.UPDATE_ALL)){
+        if(!l.setBlock(pos,Blocks.AIR.defaultBlockState(),Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE)){
             if(cane)l.setBlock(pos.above(),upper,3);
             return;
         }
@@ -185,7 +185,20 @@ public final class FarmerWork {
                 dropCane(l,pos.above());
             }
             FarmerLogistics.rescan(v);
-        }else IndustrialWork.outputs(s,drops,true);
+        }else{
+            var attached=state.is(Blocks.MELON)?Blocks.ATTACHED_MELON_STEM:Blocks.ATTACHED_PUMPKIN_STEM;
+            var mature=(state.is(Blocks.MELON)?Blocks.MELON_STEM:Blocks.PUMPKIN_STEM).defaultBlockState().setValue(StemBlock.AGE,7);
+            for(var side:Direction.Plane.HORIZONTAL){
+                var stem=pos.relative(side);
+                if(!l.hasChunkAt(stem)||!inside(s,IndustrialRules.size(l,s),stem))continue;
+                var before=l.getBlockState(stem);
+                if(before.is(attached)&&before.getValue(AttachedStemBlock.FACING)==side.getOpposite()){
+                    l.setBlock(stem,mature,Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE);
+                    traceHarvest(v,stem,before,mature);
+                }
+            }
+            IndustrialWork.outputs(s,drops,true);
+        }
         traceHarvest(v,pos,state,l.getBlockState(pos));
         v.swing(InteractionHand.MAIN_HAND,true);
         IndustrialRules.wear(l,s,tool);

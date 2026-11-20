@@ -662,10 +662,18 @@ public final class IndustryGameTests {
         final net.minecraftforge.common.util.LazyOptional<net.minecraftforge.items.IItemHandler> capability=
             net.minecraftforge.common.util.LazyOptional.of(()->storage);
 
+        final net.minecraftforge.common.util.LazyOptional<net.minecraftforge.items.IItemHandler> rejectingFace=
+            net.minecraftforge.common.util.LazyOptional.of(()->new net.minecraftforge.items.ItemStackHandler(1){
+                @Override public boolean isItemValid(int slot,ItemStack stack){return false;}
+            });
+
         @Override public <T> net.minecraftforge.common.util.LazyOptional<T> getCapability(
             net.minecraftforge.common.capabilities.Capability<T> cap,Direction side){
-            return cap==net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER&&side==Direction.EAST
-                ?capability.cast():net.minecraftforge.common.util.LazyOptional.empty();
+            if(cap!=net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER)
+                return net.minecraftforge.common.util.LazyOptional.empty();
+            if(side==Direction.EAST)return capability.cast();
+            if(side==Direction.WEST)return rejectingFace.cast();
+            return net.minecraftforge.common.util.LazyOptional.empty();
         }
 
         @net.minecraftforge.eventbus.api.SubscribeEvent
@@ -958,6 +966,34 @@ public final class IndustryGameTests {
         }).thenExecute(()->f.l.setDayTime(1000)).thenSucceed();
     }
 
+    @GameTest(template="empty",timeoutTicks=300,batch="forge_partial_after_obstacle")
+    public static void farmer_walks_around_rejecting_face_and_preserves_unaccepted_excess(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var pos=f.p.east(4).above();
+        var mod=new ModInventory();
+        mod.storage.setStackInSlot(0,new ItemStack(Items.CARROT,62));
+        MinecraftForge.EVENT_BUS.register(mod);
+        try{
+            f.l.setBlock(pos,Blocks.BEACON.defaultBlockState(),3);
+        }finally{
+            MinecraftForge.EVENT_BUS.unregister(mod);
+        }
+        f.l.setBlock(pos.west(),Blocks.STONE.defaultBlockState(),3);
+        f.l.setBlock(pos.west().above(),Blocks.STONE.defaultBlockState(),3);
+        f.s.setItem(0,new ItemStack(Items.CARROT,15));
+        f.s.setItem(1,new ItemStack(Items.STICK,3));
+        var start=Vec3.atBottomCenterOf(f.p.south().above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        f.l.setDayTime(13001);
+        h.startSequence().thenWaitUntil(()->{
+            check(mod.storage.getStackInSlot(0).getCount()==64,"waiting for partial insertion from east");
+            check(count(f,Items.CARROT)==13&&count(f,Items.STICK)==3,"partial acceptance lost or duplicated items");
+            check(f.v.getX()>pos.getX()+1,"farmer did not walk around the blocked side");
+        }).thenExecute(()->f.l.setDayTime(1000)).thenSucceed();
+    }
+
     @GameTest(template="empty",timeoutTicks=100,batch="industry")
     public static void falling_visitor_cannot_destroy_a_crop_in_an_occupied_field(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);
@@ -989,6 +1025,129 @@ public final class IndustryGameTests {
                 check(f.l.getBlockState(control.below()).is(Blocks.DIRT)&&f.l.getBlockState(control).isAir(),
                     "Control fall did not reproduce soil conversion and loss of the crop above");
             }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=420,batch="farmer_water_at_night")
+    public static void farmer_climbs_out_of_flowing_channel_and_sleeps(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var bed=placeBed(f.l,home.east(2).above());
+        var source=f.p.east().south();
+        for(int n=0;n<3;n++){
+            var channel=source.south(n);
+            f.l.setBlock(channel.below(),Blocks.STONE.defaultBlockState(),3);
+            f.l.setBlock(channel,Blocks.AIR.defaultBlockState(),3);
+        }
+        f.l.setBlock(source,Blocks.WATER.defaultBlockState(),3);
+        h.startSequence().thenWaitUntil(()->check(f.l.getFluidState(source.south(2)).is(net.minecraft.tags.FluidTags.WATER),
+            "water source did not feed both lower cells")).thenExecute(()->{
+            var center=Vec3.atBottomCenterOf(source.south());
+            f.v.setPos(center.x,center.y+.05,center.z);
+            f.v.setNoAi(false);
+            f.l.setDayTime(13001);
+        }).thenWaitUntil(()->{
+            check(f.v.getSleepingPos().filter(bed::equals).isPresent(),"worker failed to climb and reach bed from "+f.v.position()
+                +" water "+f.v.isInWaterOrBubble()+" target "+f.v.getNavigation().getTargetPos());
+        }).thenExecute(()->f.l.setDayTime(1000)).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=380,batch="farmer_three_sleepers")
+    public static void three_farmers_share_one_residence_without_sharing_beds(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var beds=new HashSet<BlockPos>();
+        for(int z=-2;z<=2;z+=2)beds.add(placeBed(f.l,home.east(2).above().south(z)));
+        var workers=new ArrayList<Villager>();
+        workers.add(f.v);
+        for(int i=1;i<=2;i++){
+            var post=f.p.east(i*2);
+            f.l.setBlock(post,WorkModule.PROFESSIONAL.get(Profession.FARMER).get().defaultBlockState(),3);
+            var station=((WorkBlockEntity)f.l.getBlockEntity(post)).station();
+            var worker=EntityType.VILLAGER.create(f.l);
+            worker.setPos(post.getX()+.5,post.getY()+1,post.getZ()+1.5);
+            f.l.addFreshEntity(worker);
+            check(ResidenceData.get(f.l).link(f.l,home,worker).equals("ok"),"shared residence rejected farmer");
+            var player=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"ThreeFarmers"));
+            player.setPos(worker.getX(),worker.getY(),worker.getZ());
+            station.setItem(31,new ItemStack(Items.EMERALD,10));
+            check(Employment.hire(player,station,worker.getUUID(),Profession.FARMER).equals("ok"),"farmer hire in shared home");
+            workers.add(worker);
+        }
+        f.v.setPos(f.p.getX()+.5,f.p.getY()+1,f.p.getZ()+1.5);
+        f.v.setNoAi(false);
+        f.l.setDayTime(13001);
+        h.startSequence().thenWaitUntil(()->{
+            var actual=new HashSet<BlockPos>();
+            for(var worker:workers){
+                var bed=worker.getSleepingPos().orElse(null);
+                check(worker.isSleeping()&&bed!=null,"awake farmer at "+worker.position());
+                check(actual.add(bed)&&ResidenceData.get(f.l).ownsBed(f.l.dimension(),bed,worker.getUUID()),"bed conflict");
+            }
+            check(actual.equals(beds),"workers did not occupy the three assigned beds");
+        }).thenExecute(()->f.l.setDayTime(1000)).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=350,batch="farmer_homeward_escape")
+    public static void farmer_heads_home_when_pursued_at_night_and_sleeps_after_safety(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var bed=placeBed(f.l,home.east(2).above());
+        var start=Vec3.atBottomCenterOf(f.p.south().above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        var pursuer=EntityType.ZOMBIE.create(f.l);
+        pursuer.setNoAi(true);
+        pursuer.setInvulnerable(true);
+        pursuer.setPersistenceRequired();
+        pursuer.setItemSlot(EquipmentSlot.HEAD,new ItemStack(Items.IRON_HELMET));
+        pursuer.setPos(start.x+2,start.y,start.z+1);
+        f.l.addFreshEntity(pursuer);
+        pursuer.setTarget(f.v);
+        f.l.setDayTime(13001);
+        var center=Vec3.atCenterOf(home);
+        h.startSequence().thenWaitUntil(()->check(Employment.fleeing(f.v),"worker has not reacted to the zombie at "
+            +pursuer.position()+" alive="+pursuer.isAlive()+" target="+pursuer.getTarget()+" worker="+f.v.position()))
+            .thenWaitUntil(()->check(f.v.position().distanceToSqr(center)<start.distanceToSqr(center)*.7,
+                "night escape has not approached the residence: "+f.v.position()))
+            .thenExecute(pursuer::discard).thenWaitUntil(()->{
+            check(f.v.getSleepingPos().filter(bed::equals).isPresent(),"farmer did not sleep after fleeing");
+            check(f.l.getEntity(f.v.getUUID())==f.v,"residential return replaced the entity");
+        }).thenExecute(()->f.l.setDayTime(1000)).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=320,batch="farmer_ground_drop_before_bed")
+    public static void closing_worker_physically_collects_item_below_farmland_grid_height(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var bed=placeBed(f.l,home.east(2).above());
+        var soil=f.p.east(2).north();
+        f.l.setBlock(soil,Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE,7),3);
+        var item=new net.minecraft.world.entity.item.ItemEntity(f.l,soil.getX()+.5,soil.getY()+.9375,
+            soil.getZ()+.5,new ItemStack(Items.COBBLESTONE,6));
+        item.setDeltaMovement(Vec3.ZERO);
+        f.l.addFreshEntity(item);
+        var chest=f.p.west(4).above();
+        f.l.setBlock(chest,Blocks.BARREL.defaultBlockState(),3);
+        var barrel=(BarrelBlockEntity)f.l.getBlockEntity(chest);
+        var start=Vec3.atBottomCenterOf(f.p.south(2).above());
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        f.l.setDayTime(13001);
+        h.startSequence().thenWaitUntil(()->{
+            check(f.v.getSleepingPos().filter(bed::equals).isPresent(),"worker did not get to bed");
+            check(!item.isAlive()&&barrel.countItem(Items.COBBLESTONE)==6,"drop on farmland did not reach the barrel");
+        }).thenExecute(()->f.l.setDayTime(1000)).thenSucceed();
+    }
+
+    private static BlockPos placeBed(ServerLevel level,BlockPos head){
+        var bed=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
+        level.setBlock(head.west(),bed.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.FOOT),3);
+        level.setBlock(head,bed.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.HEAD),3);
+        return head;
     }
 
 }

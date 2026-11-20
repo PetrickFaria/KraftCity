@@ -42,7 +42,7 @@ public final class WorkerGates {
             if(!level.hasChunkAt(pos)||worker.distanceToSqr(Vec3.atCenterOf(pos))>4)return;
             var state=level.getBlockState(pos);
             boolean door=state.is(BlockTags.WOODEN_DOORS)&&state.getBlock() instanceof DoorBlock
-                &&VillagerResidenceEvents.ownsWorkerRest(worker)
+                &&(VillagerResidenceEvents.ownsWorkerRest(worker)||Employment.seekingShelter(worker))
                 &&!worker.getPersistentData().contains("residenciasaldeoes_night_door_task")
                 &&!worker.getPersistentData().contains("residenciasaldeoes_emerald_transfer");
             if(!door&&!(state.getBlock() instanceof FenceGateBlock))continue;

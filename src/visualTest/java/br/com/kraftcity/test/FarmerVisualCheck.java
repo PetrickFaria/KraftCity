@@ -7,6 +7,8 @@ import br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity;
 import br.com.residenciasaldeoes.data.ResidenceData;
 import java.io.File;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.UUID;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -36,12 +38,18 @@ public final class FarmerVisualCheck {
     private static final BlockPos STEM=POST.offset(-1,1,1);
     private static final BlockPos FRUIT=STEM.south();
     private static final BlockPos JUMP=POST.offset(-2,1,1);
+    private static final BlockPos CHANNEL=POST.offset(4,0,2);
+    private static final BlockPos FORGE_CHEST=POST.offset(4,1,-4);
+    private static net.minecraftforge.items.ItemStackHandler forgeStorage;
     private static final BlockPos CARROTS=POST.offset(-2,1,-1);
     private static final BlockPos POTATOES=POST.offset(2,1,0);
     private static final List<BlockPos> ROW=List.of(POST.offset(-2,1,-2),POST.offset(-1,1,-2),POST.offset(0,1,-2),POST.offset(2,1,-2),POST.offset(2,1,-1),POST.offset(1,1,-1));
     private static volatile int stage;
     private static volatile String progressDetail="",serverFailure;
-    private static UUID worker,visitor;
+    private static UUID worker,visitor,pursuer,closingDrop;
+    private static double escapeStart;
+    private static long sleepObserved;
+    private static final List<UUID> companions=new ArrayList<>();
     private static boolean canePlanted,sawLooseCane,sawJump,seenPhysicalDeposit,visitorLeft;
     private static int ticks;
     private static int capturedStage=-1,visibleStage=-1,stageTicks;
@@ -180,10 +188,36 @@ public final class FarmerVisualCheck {
             if(!sawJump||!v.isOnGround()||!l.getBlockState(JUMP).isAir()||!l.getBlockState(JUMP.below()).is(Blocks.DIRT))return;
             check(l.getBlockState(STEM).is(Blocks.PUMPKIN_STEM)||l.getBlockState(STEM).is(Blocks.ATTACHED_PUMPKIN_STEM),"fruit-space work damaged stem");
             l.setBlock(CHEST,Blocks.BARREL.defaultBlockState(),3);
+            l.setBlock(CHEST.east(),Blocks.STONE.defaultBlockState(),3);
+            l.setBlock(CHEST.east().above(),Blocks.STONE.defaultBlockState(),3);
+            for(int i=0;i<2;i++){
+                var post=POST.offset(i==0?-3:3,0,-4);
+                var companion=EntityType.VILLAGER.create(l);
+                companion.setPos(post.getX()+.5,post.getY()+1,post.getZ()+.5);
+                companion.setAge(0);
+                l.addFreshEntity(companion);
+                check(ResidenceData.get(l).link(l,HOME,companion).equals("ok"),"companion residence");
+                l.setBlock(post,WorkModule.PROFESSIONAL.get(Profession.FARMER).get().defaultBlockState(),3);
+                var job=((WorkBlockEntity)l.getBlockEntity(post)).station();
+                var employer=net.minecraftforge.common.util.FakePlayerFactory.get(l,
+                    new com.mojang.authlib.GameProfile(UUID.randomUUID(),"FarmSleepTest"));
+                employer.setPos(companion.getX(),companion.getY(),companion.getZ());
+                job.setItem(31,new ItemStack(Items.EMERALD,10));
+                check(Employment.hire(employer,job,companion.getUUID(),Profession.FARMER).equals("ok"),"companion hire");
+                companions.add(companion.getUUID());
+                if(i==1){
+                    l.setBlock(FORGE_CHEST,Blocks.BEACON.defaultBlockState(),3);
+                    check(forgeStorage!=null,"missing test capability");
+                    forgeStorage.setStackInSlot(0,new ItemStack(Items.CARROT,62));
+                    job.setItem(0,new ItemStack(Items.CARROT,15));
+                    job.setItem(1,new ItemStack(Items.STICK,2));
+                }
+                var head=BED.south(i==0?-2:2);
+                var state=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
+                l.setBlock(head.west(),state.setValue(BedBlock.PART,BedPart.FOOT),3);
+                l.setBlock(head,state.setValue(BedBlock.PART,BedPart.HEAD),3);
+            }
             s.industry.putLong("discard",CHEST.asLong());
-            var drop=new ItemEntity(l,JUMP.getX()+.5,JUMP.getY()+.1,JUMP.getZ()+.5,new ItemStack(Items.COBBLESTONE,6));
-            drop.setDefaultPickUpDelay();
-            l.addFreshEntity(drop);
             var foot=BED.west();
             var bed=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
             l.setBlock(foot,bed.setValue(BedBlock.PART,BedPart.FOOT),3);
@@ -192,14 +226,36 @@ public final class FarmerVisualCheck {
             // The side aisle remains clear and is inside the residence.
             l.setBlock(foot.above(2),Blocks.STONE.defaultBlockState(),3);
             l.setBlock(foot.east().above(2),Blocks.STONE.defaultBlockState(),3);
-            l.setDayTime(13001);
+            var homes=ResidenceData.get(l);
+            check(homes.reserveBed(worker,l.dimension(),HOME,BED),"main worker bed reservation");
+            for(int offset=0;offset<3;offset++)l.setBlock(CHANNEL.south(offset),Blocks.AIR.defaultBlockState(),3);
+            l.setBlock(CHANNEL,Blocks.WATER.defaultBlockState(),3);
+            p.teleportTo(l,CHANNEL.getX()+.5,CHANNEL.getY()+3,CHANNEL.getZ()+5,180,25);
+            stage=8;
+        }else if(stage==8){
+            if(!l.getFluidState(CHANNEL.south(2)).is(net.minecraft.tags.FluidTags.WATER))return;
+            var channel=CHANNEL.south();
+            v.setPos(channel.getX()+.5,channel.getY()+.05,channel.getZ()+.5);
+            var dropAt=POST.offset(-1,1,2);
+            var drop=new ItemEntity(l,dropAt.getX()+.5,dropAt.getY()+.1,dropAt.getZ()+.5,new ItemStack(Items.COBBLESTONE,6));
+            drop.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            drop.setDefaultPickUpDelay();
+            l.addFreshEntity(drop);
+            closingDrop=drop.getUUID();
+            s.setItem(5,new ItemStack(Items.CARROT,15));
+            l.getServer().getCommands().performPrefixedCommand(l.getServer().createCommandSourceStack(),"time set night");
             nightStarted=l.getGameTime();
+            stage=9;
+        }else if(stage==9){
+            if(l.getGameTime()-nightStarted<10||v.getY()<CHANNEL.getY()+.95||v.isInWaterOrBubble())return;
+            System.out.println("FARMER_FLOWING_CHANNEL_EXIT_PASSED");
             p.teleportTo(l,CHEST.getX()+2.5,CHEST.getY()+.5,CHEST.getZ()+4.5,150,20);
             stage=3;
         }else if(stage==3){
             var barrel=(BarrelBlockEntity)l.getBlockEntity(CHEST);
             int deposited=barrel.countItem(Items.COBBLESTONE);
             progressDetail="worker="+v.blockPosition()+" chest="+deposited+" stock="+s.countItem(Items.COBBLESTONE)
+                +" groundDrop="+l.getEntity(closingDrop)
                 +" phaseUntil="+s.industry.getLong("farmer_discard_until")+" chestTarget="+s.industry.contains("farmer_discard_pos")
                 +" pickupUntil="+s.industry.getLong("farmer_pickup_until")+" navigation="+v.getNavigation().getTargetPos()
                 +" now="+l.getGameTime()+" day="+l.getDayTime()+" rain="+l.isRaining()
@@ -210,23 +266,67 @@ public final class FarmerVisualCheck {
                 +" bed="+l.getBlockState(BED)+" claimed="+(ResidenceData.get(l).bedClaim(worker)!=null)
                 +" memory="+v.getBrain().getMemory(MemoryModuleType.HOME)+" tick="+v.tickCount;
             check(l.getGameTime()-nightStarted<480,"night sequence did not finish: "+progressDetail);
-            if(!v.isSleeping())return;
+            if(!v.isSleeping()||companions.stream().anyMatch(id->!(l.getEntity(id) instanceof Villager resident)||!resident.isSleeping()))return;
+            var forgeJob=EmploymentData.get(l).assigned(companions.get(1));
+            check(forgeStorage.getStackInSlot(0).getCount()==64&&forgeJob.countItem(Items.CARROT)==13
+                &&forgeJob.countItem(Items.STICK)==2,"Forge partial insert or filter failed");
+            System.out.println("FARMER_FORGE_INVENTORY_PARTIAL_PASSED");
+            var sleepingBeds=new HashSet<BlockPos>();
+            sleepingBeds.add(v.getSleepingPos().orElseThrow());
+            for(var id:companions){
+                var resident=(Villager)l.getEntity(id);
+                check(sleepingBeds.add(resident.getSleepingPos().orElseThrow()),"farmers used the same bed");
+            }
+            s.industry.putUUID("visual_farmer_companion_0",companions.get(0));
+            s.industry.putUUID("visual_farmer_companion_1",companions.get(1));
             check(v.getSleepingPos().filter(BED::equals).isPresent(),"farmer slept outside its own bed");
             check(seenPhysicalDeposit&&deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding: "+progressDetail+" at designated barrel="+seenPhysicalDeposit);
+            check(barrel.countItem(Items.CARROT)==5&&s.countItem(Items.CARROT)==10,"main farmer did not reserve ten carrots");
             s.industry.putBoolean("visual_farmer_night",true);
             s.industry.putInt("visual_saved_harvest_cursor",s.industry.getInt("zigzag_harvest"));
             s.industry.putInt("visual_saved_plant_cursor",s.industry.getInt("zigzag_plant"));
             s.setChanged();
+            System.out.println("FARMER_THREE_DISTINCT_BEDS_PASSED");
             System.out.println("FARMER_ZIGZAG_HARVEST_JUMP_DISCARD_AND_SLEEP_PASSED");
             var bed=v.getSleepingPos().orElseThrow();
-            p.teleportTo(l,bed.getX()+.5,bed.getY()+.5,bed.getZ()+3.5,180,20);
+            p.teleportTo(l,bed.getX()+.5,bed.getY()+.5,bed.getZ()+5.5,180,23);
+            sleepObserved=l.getGameTime();
             stage=4;
+        }else if(stage==4){
+            if(l.getGameTime()-sleepObserved<24)return;
+            var companion=(Villager)l.getEntity(companions.get(1));
+            var start=POST.offset(7,1,-4);
+            companion.stopSleeping();
+            companion.setPos(start.getX()+.5,start.getY(),start.getZ()+.5);
+            escapeStart=companion.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(HOME));
+            var zombie=EntityType.ZOMBIE.create(l);
+            zombie.setInvulnerable(true);
+            zombie.setPersistenceRequired();
+            zombie.setPos(start.getX()+1.5,start.getY(),start.getZ()-1.5);
+            zombie.setTarget(companion);
+            l.addFreshEntity(zombie);
+            pursuer=zombie.getUUID();
+            p.teleportTo(l,start.getX()+3.5,start.getY()+2,start.getZ()+3.5,140,24);
+            stage=10;
+        }else if(stage==10){
+            var companion=(Villager)l.getEntity(companions.get(1));
+            if(!Employment.fleeing(companion)||companion.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(HOME))>.75*escapeStart)return;
+            var zombie=l.getEntity(pursuer);
+            if(zombie!=null)zombie.discard();
+            stage=11;
+        }else if(stage==11){
+            var companion=(Villager)l.getEntity(companions.get(1));
+            if(!companion.isSleeping())return;
+            check(companion.getSleepingPos().filter(at->ResidenceData.get(l).ownsBed(l.dimension(),at,companion.getUUID())).isPresent(),
+                "night escape lost the companion's residential bed");
+            System.out.println("FARMER_NIGHT_PURSUIT_HOME_RETURN_PASSED");
+            stage=12;
         }
     }
 
     @net.minecraftforge.eventbus.api.SubscribeEvent
     public static void depositProbe(WorkActionEvent event){
-        if(stage!=3||!event.action.equals("deposit")||!event.position.equals(CHEST)||!event.worker.getUUID().equals(worker))return;
+        if((stage!=3&&stage!=9)||!event.action.equals("deposit")||!event.position.equals(CHEST)||!event.worker.getUUID().equals(worker))return;
         seenPhysicalDeposit=event.worker.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(CHEST))<=3.5;
     }
 
@@ -236,15 +336,15 @@ public final class FarmerVisualCheck {
         ticks++;
         if(serverFailure!=null)throw new IllegalStateException(serverFailure);
         if(ticks==1)server.execute(()->recordFailure(()->setup(server.getPlayerList().getPlayer(player))));
-        if(ticks%5==0&&stage>0&&stage!=4)server.execute(()->recordFailure(()->progress(server.getPlayerList().getPlayer(player))));
+        if(ticks%5==0&&stage>0&&stage!=12)server.execute(()->recordFailure(()->progress(server.getPlayerList().getPlayer(player))));
         if(stage!=visibleStage){visibleStage=stage;stageTicks=0;}
         stageTicks++;
         if(stage>=2&&stage!=capturedStage&&stageTicks>=8){
             capturedStage=stage;
             Screenshot.grab(new File("../build"),"visual-farmer-field-"+stage+".png",mc.getMainRenderTarget(),m->{});
         }
-        check(ticks<3600&&(stage==3||stage==4||ticks<2400),"field or sleep sequence timed out at stage "+stage+" "+progressDetail);
-        return stage==4&&capturedStage==4;
+        check(ticks<3600&&(stage==3||stage==4||stage>=8||ticks<2400),"field or sleep sequence timed out at stage "+stage+" "+progressDetail);
+        return stage==12&&capturedStage==12;
     }
 
     private static void recordFailure(Runnable step){
@@ -256,11 +356,36 @@ public final class FarmerVisualCheck {
         }
     }
 
+    @net.minecraftforge.eventbus.api.SubscribeEvent
+    public static void testForgeInventory(net.minecraftforge.event.AttachCapabilitiesEvent<net.minecraft.world.level.block.entity.BlockEntity> event){
+        if(stage!=5||!(event.getObject() instanceof net.minecraft.world.level.block.entity.BeaconBlockEntity beacon)
+            ||!beacon.getBlockPos().equals(FORGE_CHEST))return;
+        forgeStorage=new net.minecraftforge.items.ItemStackHandler(1){
+            @Override public boolean isItemValid(int slot,ItemStack stack){return stack.is(Items.CARROT);}
+        };
+        var capability=net.minecraftforge.common.util.LazyOptional.of(()->forgeStorage);
+        event.addCapability(new net.minecraft.resources.ResourceLocation("residenciasaldeoes","visual_forge_chest"),
+            new net.minecraftforge.common.capabilities.ICapabilityProvider(){
+                @Override public <T> net.minecraftforge.common.util.LazyOptional<T> getCapability(
+                    net.minecraftforge.common.capabilities.Capability<T> type,Direction face){
+                    return type==net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER&&face==Direction.NORTH
+                        ?capability.cast():net.minecraftforge.common.util.LazyOptional.empty();
+                }
+            });
+        event.addListener(capability::invalidate);
+    }
+
     static void verifyRestore(ServerLevel l){
         var s=station(l);
         check(s.industry.getBoolean("visual_farmer_night")&&s.industry.getInt("zigzag_size")==5,"saved zigzag or night state missing");
         var claim=ResidenceData.get(l).bedClaim(s.worker);
         check(claim!=null&&claim.home().equals(HOME)&&claim.bed().equals(BED),"saved residential bed claim changed");
+        var beds=new HashSet<BlockPos>();
+        beds.add(claim.bed());
+        for(int i=0;i<2;i++){
+            var companion=ResidenceData.get(l).bedClaim(s.industry.getUUID("visual_farmer_companion_"+i));
+            check(companion!=null&&companion.home().equals(HOME)&&beds.add(companion.bed()),"companion bed was lost or shared after restart");
+        }
         check(s.industry.getInt("zigzag_harvest")==s.industry.getInt("visual_saved_harvest_cursor")
             &&s.industry.getInt("zigzag_plant")==s.industry.getInt("visual_saved_plant_cursor"),"saved zigzag cursors changed");
         check(((BarrelBlockEntity)l.getBlockEntity(CHEST)).countItem(Items.COBBLESTONE)==6,"saved discard changed");

@@ -67,7 +67,7 @@ public final class IndustrialWork {
         if(!ForgeEventFactory.getMobGriefingEvent(l,v)){alert(l,s,"protection","Trabalho bloqueado pela proteção/mobGriefing.");return;}
         switch(s.profession){
             case FARMER->{
-                if(!FarmerLogistics.isJumping(v)&&!FarmerLogistics.collect(l,s,v)){
+                if(!FarmerLogistics.isJumping(v)&&!FarmerLogistics.leaveWater(l,v)&&!FarmerLogistics.collect(l,s,v)){
                     if(v.distanceToSqr(area(l,s).getCenter())>400)FarmerLogistics.stayInField(l,s,v);
                     else FarmerWork.tick(l,s,v);
                 }

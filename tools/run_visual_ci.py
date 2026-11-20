@@ -59,7 +59,9 @@ for marker in ['EMPLOYMENT_GRAPHICAL_CONTRACT_PASSED','EMPLOYMENT_INVENTORY_SHAR
     if marker not in text:fail('Employment client check missing '+marker)
 if 'INDUSTRY_BLUE_LIMITS_PASSED' not in text:fail('Blue work area toggle was not validated.')
 for marker in ('FARMER_HELD_HOE_RENDERED_AT_DOUBLE_SCALE','FARMER_ZIGZAG_HARVEST_JUMP_DISCARD_AND_SLEEP_PASSED',
-               'FARMER_VISITOR_EXIT_AND_BLOCKED_ROUTE_RECOVERY_PASSED'):
+               'FARMER_VISITOR_EXIT_AND_BLOCKED_ROUTE_RECOVERY_PASSED','FARMER_THREE_DISTINCT_BEDS_PASSED',
+               'FARMER_FLOWING_CHANNEL_EXIT_PASSED','FARMER_FORGE_INVENTORY_PARTIAL_PASSED',
+               'FARMER_NIGHT_PURSUIT_HOME_RETURN_PASSED'):
     if marker not in text:fail('Farmer client check missing '+marker)
 for job in ('FARMER','BUTCHER','SHEPHERD','FISHERMAN','BREEDER','BEEKEEPER'):
     if f'INDUSTRY_{job}_FUNCTIONAL_PASSED' not in text:fail('Industry client check missing '+job)

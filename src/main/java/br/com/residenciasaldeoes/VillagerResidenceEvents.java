@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Witch;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.network.chat.Component;
@@ -1031,6 +1032,41 @@ public class VillagerResidenceEvents {
         }
         br.com.residenciasaldeoes.network.ModNetwork.sendPreviews(player,entries);
     }
+    public static boolean hasNightShelter(ServerLevel level,Villager worker){
+        long phase=Math.floorMod(level.getDayTime(),DAY_LENGTH);
+        if(phase<NIGHT_START||phase>=NIGHT_END)return false;
+        var home=ResidenceData.get(level).owner(worker.getUUID());
+        return home!=null&&home.dimension.equals(level.dimension())&&level.hasChunkAt(home.pos)
+            &&level.getBlockEntity(home.pos) instanceof ResidentialAnchorBlockEntity;
+    }
+
+    /** Prefer an actual home route whose remaining nodes keep clear of the pursuer. */
+    public static boolean seekResidentialSafety(ServerLevel level,Villager worker,LivingEntity threat){
+        if(!hasNightShelter(level,worker))return false;
+        var home=ResidenceData.get(level).owner(worker.getUUID());
+        if(insideResidence(worker.blockPosition(),home)&&!insideResidence(threat.blockPosition(),home)
+            &&!worker.hasLineOfSight(threat))return true;
+        var navigation=worker.getNavigation();
+        var current=navigation.getPath();
+        if(current!=null&&!current.isDone()&&insideResidence(current.getTarget(),home)&&clearOfThreat(current,threat))return true;
+        var target=findSafeSpot(level,worker,home.pos,home.size,false,true,threat);
+        if(target==null){
+            if(worker.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(home.pos))<144)return false;
+            var toward=net.minecraft.world.entity.ai.util.DefaultRandomPos.getPosTowards(worker,12,4,
+                net.minecraft.world.phys.Vec3.atCenterOf(home.pos),Math.PI/4);
+            if(toward==null)return false;
+            target=new BlockPos(toward);
+        }
+        var path=navigation.createPath(target,0);
+        return path!=null&&path.canReach()&&clearOfThreat(path,threat)&&navigation.moveTo(path,1.1);
+    }
+
+    private static boolean clearOfThreat(Path path,LivingEntity threat){
+        for(int i=path.getNextNodeIndex();i<path.getNodeCount();i++)
+            if(threat.distanceToSqr(net.minecraft.world.phys.Vec3.atBottomCenterOf(path.getNode(i).asBlockPos()))<4)return false;
+        return true;
+    }
+
     public static boolean ownsWorkerRest(Villager villager){
         if(!(villager.level instanceof ServerLevel level)||villager.isNoAi()||villager.isTrading()
             ||villager.isPassenger()||br.com.kraftcity.employment.Employment.fleeing(villager))return false;
@@ -1054,6 +1090,7 @@ public class VillagerResidenceEvents {
         if(villager.getPersistentData().contains(EMERALD_TRANSFER)){tickEmeraldTransfer(level,villager);return;}
         if(villager.getPersistentData().contains(NIGHT_DOOR_TASK)){tickNightDoorClosure(level,villager);return;}
         if(br.com.kraftcity.industry.FarmerLogistics.beforeHome(level,villager))return;
+        if(workerRest&&br.com.kraftcity.industry.FarmerLogistics.leaveWater(level,villager))return;
         boolean employed=br.com.kraftcity.employment.Employment.active(villager);
         long time=Math.floorMod(level.getDayTime(),DAY_LENGTH);
         boolean night=time>=NIGHT_START&&time<NIGHT_END;
@@ -1149,7 +1186,7 @@ public class VillagerResidenceEvents {
                 if(bed!=null&&!data.ownsBed(level.dimension(),bed,villager.getUUID())){
                     data.releaseBed(villager.getUUID());bed=null;
                 }
-                if(bed!=null&&!level.hasChunkAt(bed))return;
+                if(bed!=null&&!level.hasChunkAt(bed))bed=null;
                 if(bed!=null&&(!(level.getBlockState(bed).getBlock() instanceof BedBlock)
                         ||level.getBlockState(bed).getValue(BedBlock.PART)!=net.minecraft.world.level.block.state.properties.BedPart.HEAD
                         ||!bedInsideHome(level,bed,home))){
@@ -1157,14 +1194,14 @@ public class VillagerResidenceEvents {
                 }
                 BlockPos bedApproach=bed==null?null:findReachableBedApproach(level,villager,bed,home);
                 if(bed!=null&&bedApproach==null){
-                    // A saved claim can outlive a blocked route. Release it so another
-                    // accessible bed in this residence can be considered.
-                    data.releaseBed(villager.getUUID());bed=null;
+                    // Keep the valid claim while probing an alternative. A temporary
+                    // path failure must not hand this worker's bed to another resident.
+                    bed=null;
                 }
                 if(bed!=null&&!claimResidentialBedPoi(level,data,villager,home,bed)){
                     data.releaseBed(villager.getUUID());bed=null;
                 }
-                if(bed==null)bed=findAvailableBed(level,data,villager,home);
+                if(bed==null&&(!workerRest||villager.isOnGround()))bed=findAvailableBed(level,data,villager,home);
                 if(bed==null&&returningFromNightDoor){entityData.remove(NIGHT_DOOR_BED_RETURN);returningFromNightDoor=false;}
                 if(bed!=null&&level.hasChunkAt(bed)){
                     if(level.getBlockState(bed).getValue(BedBlock.OCCUPIED)){
@@ -1581,12 +1618,8 @@ public class VillagerResidenceEvents {
                 .filter(type->type.is(net.minecraft.world.entity.ai.village.poi.PoiTypes.HOME)).isPresent();
     }
     private BlockPos findReachableBedApproach(ServerLevel level,Villager villager,BlockPos bed,ResidenceData.Home home){
-        // A farmer can follow the vanilla HOME path onto the mattress after
-        // releasing its closing route. Standing on the pillow is physical arrival.
-        if(villager.blockPosition().equals(bed)&&bedInsideHome(level,bed,home)){
-            var station=br.com.kraftcity.employment.EmploymentData.get(level).assigned(villager.getUUID());
-            if(station!=null&&station.profession==br.com.kraftcity.employment.Profession.FARMER)return bed;
-        }
+        boolean workerRest=ownsWorkerRest(villager);
+        if(workerRest&&villager.blockPosition().equals(bed)&&bedInsideHome(level,bed,home))return bed;
         List<BlockPos> approaches=new ArrayList<>();
         for(Direction direction:Direction.Plane.HORIZONTAL){
             BlockPos approach=bed.relative(direction);
@@ -1601,6 +1634,10 @@ public class VillagerResidenceEvents {
         for(BlockPos approach:approaches){
             Path path=villager.getNavigation().createPath(approach,0);
             if(path!=null&&path.canReach()&&pathStaysInside(path,home))return approach;
+        }
+        if(workerRest&&bedInsideHome(level,bed,home)){
+            Path path=nav.createPath(bed,0);
+            if(path!=null&&path.canReach()&&pathStaysInside(path,home))return bed;
         }
         return null;
     }
@@ -1631,6 +1668,10 @@ public class VillagerResidenceEvents {
     }
 
     private static BlockPos findSafeSpot(ServerLevel level,Villager v,BlockPos anchor,int size,boolean covered,boolean reachable){
+        return findSafeSpot(level,v,anchor,size,covered,reachable,null);
+    }
+
+    private static BlockPos findSafeSpot(ServerLevel level,Villager v,BlockPos anchor,int size,boolean covered,boolean reachable,LivingEntity threat){
         if(reachable&&!v.isOnGround()&&!v.isInWaterOrBubble())return null;
         int paths=0;
         int r=size/2;List<BlockPos> bedApproaches=new ArrayList<>(),candidates=new ArrayList<>();
@@ -1652,7 +1693,7 @@ public class VillagerResidenceEvents {
             if(reachable){
                 if(++paths>12)return null;
                 var path=v.getNavigation().createPath(feet,0);
-                if(path==null||!path.canReach())continue;
+                if(path==null||!path.canReach()||threat!=null&&!clearOfThreat(path,threat))continue;
             }
             return feet;
         }

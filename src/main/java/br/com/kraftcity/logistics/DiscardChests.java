@@ -111,19 +111,36 @@ public final class DiscardChests {
     public static BlockEntity capability(ServerLevel level,BlockPos pos){
         if(!level.hasChunkAt(pos))return null;
         var be=level.getBlockEntity(pos);
-        if(be==null||be instanceof ChestBlockEntity||be instanceof BarrelBlockEntity
+        if(be==null||at(level,pos)!=null||be instanceof ChestBlockEntity&&level.getBlockState(pos).getBlock() instanceof ChestBlock
             ||be instanceof br.com.residenciasaldeoes.block.EmeraldChestBlockEntity)return null;
         for(var side:Direction.values())if(be.getCapability(ForgeCapabilities.ITEM_HANDLER,side).isPresent())return be;
         return be.getCapability(ForgeCapabilities.ITEM_HANDLER).isPresent()?be:null;
     }
 
     public static IItemHandler accessibleHandler(BlockEntity be,Villager worker){
-        var delta=worker.position().add(0,.75,0).subtract(Vec3.atCenterOf(be.getBlockPos()));
-        var side=Direction.getNearest(delta.x,delta.y,delta.z);
-        var handler=be.getCapability(ForgeCapabilities.ITEM_HANDLER,side).orElse(null);
-        if(handler!=null)return handler;
-        for(var direction:Direction.values())if(be.getCapability(ForgeCapabilities.ITEM_HANDLER,direction).isPresent())return null;
+        return handler(be,interactionSide(be.getBlockPos(),worker));
+    }
+
+    public static IItemHandler handler(BlockEntity be,Direction side){
+        var exposed=be.getCapability(ForgeCapabilities.ITEM_HANDLER,side).orElse(null);
+        if(exposed!=null)return exposed;
+        for(var other:Direction.values())if(be.getCapability(ForgeCapabilities.ITEM_HANDLER,other).isPresent())return null;
         return be.getCapability(ForgeCapabilities.ITEM_HANDLER).orElse(null);
+    }
+
+    private static Direction interactionSide(BlockPos pos,Villager worker){
+        var delta=worker.position().add(0,.75,0).subtract(Vec3.atCenterOf(pos));
+        return Direction.getNearest(delta.x,delta.y,delta.z);
+    }
+
+    public static boolean accepts(IItemHandler handler,EmploymentData.Station station,int[] offers){
+        for(int i=0;i<offers.length;i++){
+            if(offers[i]<=0)continue;
+            var stack=station.getItem(i).copy();
+            stack.setCount(offers[i]);
+            if(ItemHandlerHelper.insertItemStacked(handler,stack,true).getCount()<offers[i])return true;
+        }
+        return false;
     }
 
     public static boolean hasOffers(int[] offers){
@@ -145,29 +162,22 @@ public final class DiscardChests {
         var container=at(level,pos);
         var be=container==null?capability(level,pos):null;
         if(container==null&&be==null)return false;
+        if(be!=null){
+            for(var side:Direction.values()){
+                var handler=handler(be,side);
+                if(handler!=null&&accepts(handler,station,offers))return true;
+            }
+            return false;
+        }
         for(int i=0;i<offers.length;i++){
             if(offers[i]==0)continue;
             var stack=station.getItem(i).copy();
             stack.setCount(offers[i]);
-            if(container!=null){
-                for(int slot=0;slot<container.getContainerSize();slot++){
-                    var stored=container.getItem(slot);
-                    int limit=Math.min(container.getMaxStackSize(),stack.getMaxStackSize());
-                    if(container.canPlaceItem(slot,stack)&&(stored.isEmpty()
-                        ||ItemStack.isSameItemSameTags(stored,stack)&&stored.getCount()<limit))return true;
-                }
-            }else{
-                boolean sided=false;
-                for(var side:Direction.values()){
-                    var handler=be.getCapability(ForgeCapabilities.ITEM_HANDLER,side).orElse(null);
-                    if(handler==null)continue;
-                    sided=true;
-                    if(ItemHandlerHelper.insertItemStacked(handler,stack.copy(),true).getCount()<offers[i])return true;
-                }
-                if(!sided){
-                    var handler=be.getCapability(ForgeCapabilities.ITEM_HANDLER).orElse(null);
-                    if(handler!=null&&ItemHandlerHelper.insertItemStacked(handler,stack,true).getCount()<offers[i])return true;
-                }
+            for(int slot=0;slot<container.getContainerSize();slot++){
+                var stored=container.getItem(slot);
+                int limit=Math.min(container.getMaxStackSize(),stack.getMaxStackSize());
+                if(container.canPlaceItem(slot,stack)&&(stored.isEmpty()
+                    ||ItemStack.isSameItemSameTags(stored,stack)&&stored.getCount()<limit))return true;
             }
         }
         return false;
@@ -177,7 +187,7 @@ public final class DiscardChests {
         if(!level.hasChunkAt(pos)||!exposed(level,pos)||!IndustrialWork.allowed(level,station,worker,pos,null,action))return;
         var actor=IndustrialWork.actor(level,station,worker);
         if(!level.mayInteract(actor,pos))return;
-        var hit=new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(pos),Direction.UP,pos,false);
+        var hit=new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(pos),interactionSide(pos,worker),pos,false);
         var permission=net.minecraftforge.common.ForgeHooks.onRightClickBlock(actor,net.minecraft.world.InteractionHand.MAIN_HAND,pos,hit);
         if(permission.isCanceled()||permission.getUseBlock()==net.minecraftforge.eventbus.api.Event.Result.DENY
             ||!level.hasChunkAt(pos)||!worker.getUUID().equals(station.worker)||!Employment.valid(level,worker.getUUID()))return;
