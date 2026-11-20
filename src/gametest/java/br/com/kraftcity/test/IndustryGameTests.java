@@ -1495,4 +1495,79 @@ public final class IndustryGameTests {
             }).thenSucceed();
     }
 
+    /** Models a Forge subscriber that expands a player hoe break to adjoining crops. */
+    public static final class AreaHoeSubscriber {
+        private final BlockPos target;
+        private final ServerLevel level;
+        private boolean veto=true;
+        private boolean vetoed;
+        private boolean observed;
+        private boolean sawHoe;
+
+        AreaHoeSubscriber(ServerLevel level,BlockPos target){
+            this.target=target;
+            this.level=level;
+        }
+
+        @net.minecraftforge.eventbus.api.SubscribeEvent(priority=net.minecraftforge.eventbus.api.EventPriority.HIGH)
+        public void vetoBreak(net.minecraftforge.event.level.BlockEvent.BreakEvent event){
+            if(veto&&event.getLevel()==level&&event.getPos().equals(target)){
+                vetoed=true;
+                event.setCanceled(true);
+            }
+        }
+
+        @net.minecraftforge.eventbus.api.SubscribeEvent
+        public void onBreak(net.minecraftforge.event.level.BlockEvent.BreakEvent event){
+            if(event.getLevel()!=level||!event.getPos().equals(target))return;
+            observed=true;
+            sawHoe=event.getPlayer().getMainHandItem().canPerformAction(net.minecraftforge.common.ToolActions.HOE_DIG);
+            if(!sawHoe||net.minecraftforge.fml.ModList.get().isLoaded("quark"))return;
+            for(var pos:BlockPos.betweenClosed(target.offset(-1,0,-1),target.offset(1,0,1))){
+                if(!pos.equals(target)&&level.getBlockState(pos).getBlock() instanceof CropBlock)level.destroyBlock(pos,true,event.getPlayer());
+            }
+        }
+    }
+
+    @GameTest(template="empty",timeoutTicks=240,batch="farmer_area_hoe")
+    public static void a_player_hoe_subscriber_cannot_expand_a_real_farmer_harvest(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var wheat=(CropBlock)Blocks.WHEAT;
+        var target=f.p.east().north().above();
+        var soil=Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE,7);
+        var neighbors=new java.util.LinkedHashMap<BlockPos,BlockState>();
+        for(var cell:BlockPos.betweenClosed(target.offset(-1,0,-1),target.offset(1,0,1))){
+            if(cell.below().equals(f.p))continue;
+            f.l.setBlock(cell.below(),soil,3);
+            var state=cell.equals(target)?wheat.getStateForAge(7):wheat.getStateForAge(1);
+            f.l.setBlock(cell,state,3);
+            if(!cell.equals(target))neighbors.put(cell.immutable(),state);
+        }
+        f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,4));
+        f.s.setItem(27,new ItemStack(IndustrialTools.HOE.get()));
+        f.s.setItem(30,new ItemStack(Items.WATER_BUCKET));
+        var start=Vec3.atBottomCenterOf(f.p.south(2).above());
+        f.v.setPos(start.x,start.y,start.z);
+        var observer=new AreaHoeSubscriber(f.l,target);
+        MinecraftForge.EVENT_BUS.register(observer);
+        h.runAfterDelay(210,()->MinecraftForge.EVENT_BUS.unregister(observer));
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->{
+            check(observer.vetoed,"waiting for the Forge veto");
+            check(f.l.getBlockState(target)==wheat.getStateForAge(7)&&count(f,Items.WHEAT)==0,
+                "Forge veto was ignored");
+            for(var plot:neighbors.entrySet())check(f.l.getBlockState(plot.getKey())==plot.getValue(),"veto did not protect a neighboring crop");
+        }).thenExecute(()->observer.veto=false).thenWaitUntil(()->{
+            check(observer.observed&&f.v.distanceToSqr(start)>4,"waiting for real farmer arrival and Forge event");
+            for(var plot:neighbors.entrySet()){
+                var cell=plot.getKey();
+                check(f.l.getBlockState(cell)==plot.getValue()&&f.l.getBlockState(cell.below())==soil,
+                    "Forge area harvest changed neighboring crop or support at "+cell+" with hoe="+observer.sawHoe);
+            }
+            check(f.l.getBlockState(target)==wheat.getStateForAge(0),"target harvest not committed");
+        }).thenWaitUntil(()->check(count(f,Items.WHEAT)>0,"farmer did not collect wheat"))
+            .thenExecute(()->MinecraftForge.EVENT_BUS.unregister(observer)).thenSucceed();
+    }
+
 }

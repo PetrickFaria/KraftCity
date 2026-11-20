@@ -197,7 +197,20 @@ public final class IndustrialWork {
         }
     }
     static boolean breakAllowed(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos p){
-        return allowed(l,s,v,p,null,"harvest")&&!MinecraftForge.EVENT_BUS.post(new BlockEvent.BreakEvent(l,p,l.getBlockState(p),actor(l,s,v)));
+        if(!allowed(l,s,v,p,null,"harvest"))return false;
+        var actor=actor(l,s,v);
+        if(s.profession!=Profession.FARMER){
+            return !MinecraftForge.EVENT_BUS.post(new BlockEvent.BreakEvent(l,p,l.getBlockState(p),actor));
+        }
+        // This event is a permission probe. Exposing the hoe makes player-tool
+        // listeners perform their own harvest before KraftCity commits its target.
+        var tool=actor.getMainHandItem();
+        actor.setItemInHand(InteractionHand.MAIN_HAND,ItemStack.EMPTY);
+        try{
+            return !MinecraftForge.EVENT_BUS.post(new BlockEvent.BreakEvent(l,p,l.getBlockState(p),actor));
+        }finally{
+            actor.setItemInHand(InteractionHand.MAIN_HAND,tool);
+        }
     }
     static boolean placeAllowed(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos p,BlockState next){
         if(!allowed(l,s,v,p,null,"plant"))return false;

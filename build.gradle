@@ -52,6 +52,11 @@ minecraft.runs {
 sourceSets {
  visualTest { compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath; runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath }
 }
+minecraft.runs.configureEach {
+ ["kraftcity.harvestTrace", "kraftcity.harvestTrace.dimension", "kraftcity.harvestTrace.post"].each { key ->
+  if (System.getProperty(key) != null) property key, System.getProperty(key)
+ }
+}
 minecraft.runs.client {
  if (project.hasProperty("visual_check")) {
   property "residencias.visualCheck", "true"

@@ -130,6 +130,7 @@ public final class FarmerWork {
             }
             return;
         }
+        HarvestTrace.selection(l,s.pos,v,pos,state);
         if(!IndustrialWork.breakAllowed(l,s,v,pos)||!same(l,s,v,pos,state,tool))return;
         var replanted=crop.getStateForAge(0);
         if(!replanted.canSurvive(l,pos)||!IndustrialWork.placeAllowed(l,s,v,pos,replanted)||!same(l,s,v,pos,state,tool)
@@ -176,6 +177,7 @@ public final class FarmerWork {
         return false;
     }
     private static void harvestSpecial(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos pos,BlockState state,boolean cane,ItemStack tool){
+        HarvestTrace.selection(l,s.pos,v,pos,state);
         var upper=l.getBlockState(pos.above());
         if(!IndustrialWork.breakAllowed(l,s,v,pos)||cane&&!IndustrialWork.breakAllowed(l,s,v,pos.above())
             ||!same(l,s,v,pos,state,tool)||cane&&(l.getBlockState(pos.above())!=upper||!ripeCane(l,s,IndustrialRules.size(l,s),pos))
