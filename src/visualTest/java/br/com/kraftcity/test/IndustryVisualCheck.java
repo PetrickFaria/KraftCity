@@ -22,7 +22,9 @@ public final class IndustryVisualCheck {
     private static boolean farmerSceneDone,blueBoundsCleared;
     private static final Map<Profession,UUID> ids=new EnumMap<>(Profession.class);
     private static void check(boolean value,String message){if(!value)throw new IllegalStateException(message);}
-    private static BlockPos post(int i){return new BlockPos(100+i*18,-57,10);}
+    // Keep the demo workstations away from the generated GameTest grid.
+    // Use an isolated strip so its leftover containers cannot receive demo output.
+    private static BlockPos post(int i){return new BlockPos(100+i*18,-57,-120);}
     private static EmploymentData.Station station(ServerLevel l,int i){return ((WorkBlockEntity)l.getBlockEntity(post(i))).station();}
     private static <T extends Animal>T animal(ServerLevel l,EmploymentData.Station s,EntityType<T> type){var a=type.create(l);a.setPos(s.pos.getX()+1.5,s.pos.getY(),s.pos.getZ()+.5);a.setNoAi(true);a.setAge(0);a.getPersistentData().putUUID("KCIndustryStation",s.id);l.addFreshEntity(a);return a;}
     private static int count(EmploymentData.Station s,Item item){int n=0;for(int i=0;i<27;i++)if(s.getItem(i).is(item))n+=s.getItem(i).getCount();return n;}
