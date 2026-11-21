@@ -148,7 +148,7 @@ public final class CommerceVisualCheck {
                 }
             });
             if(nightReady){readyTicks++;if(readyTicks==30)mc.getSingleplayerServer().execute(()->EmploymentVisualCheck.restoreNightFixture(mc.getSingleplayerServer().overworld()));if(readyTicks>=80)MilitaryVisualCheck.tick(mc,readyTicks-80);}
-            check(ticks<2400,"Partial commercial operation did not reach checkpoint");
+            if (!nightReady) check(ticks<2400,"Partial commercial operation did not reach checkpoint");
         }
     }
     public static void verifyRestore(ServerLevel l){

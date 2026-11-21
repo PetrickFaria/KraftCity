@@ -39,7 +39,15 @@ public final class MilitaryVisualCheck {
         for(int x=-17;x<=17;x++)for(int z=-17;z<=17;z++){l.setBlock(POST.offset(x,-1,z),Blocks.STONE.defaultBlockState(),3);for(int y=0;y<=5;y++)l.setBlock(POST.offset(x,y,z),Blocks.AIR.defaultBlockState(),3);}
         l.setBlock(HOME.below(),Blocks.STONE.defaultBlockState(),3);ResidenceData.get(l).unlinkAll(l,l.dimension(),HOME);l.setBlock(HOME,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)l.getBlockEntity(HOME)).setSize(11);
         var v=EntityType.VILLAGER.create(l);v.setAge(0);v.setNoAi(true);v.moveTo(POST.getX()+.5,POST.getY(),POST.getZ()+1.5,0,0);l.addFreshEntity(v);check(ResidenceData.get(l).link(l,HOME,v).equals("ok"),"Military visual residence");ResidenceData.get(l).renameResident(v.getUUID(),"Soldado de validação");worker=v.getUUID();
-        l.setBlock(POST,WorkModule.MILITARY.get().defaultBlockState().setValue(WorkBlock.FACING,Direction.SOUTH),3);var s=station(l);s.setItem(31,new ItemStack(Items.EMERALD,30));WorkBlock.open(p,s);
+        l.setBlock(POST,WorkModule.MILITARY.get().defaultBlockState().setValue(WorkBlock.FACING,Direction.SOUTH),3);
+        var s=station(l);
+        // The copied GameTest world can contain hostiles from earlier fixtures in this post's range.
+        var bounds=new net.minecraft.world.phys.AABB(POST).inflate(100,10,100);
+        l.getEntitiesOfClass(net.minecraft.world.entity.Mob.class,bounds,
+            mob->mob instanceof net.minecraft.world.entity.monster.Enemy&&Military.insideArea(s,mob.position()))
+            .forEach(net.minecraft.world.entity.Entity::discard);
+        s.setItem(31,new ItemStack(Items.EMERALD,30));
+        WorkBlock.open(p,s);
     }
     public static void tick(Minecraft mc,int elapsedTicks){
         if(elapsedTicks==0)mc.getSingleplayerServer().execute(()->setup(player(mc)));
