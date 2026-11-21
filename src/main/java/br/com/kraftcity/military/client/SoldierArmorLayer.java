@@ -37,6 +37,12 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
                 super.setPartVisibility(model,slot);
                 // The villager head and projecting nose have no compatible vanilla helmet shell.
                 if(slot==EquipmentSlot.HEAD&&!steve){model.head.visible=false;model.hat.visible=false;}
+                if(slot==EquipmentSlot.LEGS&&!steve){
+                    // The robe is deeper than the vanilla leggings mesh at rest.
+                    model.body.zScale=1.55F;
+                    model.leftLeg.zScale=1.55F;
+                    model.rightLeg.zScale=1.55F;
+                }
             }
             @Override protected net.minecraft.client.model.Model getArmorModelHook(
                     Villager entity,ItemStack stack,EquipmentSlot slot,HumanoidModel<Villager> model){
