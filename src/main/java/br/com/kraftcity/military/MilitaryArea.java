@@ -35,8 +35,9 @@ final class MilitaryArea {
     }
 
     boolean leaveGuardPost(BlockPos post,Villager soldier,Vec3 target){
-        var center=Vec3.atBottomCenterOf(post.above());
         var position=soldier.position();
+        if(Math.abs(position.y-post.getY())<.15)return bypassGuardPost(post,soldier,target);
+        var center=Vec3.atBottomCenterOf(post.above());
         var offset=target.subtract(center);
         if(Math.abs(position.y-center.y)>.1||Math.abs(position.x-center.x)>.8
             ||Math.abs(position.z-center.z)>.8||offset.horizontalDistanceSqr()<1)return false;
@@ -56,6 +57,24 @@ final class MilitaryArea {
         soldier.getNavigation().stop();
         soldier.getMoveControl().setWantedPosition(step.x,step.y,step.z,CHASE);
         return true;
+    }
+
+    private boolean bypassGuardPost(BlockPos post,Villager soldier,Vec3 target){
+        var center=Vec3.atBottomCenterOf(post);
+        var origin=soldier.position();
+        var offset=origin.subtract(center);
+        if(offset.horizontalDistanceSqr()>4)return false;
+        var side=Direction.getNearest(offset.x,0,offset.z);
+        var targetOffset=target.subtract(center);
+        if(targetOffset.x*side.getStepX()+targetOffset.z*side.getStepZ()>=0)return false;
+        var clearance=new AABB(post).inflate(soldier.getBbWidth()/2,0,soldier.getBbWidth()/2);
+        var from=origin.add(0,.1,0);
+        if(!clearance.contains(from)&&clearance.clip(from,target.add(0,.1,0)).isEmpty())return false;
+        var corner=post.relative(side);
+        var turn=side.getClockWise();
+        if(targetOffset.x*turn.getStepX()+targetOffset.z*turn.getStepZ()<0)turn=turn.getOpposite();
+        return move(soldier,Vec3.atBottomCenterOf(corner.relative(turn)),CHASE)
+            ||move(soldier,Vec3.atBottomCenterOf(corner.relative(turn.getOpposite())),CHASE);
     }
 
     boolean approach(Villager soldier,Vec3 destination,double speed){
