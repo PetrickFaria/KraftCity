@@ -60,14 +60,15 @@ public final class EmploymentEvents {
             if(!s.active||s.worker==null||s.profession==null)continue;
             var level=server.getLevel(s.dimension);
             if(level==null||!(level.getEntity(s.worker) instanceof Villager worker))continue;
-            boolean interrupted=worker.isSleeping()||Employment.fleeing(worker)||worker.getTarget()!=null||worker.isUsingItem();
-            boolean working=s.sector==Profession.Sector.MILITARY
+            boolean soldier=s.sector==Profession.Sector.MILITARY;
+            boolean interrupted=worker.isSleeping()||Employment.fleeing(worker)||!soldier&&(worker.getTarget()!=null||worker.isUsingItem());
+            boolean working=soldier
                 ?br.com.kraftcity.military.Military.onDuty(level,s)
                 :br.com.kraftcity.industry.IndustrialWork.day(level)&&!level.isThundering()
                     ||s.profession==Profession.FARMER&&br.com.kraftcity.industry.FarmerLogistics.ending(worker);
             ItemStack stowed=worker.isSleeping()||!interrupted&&!working?restingTool(s,worker):ItemStack.EMPTY;
             WorkNetwork.CHANNEL.send(net.minecraftforge.network.PacketDistributor.TRACKING_ENTITY.with(()->worker),
-                new WorkNetwork.Activity(worker.getId(),worker.getUUID(),s.profession==Profession.FARMER,working&&!interrupted,stowed));
+                new WorkNetwork.Activity(worker.getId(),worker.getUUID(),s.profession==Profession.FARMER,soldier,working&&!interrupted,stowed));
         }
         if(server.getTickCount()%20!=0)return;
         for(var s:EmploymentData.get(server.overworld()).stations())Employment.reconcile(server.overworld(),s);

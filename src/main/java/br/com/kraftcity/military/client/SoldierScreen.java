@@ -19,7 +19,7 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
     private int category=2,origin,page;
     private String query="";
     private EditBox search;
-    public SoldierScreen(SoldierMenu m,Inventory inv,Component title){super(m,inv,title);imageWidth=350;imageHeight=296;inventoryLabelX=94;inventoryLabelY=203;}
+    public SoldierScreen(SoldierMenu m,Inventory inv,Component title){super(m,inv,title);imageWidth=350;imageHeight=283;inventoryLabelX=94;inventoryLabelY=190;}
     @SubscribeEvent public static void setup(FMLClientSetupEvent e){e.enqueueWork(()->net.minecraft.client.gui.screens.MenuScreens.register(MilitaryModule.MENU.get(),SoldierScreen::new));}
     @SubscribeEvent public static void renderers(net.minecraftforge.client.event.EntityRenderersEvent.RegisterRenderers e){e.registerEntityRenderer(MilitaryModule.ZOMBIE.get(),net.minecraft.client.renderer.entity.ZombieVillagerRenderer::new);}
     public static void receive(MilitaryNetwork.State s){var mc=Minecraft.getInstance();if(mc.player!=null&&mc.player.containerMenu instanceof SoldierMenu m&&m.containerId==s.menu()&&m.stationId.equals(s.station())){m.state=s;if(!s.entries().isEmpty())m.catalog=s.entries();if(mc.screen instanceof SoldierScreen screen&&(!screen.blacklist||!s.entries().isEmpty()))screen.buttons();}}
@@ -34,24 +34,39 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
         search=addRenderableWidget(new EditBox(font,leftPos+146,topPos+46,194,18,Component.literal("Buscar criatura")));search.setValue(query);search.setResponder(v->{query=v;page=0;buttonsForRows();});
         buttonsForRows();return;
     }
+        boolean oldItems=java.util.stream.IntStream.range(9,31).anyMatch(i->!menu.inventory.getItem(i).isEmpty());
+        if(oldItems||menu.legacyStorage)button(180,128,162,menu.legacyStorage?"Voltar ao armazenamento":"Itens da versão anterior",
+            ()->{menu.legacyStorage=!menu.legacyStorage;buttons();});
         var state=menu.state;
         if(state!=null&&state.employed())addRenderableWidget(new Button(leftPos+276,topPos+2,66,14,
             Component.translatable("gui.kraftcity.dismiss"),b->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(
                 new br.com.kraftcity.employment.WorkNetwork.Dismiss(menu.containerId,menu.stationId,state.epoch()))));
-        String[] modes={"Livre","Guarda","Seguir"};for(int i=0;i<3;i++){final int c=i;button(8+82*i,145,78,(menu.state!=null&&menu.state.mode()==i?"> ":"")+modes[i],()->send(0,Military.Mode.values()[c].name()));}
-        button(258,145,84,menu.state!=null&&menu.state.night()?"Noturno":"Diurno",()->send(1,menu.state!=null&&menu.state.night()?"DAY":"NIGHT"));
-        button(8,169,164,"Blacklist de criaturas",()->{blacklist=true;page=0;buttons();send(3,"");});
-        if(menu.state!=null&&!menu.state.employed())button(180,169,162,"Treinar residente",()->send(4,""));
+        String[] modes={"Patrulhar","Guarnecer","Seguir"};for(int i=0;i<3;i++){final int c=i;button(8+82*i,104,78,(menu.state!=null&&menu.state.mode()==i?"> ":"")+modes[i],()->send(0,Military.Mode.values()[c].name()));}
+        button(258,104,84,menu.state!=null&&menu.state.night()?"Noturno":"Diurno",()->send(1,menu.state!=null&&menu.state.night()?"DAY":"NIGHT"));
+        button(8,128,164,"Blacklist de criaturas",()->{blacklist=true;page=0;buttons();send(3,"");});
+        if(!menu.legacyStorage&&menu.state!=null&&!menu.state.employed())button(180,28,162,"Treinar residente",()->send(4,""));
     }
     private final List<Button> rows=new ArrayList<>();
     private void buttonsForRows(){for(var r:rows)removeWidget(r);rows.clear();var list=filtered();page=Math.max(0,Math.min(page,Math.max(0,(list.size()-1)/8)));
         for(int i=0;i<8&&page*8+i<list.size();i++){var e=list.get(page*8+i);String label=(e.selected()?"[✓] ":"[ ] ")+font.plainSubstrByWidth(name(e)+" — "+e.id(),310);rows.add(button(8,74+23*i,334,label,()->send(2,e.id())));}
         rows.add(button(8,264,66,"<",()->{page--;buttonsForRows();}));rows.add(button(80,264,66,">",()->{page++;buttonsForRows();}));rows.add(button(212,264,130,"Voltar ao soldado",()->{blacklist=false;buttons();}));
     }
-    @Override protected void renderBg(PoseStack pose,float partial,int x,int y){fill(pose,leftPos,topPos,leftPos+350,topPos+296,0xFF252F29);fill(pose,leftPos+3,topPos+3,leftPos+347,topPos+293,0xFF435847);if(!blacklist)for(var slot:menu.slots){fill(pose,leftPos+slot.x-1,topPos+slot.y-1,leftPos+slot.x+17,topPos+slot.y+17,0xFF202820);fill(pose,leftPos+slot.x,topPos+slot.y,leftPos+slot.x+16,topPos+slot.y+16,0xFFAAB79C);}}
-    @Override protected void renderLabels(PoseStack pose,int x,int y){drawCenteredString(pose,font,blacklist?"Blacklist — criaturas autorizadas":"Soldado",175,6,0xFFFFFF);if(blacklist)return;
-        font.draw(pose,"Inventário comum (3 × 9)",94,16,0xFFFFFF);font.draw(pose,"Reservas",8,40,0xFFFFFF);String[] labels={"Arma","Esc.","Cap.","Peito","Pern.","Botas"};for(int i=0;i<6;i++)font.draw(pose,labels[i],16+36*i,91,0xFFFFFF);font.draw(pose,"Esmer.",267,91,0xFFFFFF);
-        var s=menu.state;if(s!=null){font.draw(pose,"Vida: "+Math.round(s.hp())+"/"+Math.round(s.max())+"   Lv"+s.level()+"   XP: "+String.format(Locale.ROOT,"%.1f",s.xp()/1000.),8,124,0xFFFFFF);font.draw(pose,s.zombie()?"Soldado Zumbi: Fraqueza + Maçã Dourada":s.employed()?"Turno, cama e equipamentos persistentes":"Sem soldado: itens preservados no posto",8,191,0xFFFFDD88);}font.draw(pose,playerInventoryTitle,94,203,0xFFFFFF);
+    @Override protected void renderBg(PoseStack pose,float partial,int x,int y){fill(pose,leftPos,topPos,leftPos+350,topPos+283,0xFF252F29);fill(pose,leftPos+3,topPos+3,leftPos+347,topPos+280,0xFF435847);if(!blacklist)for(var slot:menu.slots){if(!slot.isActive())continue;fill(pose,leftPos+slot.x-1,topPos+slot.y-1,leftPos+slot.x+17,topPos+slot.y+17,0xFF202820);fill(pose,leftPos+slot.x,topPos+slot.y,leftPos+slot.x+16,topPos+slot.y+16,0xFFAAB79C);}}
+    @Override protected void renderLabels(PoseStack pose,int x,int y){drawCenteredString(pose,font,blacklist?"Blacklist — inimigos adicionais":menu.state!=null&&menu.state.employed()?font.plainSubstrByWidth("Soldado · "+menu.state.workerName(),192):"Soldado",175,6,0xFFFFFF);if(blacklist)return;
+        if(menu.legacyStorage)font.draw(pose,"Recuperar itens da versão anterior",94,22,0xFFFFFF);
+        else{
+            font.draw(pose,"Equipamentos",8,38,0xFFFFFF);
+            font.draw(pose,"Armazenamento",94,153,0xFFFFFF);
+            String[] labels={"Arma","Esc.","Cap.","Peito","Pern.","Botas"};
+            for(int i=0;i<6;i++)font.draw(pose,labels[i],16+36*i,52,0xFFFFFF);
+            font.draw(pose,"Esmer.",267,52,0xFFFFFF);
+        }
+        var s=menu.state;
+        if(s!=null){
+            font.draw(pose,"Vida: "+Math.round(s.hp())+"/"+Math.round(s.max())+"   Lv"+s.level()+"   XP: "+String.format(Locale.ROOT,"%.1f",s.xp()/1000.),8,88,0xFFFFFF);
+            if(!menu.legacyStorage)font.draw(pose,s.zombie()?"Soldado Zumbi: Fraqueza + Maçã Dourada":s.employed()?"Em serviço conforme o turno":"Sem soldado",8,22,0xFFFFDD88);
+        }
+        font.draw(pose,playerInventoryTitle,94,190,0xFFFFFF);
     }
     @Override public void render(PoseStack pose,int x,int y,float partial){renderBackground(pose);if(!blacklist){super.render(pose,x,y,partial);renderTooltip(pose,x,y);}else{renderBg(pose,partial,x,y);pose.pushPose();pose.translate(leftPos,topPos,0);renderLabels(pose,x,y);pose.popPose();for(var r:renderables)r.render(pose,x,y,partial);}}
     @Override public boolean mouseClicked(double x,double y,int b){if(!blacklist)return super.mouseClicked(x,y,b);for(var child:children())if(child.mouseClicked(x,y,b)){setFocused(child);return true;}return false;}

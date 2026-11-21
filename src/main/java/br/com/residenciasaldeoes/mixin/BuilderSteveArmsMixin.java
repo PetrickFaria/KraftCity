@@ -28,6 +28,7 @@ public abstract class BuilderSteveArmsMixin {
             model.rightArm.xRot=cycle-1.1F*action;
             model.leftArm.xRot=-cycle;
         }else return;
+        WorkerPose.aim(worker,model.rightArm,model.leftArm);
         model.rightSleeve.copyFrom(model.rightArm);
         model.leftSleeve.copyFrom(model.leftArm);
     }

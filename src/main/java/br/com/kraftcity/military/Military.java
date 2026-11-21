@@ -44,60 +44,202 @@ public final class Military {
     }
     public static void stats(ServerLevel l,LivingEntity v){var a=v.getAttribute(Attributes.MAX_HEALTH);if(a!=null)a.setBaseValue(health(level(l,v.getUUID())));if(v.getHealth()>v.getMaxHealth())v.setHealth(v.getMaxHealth());}
     public static boolean onDuty(ServerLevel l,EmploymentData.Station s){long t=Math.floorMod(l.getDayTime(),24000);boolean night=t>=13000&&t<23000;return shift(s)==Shift.NIGHT?night:!night;}
-    public static void bind(EmploymentData.Station s,Mob v){for(int i=0;i<6;i++){var gear=s.equipment.getItem(i);if(gear.isDamageableItem()&&gear.getDamageValue()>=gear.getMaxDamage())s.equipment.setItem(i,ItemStack.EMPTY);if(v.getItemBySlot(GEAR[i])!=s.equipment.getItem(i))v.setItemSlot(GEAR[i],s.equipment.getItem(i));v.setDropChance(GEAR[i],0);}v.setCanPickUpLoot(false);}
+    public static void bind(EmploymentData.Station s,Mob v){for(int i=0;i<6;i++){var gear=s.equipment.getItem(i);if(gear.isDamageableItem()&&gear.getDamageValue()>=gear.getMaxDamage())s.equipment.setItem(i,ItemStack.EMPTY);if(v.getItemBySlot(GEAR[i])!=s.equipment.getItem(i)){
+            if(i==0){v.stopUsingItem();s.military.remove("drawAt");}
+            v.setItemSlot(GEAR[i],s.equipment.getItem(i));
+        }v.setDropChance(GEAR[i],0);}v.setCanPickUpLoot(false);v.setLeftHanded(false);}
     public static void release(ServerLevel l,UUID worker){var s=EmploymentData.get(l).assigned(worker);if(!military(s))return;s.military.remove("target");
         for(var world:l.getServer().getAllLevels())if(world.getEntity(worker) instanceof SoldierZombie z){for(var slot:GEAR)z.setItemSlot(slot,ItemStack.EMPTY);}else if(world.getEntity(worker) instanceof Villager v){v.stopUsingItem();for(var slot:GEAR)v.setItemSlot(slot,ItemStack.EMPTY);v.getPersistentData().remove("KCSoldier");v.getAttribute(Attributes.MAX_HEALTH).setBaseValue(20);}
         s.setChanged();
     }
-    public static boolean selected(EmploymentData.Station s,EntityType<?> type){var key=net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(type);if(key==null)return false;String id=key.toString();var choices=s.military.getCompound("blacklist");return choices.contains(id)?choices.getBoolean(id):key.getNamespace().equals("minecraft")&&type.getCategory()==MobCategory.MONSTER&&type!=EntityType.CREEPER&&MilitaryNetwork.category(type,null)==2;}
+    public static boolean selected(EmploymentData.Station s,EntityType<?> type){var key=net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(type);if(key==null)return false;String id=key.toString();var choices=s.military.getCompound("blacklist");return choices.getBoolean(id);}
     public static void select(EmploymentData.Station s,EntityType<?> type,boolean on){var c=s.military.getCompound("blacklist");c.putBoolean(net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(type).toString(),on);s.military.put("blacklist",c);s.setChanged();}
-    public static boolean protectedArea(ServerLevel l,LivingEntity target){
-        var homes=ResidenceData.get(l);for(var home:homes.homes())if(home.dimension.equals(l.dimension())){
-            boolean loaded=l.hasChunkAt(home.pos);if(loaded&&!(l.getBlockEntity(home.pos) instanceof br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity))continue;
-            double half=home.size/2;if(loaded&&new AABB(home.pos).inflate(half,5,half).inflate(5).contains(target.position()))return true;
-            for(UUID id:home.residents)if(l.getEntity(id) instanceof Villager resident&&resident.isAlive()&&!isSoldier(resident)&&resident.distanceToSqr(target)<=100)return true;
+    public static boolean protectedArea(ServerLevel level,LivingEntity target){
+        return protectedArea(level,target,null);
+    }
+
+    private static boolean protectedArea(ServerLevel level,LivingEntity target,MilitaryArea area){
+        for(var home:ResidenceData.get(level).homes()){
+            if(!home.dimension.equals(level.dimension())||!level.hasChunkAt(home.pos)
+                ||!(level.getBlockEntity(home.pos) instanceof br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity))continue;
+            int radius=home.size/2;
+            var bounds=new AABB(home.pos.offset(-radius,1,-radius),home.pos.offset(radius+1,home.size+1,radius+1));
+            if((area==null||area.intersects(bounds))&&distanceTo(bounds,target.position())<=100)return true;
         }
-        for(var post:EmploymentData.get(l).stations())if(post.active&&post.dimension.equals(l.dimension())&&post.sector!=Profession.Sector.MILITARY&&l.hasChunkAt(post.pos)&&l.getBlockEntity(post.pos) instanceof WorkBlockEntity be&&post.id.equals(be.identity())){
-            double half=br.com.kraftcity.industry.IndustrialRules.size(l,post)/2;if(new AABB(post.pos).inflate(half,5,half).inflate(5).contains(target.position()))return true;
-        }return false;
+        for(var post:EmploymentData.get(level).stations()){
+            if(!post.active||post.worker==null||post.sector==Profession.Sector.MILITARY||!post.dimension.equals(level.dimension())
+                ||!level.hasChunkAt(post.pos)||!(level.getBlockEntity(post.pos) instanceof WorkBlockEntity be)||!post.id.equals(be.identity()))continue;
+            var bounds=post.sector==Profession.Sector.INDUSTRIAL
+                ?br.com.kraftcity.industry.IndustrialWork.area(level,post):new AABB(post.pos);
+            if((area==null||area.intersects(bounds))&&distanceTo(bounds,target.position())<=100)return true;
+        }
+        return false;
     }
+
+    private static double distanceTo(AABB box,Vec3 p){
+        double dx=Math.max(0,Math.max(box.minX-p.x,p.x-box.maxX));
+        double dy=Math.max(0,Math.max(box.minY-p.y,p.y-box.maxY));
+        double dz=Math.max(0,Math.max(box.minZ-p.z,p.z-box.maxZ));
+        return dx*dx+dy*dy+dz*dz;
+    }
+
+    private static Player linkedPlayer(ServerLevel level,EmploymentData.Station station){
+        return station.military.hasUUID("player")?level.getPlayerByUUID(station.military.getUUID("player")):null;
+    }
+
+    private static boolean struck(LivingEntity victim,LivingEntity attacker){
+        return victim.getLastHurtByMob()==attacker&&victim.tickCount-victim.getLastHurtByMobTimestamp()<100;
+    }
+
+    private static boolean ally(ServerLevel level,Villager soldier,LivingEntity candidate){
+        return candidate==soldier||candidate instanceof Player||soldier.isAlliedTo(candidate)||candidate.isAlliedTo(soldier)
+            ||candidate instanceof Villager&&(ResidenceData.get(level).owner(candidate.getUUID())!=null||Employment.active((Villager)candidate));
+    }
+
+    private static int priority(ServerLevel level,EmploymentData.Station station,Villager soldier,LivingEntity candidate,MilitaryArea area){
+        if(!(candidate instanceof Mob)||!candidate.isAlive()||candidate.isInvulnerable()||!area.contains(candidate.position())||ally(level,soldier,candidate))
+            return Integer.MAX_VALUE;
+        boolean enemy=MilitaryNetwork.category(candidate.getType(),candidate)==2||selected(station,candidate.getType());
+        if(mode(station)==Mode.FOLLOW){
+            var player=linkedPlayer(level,station);
+            if(player!=null&&area.contains(player.position())){
+                if(struck(player,candidate))return 0;
+                var orders=station.military.getCompound("orders");
+                String key=candidate.getUUID().toString();
+                if(candidate.distanceToSqr(player)<=100&&orders.contains(key)&&level.getGameTime()-orders.getLong(key)>=0
+                    &&level.getGameTime()-orders.getLong(key)<=MilitaryModule.CONTRIBUTION_TICKS.get())return 0;
+            }
+            if(struck(soldier,candidate))return 1;
+            return enemy&&player!=null&&area.contains(player.position())&&candidate.distanceToSqr(player)<=100?2:Integer.MAX_VALUE;
+        }
+        boolean nearResident=false;
+        for(var resident:level.getEntitiesOfClass(Villager.class,candidate.getBoundingBox().inflate(10),
+            villager->villager!=soldier&&villager.isAlive()&&area.contains(villager.position())&&villager.distanceToSqr(candidate)<=100
+                &&(ResidenceData.get(level).owner(villager.getUUID())!=null||Employment.active(villager)))){
+            if(struck(resident,candidate))return 0;
+            nearResident=true;
+        }
+        if(struck(soldier,candidate))return 1;
+        if(!enemy)return Integer.MAX_VALUE;
+        if(nearResident)return 2;
+        if(protectedArea(level,candidate,area))return 3;
+        return soldier.distanceToSqr(candidate)<=100?4:Integer.MAX_VALUE;
+    }
+
     public static boolean authorized(ServerLevel l,EmploymentData.Station s,Villager v,LivingEntity target){
-        if(!target.isAlive()||target==v||target instanceof Player||target instanceof Villager&&ResidenceData.get(l).owner(target.getUUID())!=null||!selected(s,target.getType()))return false;
-        if(!onDuty(l,s)||v.isSleeping()||!Employment.valid(l,v.getUUID()))return false;
-        if(mode(s)==Mode.FOLLOW){var p=s.military.hasUUID("player")?l.getPlayerByUUID(s.military.getUUID("player")):null;var orders=s.military.getCompound("orders");String key=target.getUUID().toString();boolean ordered=orders.contains(key)&&l.getGameTime()-orders.getLong(key)>=0&&l.getGameTime()-orders.getLong(key)<=MilitaryModule.CONTRIBUTION_TICKS.get();return p!=null&&target.distanceToSqr(p)<=100&&ordered;}
-        if(target.distanceToSqr(Vec3.atCenterOf(s.pos))>Math.pow(MilitaryModule.DETECTION.get(),2))return false;
-        return protectedArea(l,target)||(v.getLastHurtByMob()==target&&v.tickCount-v.getLastHurtByMobTimestamp()<100);
+        var area=new MilitaryArea(s);
+        return area.contains(v.position())&&onDuty(l,s)&&!v.isSleeping()&&Employment.valid(l,v.getUUID())
+            &&priority(l,s,v,target,area)!=Integer.MAX_VALUE;
     }
+
     public static LivingEntity target(ServerLevel l,EmploymentData.Station s,Villager v){
-        LivingEntity current=s.military.hasUUID("target")&&l.getEntity(s.military.getUUID("target")) instanceof LivingEntity t?t:null;
-        var choices=l.getEntitiesOfClass(LivingEntity.class,new AABB(s.pos).inflate(MilitaryModule.DETECTION.get()),t->authorized(l,s,v,t)&&v.hasLineOfSight(t));
-        if(mode(s)==Mode.FOLLOW)choices=l.getEntitiesOfClass(LivingEntity.class,v.getBoundingBox().inflate(20),t->authorized(l,s,v,t)&&v.hasLineOfSight(t));
-        // Keep focus unless a protected resident/area needs rescue over self-defense.
-        if(current!=null&&authorized(l,s,v,current)&&(protectedArea(l,current)||choices.stream().noneMatch(t->protectedArea(l,t))))return current;
-        return choices.stream().min(Comparator.<LivingEntity>comparingInt(t->protectedArea(l,t)?0:1).thenComparingDouble(v::distanceToSqr).thenComparing(t->t.getUUID().toString())).orElse(null);
+        var area=new MilitaryArea(s);
+        LivingEntity best=null;
+        int rank=Integer.MAX_VALUE;
+        double distance=Double.POSITIVE_INFINITY;
+        for(var candidate:l.getEntitiesOfClass(Mob.class,v.getBoundingBox().inflate(Math.min(32,MilitaryModule.DETECTION.get())),mob->mob!=v&&v.hasLineOfSight(mob))){
+            int nextRank=priority(l,s,v,candidate,area);
+            double nextDistance=v.distanceToSqr(candidate);
+            if((nextRank<rank||nextRank!=Integer.MAX_VALUE&&nextRank==rank&&nextDistance<distance)
+                &&(nextRank<=1||canEngage(s,v,candidate,area,nextDistance))){
+                best=candidate;rank=nextRank;distance=nextDistance;
+            }
+        }
+        return best;
     }
+
+    private static boolean canEngage(EmploymentData.Station station,Villager soldier,LivingEntity target,
+                                     MilitaryArea area,double distance){
+        if(distance<=4)return true;
+        var weapon=station.equipment.getItem(0);
+        boolean ranged=weapon.getItem() instanceof BowItem||weapon.getItem() instanceof CrossbowItem;
+        if(ranged&&distance<=36&&(ammo(station)>=0||CrossbowItem.isCharged(weapon)))return true;
+        return area.canReach(soldier,target.position());
+    }
+
+    public static Vec3 limitMovement(Villager soldier,Vec3 movement){
+        if(!(soldier.level instanceof ServerLevel level)||!soldier.getPersistentData().getBoolean("KCSoldier"))return movement;
+        var station=station(soldier);
+        if(!military(station)||!onDuty(level,station))return movement;
+        return new MilitaryArea(station).limit(soldier.position(),movement);
+    }
+
+    public static boolean insideArea(EmploymentData.Station station,Vec3 point){
+        return military(station)&&new MilitaryArea(station).contains(point);
+    }
+
+    public static void clearTask(Villager soldier,EmploymentData.Station station){
+        soldier.getNavigation().stop();
+        soldier.stopUsingItem();
+        station.military.remove("target");
+        station.military.remove("drawAt");
+        station.military.remove("retreatUntil");
+    }
+
     public static void tick(ServerLevel l,EmploymentData.Station s,Villager v){
-        if(!Employment.valid(l,v.getUUID())||!l.hasChunkAt(s.pos)&&mode(s)!=Mode.FOLLOW)return;bind(s,v);stats(l,v);
-        if(!onDuty(l,s)){if(!s.military.getBoolean("resting"))v.getNavigation().stop();s.military.putBoolean("resting",true);s.military.remove("target");v.stopUsingItem();
+        if(!Employment.valid(l,v.getUUID()))return;
+        bind(s,v);
+        stats(l,v);
+        if(!onDuty(l,s)){
+            if(!s.military.getBoolean("resting"))clearTask(v,s);
+            s.military.putBoolean("resting",true);
             if(!br.com.residenciasaldeoes.VillagerResidenceEvents.ownsWorkerRest(v))sleep(l,s,v);
-            heal(l,v);return;
+            heal(l,v);
+            return;
         }
         s.military.remove("resting");
-        if(v.isSleeping()){v.stopSleeping();v.getNavigation().stop();}heal(l,v);
-        var t=target(l,s,v);
-        if(t!=null){s.military.putUUID("target",t.getUUID());combat(l,s,v,t);s.setChanged();return;}
-        s.military.remove("target");v.stopUsingItem();
-        if(l.isThundering()){
-            var home=ResidenceData.get(l).owner(v.getUUID());
-            if(home!=null)br.com.residenciasaldeoes.VillagerResidenceEvents.shelterDuringStorm(l,v,home);
+        if(v.isSleeping()){v.stopSleeping();v.getNavigation().stop();}
+        heal(l,v);
+        var area=new MilitaryArea(s);
+        var navigation=v.getNavigation();
+        if(area.contains(v.position())&&!area.permits(navigation.getPath()))navigation.stop();
+        if(!area.contains(v.position())){
+            area.move(v,area.nearest(v.position()),MilitaryArea.WALK);
+            return;
+        }
+        LivingEntity threat=s.military.hasUUID("target")&&l.getEntity(s.military.getUUID("target")) instanceof LivingEntity current
+            &&priority(l,s,v,current,area)!=Integer.MAX_VALUE?current:null;
+        if(v.tickCount%5==0||threat==null&&s.military.hasUUID("target"))threat=target(l,s,v);
+        if(threat!=null){
+            if(!s.military.hasUUID("target")||!s.military.getUUID("target").equals(threat.getUUID()))clearTask(v,s);
+            s.military.putUUID("target",threat.getUUID());
+            combat(l,s,v,threat);
             s.setChanged();
             return;
         }
-        if(mode(s)==Mode.FOLLOW){var p=s.military.hasUUID("player")?l.getPlayerByUUID(s.military.getUUID("player")):null;if(p!=null&&v.distanceToSqr(p)>9)v.getNavigation().moveTo(p,1.1);else v.getNavigation().stop();}
-        else if(mode(s)==Mode.GUARD){Vec3 p=Vec3.atBottomCenterOf(s.pos.above());if(v.distanceToSqr(p)>.16)v.getNavigation().moveTo(p.x,p.y,p.z,1.1);else{v.getNavigation().stop();v.setDeltaMovement(Vec3.ZERO);float yaw=l.getBlockState(s.pos).getValue(WorkBlock.FACING).toYRot();v.setYRot(yaw);v.setYHeadRot(yaw);v.setYBodyRot(yaw);v.setXRot(0);var facing=l.getBlockState(s.pos).getValue(WorkBlock.FACING);v.getLookControl().setLookAt(v.getX()+facing.getStepX()*5,v.getEyeY(),v.getZ()+facing.getStepZ()*5);}}
-        else if(v.distanceToSqr(Vec3.atCenterOf(s.pos))>225)v.getNavigation().moveTo(s.pos.getX()+.5,s.pos.getY()+1,s.pos.getZ()+.5,1.1);
-        else if(v.tickCount%80==0||v.getNavigation().isDone()){int dx=v.getRandom().nextInt(21)-10,dz=v.getRandom().nextInt(21)-10;var p=s.pos.offset(dx,0,dz);if(dx*dx+dz*dz<=225&&l.hasChunkAt(p))v.getNavigation().moveTo(p.getX()+.5,p.getY()+1,p.getZ()+.5,.65);}
-        s.setChanged();
+        if(s.military.hasUUID("target"))clearTask(v,s);
+        if(mode(s)==Mode.FOLLOW){
+            var owner=linkedPlayer(l,s);
+            if(owner!=null&&v.distanceToSqr(owner)>49){
+                if(!area.approach(v,owner.position(),MilitaryArea.WALK))navigation.stop();
+                return;
+            }
+            navigation.stop();
+            MilitaryLoot.collect(l,s,v,area,false);
+        }else if(mode(s)==Mode.GUARD){
+            var point=Vec3.atBottomCenterOf(s.pos.above());
+            if(v.distanceToSqr(point)>.25)area.move(v,point,MilitaryArea.WALK);
+            else if(v.distanceToSqr(point)>.0025){
+                navigation.stop();
+                v.getMoveControl().setWantedPosition(point.x,point.y,point.z,MilitaryArea.WALK);
+            }else{
+                navigation.stop();
+                if(v.distanceToSqr(point)>1e-8)v.setPos(point.x,point.y,point.z);
+                v.setDeltaMovement(Vec3.ZERO);
+                if(l.hasChunkAt(s.pos)&&l.getBlockState(s.pos).hasProperty(WorkBlock.FACING)){
+                    var facing=l.getBlockState(s.pos).getValue(WorkBlock.FACING);
+                    float yaw=facing.toYRot();
+                    v.setYRot(yaw);v.setYHeadRot(yaw);v.setYBodyRot(yaw);v.setXRot(0);
+                    v.getLookControl().setLookAt(v.getX()+facing.getStepX()*5,v.getEyeY(),v.getZ()+facing.getStepZ()*5);
+                }
+                MilitaryLoot.collect(l,s,v,area,false);
+            }
+        }else if(!MilitaryLoot.collect(l,s,v,area,true)&&navigation.isDone()&&v.tickCount%10==0){
+            for(int attempt=0;attempt<6;attempt++){
+                var destination=v.blockPosition().offset(v.getRandom().nextInt(25)-12,v.getRandom().nextInt(5)-2,v.getRandom().nextInt(25)-12);
+                if(area.move(v,area.nearest(Vec3.atBottomCenterOf(destination)),MilitaryArea.WALK))break;
+            }
+        }
     }
     private static void heal(ServerLevel level,Villager villager){
         if(villager.isSleeping()&&br.com.residenciasaldeoes.VillagerResidenceEvents.usesResidentialSleepHealing(level,villager))return;
@@ -113,28 +255,36 @@ public final class Military {
         if(bed==null){if(v.distanceToSqr(Vec3.atCenterOf(home.pos.above()))>4)v.getNavigation().moveTo(home.pos.getX()+.5,home.pos.getY()+1,home.pos.getZ()+.5,.7);else v.getNavigation().stop();return;}if(v.distanceToSqr(Vec3.atCenterOf(bed))<=4){v.getNavigation().stop();v.startSleeping(bed);}else v.getNavigation().moveTo(bed.getX()+.5,bed.getY(),bed.getZ()+.5,.7);
     }
     public static void combat(ServerLevel l,EmploymentData.Station s,Villager v,LivingEntity t){
+        var area=new MilitaryArea(s);
+        if(!area.contains(v.position())||!area.contains(t.position()))return;
         v.getLookControl().setLookAt(t,30,30);double distance=v.distanceToSqr(t);ItemStack weapon=s.equipment.getItem(0);
         boolean ranged=weapon.getItem() instanceof BowItem||weapon.getItem() instanceof CrossbowItem;
         if(ranged&&(ammo(s)>=0||weapon.getItem() instanceof CrossbowItem&&CrossbowItem.isCharged(weapon))){ranged(l,s,v,t,weapon,distance);return;}
         long now=l.getGameTime();
-        if(now<s.military.getLong("retreatUntil")){Vec3 away=v.position().subtract(t.position()).normalize().scale(3);v.getNavigation().moveTo(v.getX()+away.x,v.getY(),v.getZ()+away.z,1.1);return;}
-        if(distance>4){v.getNavigation().moveTo(t,1.25);shield(v,true);return;}
-        if(!v.hasLineOfSight(t)){v.getNavigation().moveTo(t,1.1);shield(v,true);return;}
+        if(now<s.military.getLong("retreatUntil")){Vec3 away=v.position().subtract(t.position()).normalize().scale(3);area.move(v,area.nearest(v.position().add(away.x,0,away.z)),MilitaryArea.CHASE);return;}
+        if(distance>4){area.move(v,t.position(),MilitaryArea.CHASE);shield(v,true);return;}
+        if(!v.hasLineOfSight(t)){area.move(v,t.position(),MilitaryArea.CHASE);shield(v,true);return;}
         v.getNavigation().stop();if(now<s.military.getLong("attackAt")){shield(v,true);return;}
         v.stopUsingItem();v.swing(InteractionHand.MAIN_HAND);
         if(v.doHurtTarget(t)){if(weapon.getItem() instanceof SwordItem)weapon.hurtAndBreak(1,v,e->e.broadcastBreakEvent(EquipmentSlot.MAINHAND));s.setChanged();}
         s.military.putLong("attackAt",now+20);s.military.putLong("retreatUntil",now+10);
     }
-    private static void shield(Villager v,boolean enabled){if(enabled&&v.getOffhandItem().getItem() instanceof ShieldItem&&!v.isUsingItem())v.startUsingItem(InteractionHand.OFF_HAND);}
+    private static void shield(Villager v,boolean enabled){if(enabled&&v.getOffhandItem().canPerformAction(net.minecraftforge.common.ToolActions.SHIELD_BLOCK)&&!v.isUsingItem())v.startUsingItem(InteractionHand.OFF_HAND);}
     private static int ammo(EmploymentData.Station s){for(int i=0;i<31;i++)if(s.getItem(i).getItem() instanceof ArrowItem)return i;return -1;}
     private static void ranged(ServerLevel l,EmploymentData.Station s,Villager v,LivingEntity t,ItemStack weapon,double distance){
-        if(distance<16){var away=v.position().subtract(t.position()).normalize().scale(3);v.getNavigation().moveTo(v.getX()+away.x,v.getY(),v.getZ()+away.z,1.1);}else if(distance>36)v.getNavigation().moveTo(t,1.1);else v.getNavigation().stop();
-        if(!v.hasLineOfSight(t)){s.military.remove("drawAt");v.stopUsingItem();v.getNavigation().moveTo(t,1.1);return;}
+        var area=new MilitaryArea(s);
+        if(distance<16){var away=v.position().subtract(t.position()).normalize().scale(3);area.move(v,area.nearest(v.position().add(away.x,0,away.z)),MilitaryArea.CHASE);}else if(distance>36)area.move(v,t.position(),MilitaryArea.CHASE);else v.getNavigation().stop();
+        if(!v.hasLineOfSight(t)){s.military.remove("drawAt");v.stopUsingItem();area.move(v,t.position(),MilitaryArea.CHASE);return;}
+        var line=v.getEyePosition();
+        var end=t.getEyePosition();
+        var box=new AABB(line,end).inflate(.5);
+        if(l.getEntitiesOfClass(LivingEntity.class,box,entity->entity!=v&&entity!=t&&ally(l,v,entity)).stream()
+            .anyMatch(entity->entity.getBoundingBox().inflate(.15).clip(line,end).isPresent()))return;
         if(weapon.getItem() instanceof CrossbowItem&&CrossbowItem.isCharged(weapon)){
             v.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,t.getEyePosition());
             CrossbowItem.performShooting(l,v,InteractionHand.MAIN_HAND,weapon,3.15F,1F);CrossbowItem.setCharged(weapon,false);s.military.remove("drawAt");v.stopUsingItem();s.setChanged();return;
         }
-        if(!s.military.contains("drawAt")){s.military.putLong("drawAt",l.getGameTime());v.startUsingItem(InteractionHand.MAIN_HAND);return;}
+        if(!s.military.contains("drawAt")){s.military.putLong("drawAt",l.getGameTime());v.stopUsingItem();v.startUsingItem(InteractionHand.MAIN_HAND);return;}
         int quick=EnchantmentHelper.getItemEnchantmentLevel(Enchantments.QUICK_CHARGE,weapon);int load=weapon.getItem() instanceof CrossbowItem?Math.max(5,25-5*quick):20;
         if(l.getGameTime()-s.military.getLong("drawAt")<load)return;
         int slot=ammo(s);if(slot<0)return;var ammunition=s.getItem(slot);boolean infinity=weapon.getItem() instanceof BowItem&&EnchantmentHelper.getItemEnchantmentLevel(Enchantments.INFINITY_ARROWS,weapon)>0&&ammunition.is(Items.ARROW);

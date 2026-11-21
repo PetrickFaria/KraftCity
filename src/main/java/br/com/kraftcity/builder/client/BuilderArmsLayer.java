@@ -46,13 +46,18 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
         var left=root.getChild("left");
         right.xRot=building?-.9F+cycle:cycle-1.1F*action;
         left.xRot=building?-.9F-cycle:-cycle;
+        right.yRot=left.yRot=0;
+        WorkerPose.aim(worker,right,left);
         var skin=VillagerSkinTextures.get(worker.getUUID());
         var texture=skin==null?getTextureLocation(worker):skin;
         var villagerType=net.minecraft.core.Registry.VILLAGER_TYPE.getKey(worker.getVillagerData().getType());
         var robe=new net.minecraft.resources.ResourceLocation(villagerType.getNamespace(),
             "textures/entity/villager/type/"+villagerType.getPath()+".png");
         root.render(pose,buffers.getBuffer(RenderType.entityTranslucent(WorkerTextures.arms(texture,robe))),light,OverlayTexture.NO_OVERLAY,1,1,1,1);
-        if(WorkerPose.active(worker))renderTool(pose,buffers,light,worker,right);
+        if(WorkerPose.active(worker)){
+            renderTool(pose,buffers,light,worker,right);
+            if(WorkerPose.soldier(worker))renderShield(pose,buffers,light,worker,left);
+        }
     }
 
     public static void renderBack(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,ModelPart body,float rearPixels){
@@ -76,6 +81,19 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
             reportedBack=true;
             System.out.println("WORKER_STOWED_TOOL_RENDERED");
         }
+    }
+
+    public static void renderShield(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,ModelPart arm){
+        var stack=worker.getOffhandItem();
+        if(stack.isEmpty())return;
+        pose.pushPose();
+        arm.translateAndRotate(pose);
+        pose.translate(1.0/16,9.0/16,0);
+        pose.mulPose(Vector3f.XP.rotationDegrees(-90));
+        pose.mulPose(Vector3f.YP.rotationDegrees(180));
+        Minecraft.getInstance().getEntityRenderDispatcher().getItemInHandRenderer().renderItem(worker,stack,
+            ItemTransforms.TransformType.THIRD_PERSON_LEFT_HAND,true,pose,buffers,light);
+        pose.popPose();
     }
 
     public static void renderTool(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,ModelPart arm){

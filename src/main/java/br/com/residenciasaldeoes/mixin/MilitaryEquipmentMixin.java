@@ -23,6 +23,6 @@ public abstract class MilitaryEquipmentMixin {
     }
     @Inject(method="hurtCurrentlyUsedShield",at=@At("HEAD")) private void kraftcity$shield(float damage,CallbackInfo ci){
         var v=(LivingEntity)(Object)this;if(v.level.isClientSide||!Military.isSoldier(v)||damage<3)return;
-        var stack=v.getUseItem();if(stack.getItem() instanceof ShieldItem)stack.hurtAndBreak(1+(int)Math.floor(damage),v,x->x.broadcastBreakEvent(v.getUsedItemHand()));var s=Military.station(v);if(s!=null)s.setChanged();
+        var stack=v.getUseItem();if(stack.canPerformAction(net.minecraftforge.common.ToolActions.SHIELD_BLOCK))stack.hurtAndBreak(1+(int)Math.floor(damage),v,x->x.broadcastBreakEvent(v.getUsedItemHand()));var s=Military.station(v);if(s!=null)s.setChanged();
     }
 }
