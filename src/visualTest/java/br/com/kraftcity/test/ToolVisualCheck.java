@@ -10,6 +10,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.npc.Villager;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Vector3f;
 import java.io.File;
 import java.util.Map;
 import net.minecraft.client.Minecraft;
@@ -32,6 +33,7 @@ public final class ToolVisualCheck extends Screen {
 
     private final Villager[] workers=new Villager[6];
     private int phase;
+    private int renderedPhase=-1;
 
     private ToolVisualCheck(){super(Component.literal("Ferramentas"));}
     @Override public boolean isPauseScreen(){return false;}
@@ -121,11 +123,12 @@ public final class ToolVisualCheck extends Screen {
 
     @Override public void render(PoseStack pose,int mouseX,int mouseY,float tick){
         renderBackground(pose);
-        drawCenteredString(pose,font,title,width/2,height/2-60,0xFFFFFF);
         if(phase!=0){
             renderComparison(pose);
+            renderedPhase=phase;
             return;
         }
+        drawCenteredString(pose,font,title,width/2,height/2-60,0xFFFFFF);
         Item[] emerald=emerald();
         drawCenteredString(pose,font,Component.literal("Ferro"),width/2-54,height/2-42,0xFFFFFF);
         drawCenteredString(pose,font,Component.literal("Esmeralda"),width/2+54,height/2-42,0xFFFFFF);
@@ -135,6 +138,7 @@ public final class ToolVisualCheck extends Screen {
         }
         drawRow(IndustrialTools.RODS,height/2+52);
         drawRow(IndustrialTools.SHEARS,height/2+76);
+        renderedPhase=phase;
     }
 
     private void drawRow(Map<Integer,? extends java.util.function.Supplier<Item>> items,int y){
@@ -177,6 +181,8 @@ public final class ToolVisualCheck extends Screen {
         pose.pushPose();
         pose.translate(x,y,100);
         pose.scale(58,-58,58);
+        pose.mulPose(Vector3f.YP.rotationDegrees(30));
+        pose.mulPose(Vector3f.XP.rotationDegrees(-12));
         itemRenderer.renderStatic(stack,view,LightTexture.FULL_BRIGHT,0,pose,buffers,0);
         buffers.endBatch();
         pose.popPose();
@@ -191,11 +197,9 @@ public final class ToolVisualCheck extends Screen {
         InventoryScreen.renderEntityInInventoryRaw(x,y,34,held?0.9F:8.5F,0F,worker);
     }
 
-    public static void capture(Minecraft mc,int phase){
-        check(mc.screen instanceof ToolVisualCheck,"Tool comparison screen missing");
-        var screen=(ToolVisualCheck)mc.screen;
-        check(screen.phase==phase,"Tool comparison phase missing");
-        String name=new String[]{"materials","first-person","third-person","worker-hand","worker-animation","worker-back"}[phase];
+    public static void captureRenderedPhase(Minecraft mc){
+        if(!(mc.screen instanceof ToolVisualCheck screen)||screen.renderedPhase!=screen.phase)return;
+        String name=new String[]{"materials","first-person","third-person","worker-hand","worker-animation","worker-back"}[screen.phase];
         Screenshot.grab(new File("../build"),"visual-tool-"+name+".png",mc.getMainRenderTarget(),message->{});
         if(++screen.phase>5){
             for(var worker:screen.workers)mc.level.removeEntity(worker.getId(),Entity.RemovalReason.DISCARDED);

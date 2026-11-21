@@ -145,7 +145,7 @@ public final class VisualClientCheck {
         }
         ticks++;clientTicks++;
         if(ticks==10)br.com.kraftcity.test.ToolVisualCheck.verify(mc);
-        if(ticks>=20&&ticks<=45&&ticks%5==0)br.com.kraftcity.test.ToolVisualCheck.capture(mc,(ticks-20)/5);
+        br.com.kraftcity.test.ToolVisualCheck.captureRenderedPhase(mc);
         if(!courierStarted&&ticks>=60&&mc.screen==null){
             courierStarted=true;var server=mc.getSingleplayerServer();
             server.execute(()->{

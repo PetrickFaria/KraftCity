@@ -51,6 +51,9 @@ for name in ['visual-tool-materials.png','visual-tool-first-person.png','visual-
     data=path.read_bytes()
     if data[:8]!=bytes.fromhex('89504e470d0a1a0a') or struct.unpack('>II',data[16:24])!=(1600,900):
         fail('Invalid Minecraft screenshot: '+name)
+tools=('materials','first-person','third-person','worker-hand','worker-animation','worker-back')
+if len({(Path('build/screenshots')/f'visual-tool-{name}.png').read_bytes() for name in tools})!=len(tools):
+    fail('Tool comparisons must capture a distinct rendered frame for each phase.')
 if result.returncode and 'Gradle build daemon disappeared unexpectedly' not in text:
     fail(result.returncode)
 for marker in ['TOOL_TEXTURES_AND_HAND_TRANSFORMS_PASSED','FARMER_INFECTION_PREPARED_FOR_RESTART','COURIER_PLAYER_OVERLAP_PASSED','COURIER_CLIENT_OPEN_CLOSE_PASSED','COURIER_GRAPHICAL_DEPOSIT_PASSED','STEVE_WORLD_OPACITY_50_PASSED','STEVE_WORLD_OPACITY_PERCENTAGES_PASSED','STEVE_MULTI_RESIDENT_OPACITY_SYNC_PASSED','STEVE_MULTI_RESIDENT_OPACITY_CAPTURED']:
