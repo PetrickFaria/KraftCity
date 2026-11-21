@@ -86,6 +86,9 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
     public static void renderShield(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,ModelPart arm){
         var stack=worker.getOffhandItem();
         if(stack.isEmpty())return;
+        var weapon=worker.getMainHandItem().getItem();
+        if(worker.isUsingItem()&&worker.getUsedItemHand()==net.minecraft.world.InteractionHand.MAIN_HAND
+            &&(weapon instanceof net.minecraft.world.item.BowItem||weapon instanceof net.minecraft.world.item.CrossbowItem))return;
         pose.pushPose();
         arm.translateAndRotate(pose);
         pose.translate(1.0/16,9.0/16,0);

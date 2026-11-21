@@ -20,7 +20,7 @@ Hostis naturais são elegíveis e a Blacklist adiciona outros tipos. Nos modos d
 
 ## Combate, animações e persistência
 
-Espadas usam o ataque físico e a durabilidade do equipamento. Arcos e bestas mantêm munição finita e os tempos de preparo. A exceção da Infinitude segue a regra existente para flechas comuns. Escudos compatíveis usam a mão secundária e recebem desgaste. A mão direita acompanha o balanço do ataque e os braços acompanham o uso do escudo, do arco ou da besta nos modelos de Aldeão e Steve.
+Espadas usam o ataque físico e a durabilidade do equipamento. Arcos e bestas mantêm munição finita e os tempos de preparo. A exceção da Infinitude segue a regra existente para flechas comuns. Escudos compatíveis usam a mão secundária e recebem desgaste. A mão direita acompanha o balanço do ataque e os braços acompanham o uso do escudo, do arco ou da besta nos modelos de Aldeão e Steve. Na mira, o tronco gira em direção ao alvo e a pose de duas mãos mantém o escudo equipado sem mostrá-lo no caminho da arma.
 
 A estação continua como fonte única dos equipamentos e do armazenamento. O salvamento existente mantém modos, jogador vinculado, Blacklist, XP e identidade. A transferência e a representação gráfica não criam um segundo inventário. As rotinas de zumbificação e cura seguem a identidade existente do Soldado.
 

@@ -272,6 +272,11 @@ public final class Military {
     private static void shield(Villager v,boolean enabled){if(enabled&&v.getOffhandItem().canPerformAction(net.minecraftforge.common.ToolActions.SHIELD_BLOCK)&&!v.isUsingItem())v.startUsingItem(InteractionHand.OFF_HAND);}
     private static int ammo(EmploymentData.Station s){for(int i=0;i<31;i++)if(s.getItem(i).getItem() instanceof ArrowItem)return i;return -1;}
     private static void ranged(ServerLevel l,EmploymentData.Station s,Villager v,LivingEntity t,ItemStack weapon,double distance){
+        var offset=t.position().subtract(v.position());
+        float desiredYaw=(float)(Math.toDegrees(Math.atan2(offset.z,offset.x))-90);
+        float yaw=net.minecraft.util.Mth.approachDegrees(v.getYRot(),desiredYaw,30);
+        v.setYRot(yaw);
+        v.setYBodyRot(yaw);
         var area=new MilitaryArea(s);
         if(distance<16){var away=v.position().subtract(t.position()).normalize().scale(3);area.move(v,area.nearest(v.position().add(away.x,0,away.z)),MilitaryArea.CHASE);}else if(distance>36)area.move(v,t.position(),MilitaryArea.CHASE);else v.getNavigation().stop();
         if(!v.hasLineOfSight(t)){s.military.remove("drawAt");v.stopUsingItem();area.move(v,t.position(),MilitaryArea.CHASE);return;}

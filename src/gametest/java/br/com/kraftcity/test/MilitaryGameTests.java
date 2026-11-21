@@ -273,7 +273,8 @@ public final class MilitaryGameTests {
             Military.combat(f.l,f.s,f.v,target);
             check(f.v.isUsingItem()&&f.v.getUsedItemHand()==InteractionHand.MAIN_HAND,
                 "Ranged soldier did not raise the main-hand weapon");
-            Military.combat(f.l,f.s,f.v,target);
+            for(int tick=0;tick<4;tick++)Military.combat(f.l,f.s,f.v,target);
+            check(Math.abs(net.minecraft.util.Mth.wrapDegrees(f.v.yBodyRot+90))<1,"Ranged stance did not face its target");
             check(f.s.getItem(0).getCount()==3,"Ranged weapon fired before charging");
             Military.clearTask(f.v,f.s);
         }

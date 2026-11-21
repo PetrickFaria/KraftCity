@@ -158,7 +158,7 @@ public final class MilitaryVisualCheck {
     private static boolean watchAim(Minecraft mc,Item weapon){
         return mc.level.getEntitiesOfClass(Villager.class,mc.player.getBoundingBox().inflate(24),villager->
             villager.getUUID().equals(worker)&&villager.getMainHandItem().is(weapon)&&villager.isUsingItem()
-            &&villager.getUsedItemHand()==InteractionHand.MAIN_HAND
+            &&villager.getUsedItemHand()==InteractionHand.MAIN_HAND&&villager.getTicksUsingItem()>6
             &&br.com.kraftcity.employment.client.WorkerPose.soldier(villager)).size()==1;
     }
 
