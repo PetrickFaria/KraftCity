@@ -72,8 +72,8 @@ public final class IndustryVisualCheck {
                 l.setBlock(pos.south().east(),(arcane==null?Blocks.CHEST:arcane).defaultBlockState(),3);
                 if(arcane!=null)l.setBlock(pos.south().east(2),arcane.defaultBlockState(),3);s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,10));s.setItem(27,new ItemStack(IndustrialTools.HOE.get()));s.setItem(30,new ItemStack(Items.WATER_BUCKET));l.setBlock(target,Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(target.above(),Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);s.industry.putInt("cursor",67);}
             case BUTCHER->{s.setItem(27,new ItemStack(IndustrialTools.AXE.get()));var old=animal(l,s,EntityType.COW);old.getPersistentData().putLong("KCIndustryBorn",-1000000);animal(l,s,EntityType.COW);animal(l,s,EntityType.COW);}
-            case SHEPHERD->{s.setItem(27,new ItemStack(IndustrialTools.SHEARS.get(3).get()));animal(l,s,EntityType.SHEEP);}
-            case FISHERMAN->{s.setItem(27,new ItemStack(IndustrialTools.RODS.get(3).get()));var water=pos.offset(0,-2,0);for(BlockPos at:BlockPos.betweenClosed(water.offset(-1,-1,-1),water.offset(1,1,1)))l.setBlock(at,Blocks.WATER.defaultBlockState(),3);s.industry.putLong("water",water.asLong());s.industry.putInt("fish_elapsed",IndustrialRules.fishingTicks(EmploymentConfig.FISH_TICKS.get(),1));}
+            case SHEPHERD->{s.setItem(27,new ItemStack(IndustrialTools.SHEARS.get(IndustrialTools.STONE).get()));animal(l,s,EntityType.SHEEP);}
+            case FISHERMAN->{s.setItem(27,new ItemStack(IndustrialTools.RODS.get(IndustrialTools.STONE).get()));var water=pos.offset(0,-2,0);for(BlockPos at:BlockPos.betweenClosed(water.offset(-1,-1,-1),water.offset(1,1,1)))l.setBlock(at,Blocks.WATER.defaultBlockState(),3);s.industry.putLong("water",water.asLong());s.industry.putInt("fish_elapsed",IndustrialRules.fishingTicks(EmploymentConfig.FISH_TICKS.get(),1));}
             case BREEDER->{WorkforceData.get(l).setProgress(v.getUUID(),profession.id(),2,25);s.setItem(28,new ItemStack(Items.BONE,8));s.setItem(29,new ItemStack(Items.BEEF,2));for(var w:List.of(animal(l,s,EntityType.WOLF),animal(l,s,EntityType.WOLF))){w.setTame(true);w.getPersistentData().putUUID("KraftCityCaretaker",v.getUUID());}}
             case BEEKEEPER->{s.setItem(0,new ItemStack(Items.GLASS_BOTTLE,2));s.setItem(1,new ItemStack(IndustrialTools.SHEARS.get(3).get()));l.setBlock(target.below(),Blocks.CAMPFIRE.defaultBlockState(),3);l.setBlock(target,Blocks.BEEHIVE.defaultBlockState().setValue(BeehiveBlock.HONEY_LEVEL,5),3);s.industry.putInt("cursor",67);}
             default->throw new IllegalStateException();
@@ -294,8 +294,10 @@ public final class IndustryVisualCheck {
             if(i==0)check(count(s,Items.WHEAT)>0&&s.getItem(30).is(Items.WATER_BUCKET)
                 &&IndustrialRules.size(l,s)==7,"Farmer production, water or selected area lost");
             if(i==1)check(count(s,Items.BEEF)>0,"Butcher output lost");
-            if(i==2)check(count(s,Items.WHITE_WOOL)>0,"Shepherd output lost");
-            if(i==3)check(count(s,Items.COD)+count(s,Items.SALMON)+count(s,Items.TROPICAL_FISH)+count(s,Items.PUFFERFISH)>0,"Fish output lost");
+            if(i==2)check(count(s,Items.WHITE_WOOL)>0&&s.getItem(27).is(IndustrialTools.SHEARS.get(IndustrialTools.STONE).get())
+                &&s.getItem(27).getDamageValue()>0,"Shepherd output or worn stone shears lost");
+            if(i==3)check(count(s,Items.COD)+count(s,Items.SALMON)+count(s,Items.TROPICAL_FISH)+count(s,Items.PUFFERFISH)>0
+                &&s.getItem(27).is(IndustrialTools.RODS.get(IndustrialTools.STONE).get())&&s.getItem(27).getDamageValue()>0,"Fish output or worn stone rod lost");
             if(i==5)check(count(s,Items.HONEY_BOTTLE)>0,"Honey output lost");
         }
         if(arcaneBlock()!=null){

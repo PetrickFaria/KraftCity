@@ -164,6 +164,10 @@ public final class Military {
         return new MilitaryArea(station).limit(soldier.position(),movement);
     }
 
+    public static AABB areaBounds(BlockPos post){
+        return MilitaryArea.boundsAt(post);
+    }
+
     public static boolean insideArea(EmploymentData.Station station,Vec3 point){
         return military(station)&&new MilitaryArea(station).contains(point);
     }

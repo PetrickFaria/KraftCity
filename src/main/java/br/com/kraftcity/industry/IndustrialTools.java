@@ -12,6 +12,9 @@ public final class IndustrialTools {
     private static final DeferredRegister<Item> ITEMS=DeferredRegister.create(ForgeRegistries.ITEMS,KraftCity.MOD_ID);
     public static final CreativeModeTab TAB=new CreativeModeTab("kraftcity_tools"){
         @Override public ItemStack makeIcon(){return new ItemStack(Items.EMERALD);}
+        @Override public void fillItemList(net.minecraft.core.NonNullList<ItemStack> items){
+            matrix().forEach(row->row.forEach(item->items.add(new ItemStack(item))));
+        }
     };
     public static final Tier EMERALD=new Tier(){
         public int getUses(){return 1024;}public float getSpeed(){return 7;}public float getAttackDamageBonus(){return 2.5F;}
@@ -23,20 +26,33 @@ public final class IndustrialTools {
     public static final RegistryObject<Item> AXE=ITEMS.register("emerald_axe",()->new AxeItem(EMERALD,6,-3.1F,new Item.Properties().tab(TAB)));
     public static final RegistryObject<Item> SWORD=ITEMS.register("emerald_sword",()->new SwordItem(EMERALD,3,-2.4F,new Item.Properties().tab(TAB)));
     public static final Map<Integer,RegistryObject<Item>> SHEARS=new LinkedHashMap<>(),RODS=new LinkedHashMap<>();
-    public static final String[] NAMES={"wood","iron","gold","emerald","diamond","netherite"};
-    public static final int[] USES={59,238,32,1024,1561,2031};
-    static {for(int i=0;i<6;i++){
+    public static final int STONE=6; // Keep the legacy numeric tiers stable.
+    private static final List<Integer> MATERIAL_ORDER=List.of(0,STONE,1,2,3,4,5);
+    public static final String[] NAMES={"wood","iron","gold","emerald","diamond","netherite","stone"};
+    public static final int[] USES={59,238,32,1024,1561,2031,131};
+    static {for(int i:MATERIAL_ORDER){
         final int tier=i;
         if(i!=1)SHEARS.put(i,ITEMS.register(NAMES[i]+"_shears",()->new TierShears(tier)));
         if(i!=0)RODS.put(i,ITEMS.register(NAMES[i]+"_fishing_rod",()->new TierRod(tier)));
     }}
     private static Item.Properties properties(int tier,int durability){var p=new Item.Properties().tab(TAB).durability(durability);return tier==5?p.fireResistant():p;}
-    private static boolean repair(int tier,ItemStack material){return switch(tier){case 0->material.is(net.minecraft.tags.ItemTags.PLANKS);case 1->material.is(Items.IRON_INGOT);case 2->material.is(Items.GOLD_INGOT);case 3->material.is(Items.EMERALD);case 4->material.is(Items.DIAMOND);default->material.is(Items.NETHERITE_INGOT);};}
+    private static boolean repair(int tier,ItemStack material){return switch(tier){case 0->material.is(net.minecraft.tags.ItemTags.PLANKS);case 1->material.is(Items.IRON_INGOT);case 2->material.is(Items.GOLD_INGOT);case 3->material.is(Items.EMERALD);case 4->material.is(Items.DIAMOND);case STONE->material.is(net.minecraft.tags.ItemTags.STONE_TOOL_MATERIALS);default->material.is(Items.NETHERITE_INGOT);};}
     public static class TierShears extends ShearsItem {public final int tier;TierShears(int t){super(properties(t,USES[t]));tier=t;}
         @Override public boolean isValidRepairItem(ItemStack tool,ItemStack material){return repair(tier,material)||super.isValidRepairItem(tool,material);}}
 
     public static class TierRod extends FishingRodItem {public final int tier;TierRod(int t){super(properties(t,t==1?250:USES[t]));tier=t;}
         @Override public boolean isValidRepairItem(ItemStack tool,ItemStack material){return repair(tier,material)||super.isValidRepairItem(tool,material);}}
+
+    /** Categories with fixed material tiers, in creative tab and documentation order. */
+    public static List<List<Item>> matrix(){
+        return List.of(
+            List.of(Items.WOODEN_SWORD,Items.STONE_SWORD,Items.IRON_SWORD,Items.GOLDEN_SWORD,SWORD.get(),Items.DIAMOND_SWORD,Items.NETHERITE_SWORD),
+            List.of(Items.WOODEN_AXE,Items.STONE_AXE,Items.IRON_AXE,Items.GOLDEN_AXE,AXE.get(),Items.DIAMOND_AXE,Items.NETHERITE_AXE),
+            List.of(Items.WOODEN_HOE,Items.STONE_HOE,Items.IRON_HOE,Items.GOLDEN_HOE,HOE.get(),Items.DIAMOND_HOE,Items.NETHERITE_HOE),
+            MATERIAL_ORDER.stream().map(tier->tier==1?Items.SHEARS:SHEARS.get(tier).get()).toList(),
+            MATERIAL_ORDER.stream().map(tier->tier==0?Items.FISHING_ROD:RODS.get(tier).get()).toList()
+        );
+    }
 
     public static int tier(ItemStack stack){
         Item item=stack.getItem();if(item instanceof TierShears t)return t.tier;if(item instanceof TierRod t)return t.tier;

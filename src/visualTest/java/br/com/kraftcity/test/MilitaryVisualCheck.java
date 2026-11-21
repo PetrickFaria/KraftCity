@@ -42,7 +42,7 @@ public final class MilitaryVisualCheck {
         l.setBlock(POST,WorkModule.MILITARY.get().defaultBlockState().setValue(WorkBlock.FACING,Direction.SOUTH),3);
         var s=station(l);
         // The copied GameTest world can contain hostiles from earlier fixtures in this post's range.
-        var bounds=new net.minecraft.world.phys.AABB(POST).inflate(100,10,100);
+        var bounds=Military.areaBounds(POST);
         l.getEntitiesOfClass(net.minecraft.world.entity.Mob.class,bounds,
             mob->mob instanceof net.minecraft.world.entity.monster.Enemy&&Military.insideArea(s,mob.position()))
             .forEach(net.minecraft.world.entity.Entity::discard);

@@ -31,11 +31,14 @@ public final class MilitaryGameTests {
     private record F(ServerLevel l,EmploymentData.Station s,Villager v,ServerPlayer player,BlockPos home,BlockPos p){}
     private static void check(boolean v,String m){if(!v)throw new GameTestAssertException(m);}
     private static F fixture(GameTestHelper h){
+        return fixture(h,2);
+    }
+    private static F fixture(GameTestHelper h,int y){
         var l=h.getLevel();l.setDayTime(1000);l.setWeatherParameters(10000,0,false,false);l.setRainLevel(0);
-        var home=h.absolutePos(new BlockPos(2,2,2));var p=h.absolutePos(new BlockPos(8,2,8));
+        var home=h.absolutePos(new BlockPos(2,y,2));var p=h.absolutePos(new BlockPos(8,y,8));
         for(var at:BlockPos.betweenClosed(p.offset(-4,-1,-4),p.offset(4,-1,4)))l.setBlock(at,Blocks.STONE.defaultBlockState(),3);
         l.setBlock(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)l.getBlockEntity(home)).setSize(11);
-        var v=h.spawn(EntityType.VILLAGER,new BlockPos(3,2,2));v.setAge(0);v.setNoAi(true);check(ResidenceData.get(l).link(l,home,v).equals("ok"),"Soldier home");v.setPos(p.getX()+.5,p.getY()+1,p.getZ()+.5);
+        var v=h.spawn(EntityType.VILLAGER,new BlockPos(3,y,2));v.setAge(0);v.setNoAi(true);check(ResidenceData.get(l).link(l,home,v).equals("ok"),"Soldier home");v.setPos(p.getX()+.5,p.getY()+1,p.getZ()+.5);
         l.setBlock(p,WorkModule.MILITARY.get().defaultBlockState(),3);var s=((WorkBlockEntity)l.getBlockEntity(p)).station();var player=FakePlayerFactory.get(l,new GameProfile(UUID.randomUUID(),"MilitaryTest"));player.setPos(v.position());s.setItem(31,new ItemStack(Items.EMERALD,30));check(Employment.hire(player,s,v.getUUID(),Profession.SOLDIER).equals("ok"),"Military hire");return new F(l,s,v,player,home,p);
     }
     private static <T extends Mob>T mob(F f,EntityType<T> type,int dx){var v=type.create(f.l);v.setNoAi(true);v.setPos(f.p.getX()+dx+.5,f.p.getY()+1,f.p.getZ()+.5);f.l.addFreshEntity(v);return v;}
@@ -134,12 +137,45 @@ public final class MilitaryGameTests {
     @GameTest(template="empty",batch="military_inventory")
     public static void military_boundary_is_inclusive_and_stops_boundary_movement(GameTestHelper h){
         var f=fixture(h);
-        var edge=Vec3.atBottomCenterOf(f.p.offset(100,10,100));
+        var edge=Vec3.atBottomCenterOf(f.p.offset(100,15,100));
         check(Military.insideArea(f.s,edge)&&!Military.insideArea(f.s,edge.add(1,0,0))
             &&!Military.insideArea(f.s,edge.add(0,1,0))&&!Military.insideArea(f.s,edge.add(0,0,1)),"Military area bounds");
         f.v.setPos(edge);
         f.v.move(MoverType.SELF,new Vec3(1,1,1));
         check(Military.insideArea(f.s,f.v.position()),"Movement escaped military area");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",batch="military_inventory")
+    public static void vertical_boundary_limits_targets_combat_and_motion(GameTestHelper h){
+        var f=fixture(h,20);
+        var zombie=mob(f,EntityType.ZOMBIE,0);
+        f.s.equipment.setItem(0,new ItemStack(Items.IRON_SWORD));
+        Military.bind(f.s,f.v);
+        f.v.setLastHurtByMob(zombie);
+        for(int dy:new int[]{-16,-15,-10,10,15,16}){
+            var point=Vec3.atBottomCenterOf(f.p.offset(0,dy,0));
+            boolean inside=Math.abs(dy)<=15;
+            zombie.setPos(point);
+            check(Military.insideArea(f.s,point)==inside,"Wrong area at Y"+dy);
+            for(var selection:Military.Mode.values()){
+                mode(f,selection);
+                check(Military.authorized(f.l,f.s,f.v,zombie)==inside,"Threat boundary "+selection+" at Y"+dy);
+            }
+            f.v.setPos(Vec3.atBottomCenterOf(f.p.offset(1,Math.max(-15,Math.min(15,dy)),0)));
+            f.s.military.remove("attackAt");
+            f.s.military.remove("retreatUntil");
+            zombie.invulnerableTime=0;
+            float before=zombie.getHealth();
+            Military.combat(f.l,f.s,f.v,zombie);
+            check((zombie.getHealth()<before)==inside,"Combat boundary at Y"+dy);
+        }
+        zombie.discard();
+        for(int sign:new int[]{-1,1}){
+            f.v.setPos(Vec3.atBottomCenterOf(f.p.offset(0,sign*15,0)));
+            f.v.move(MoverType.SELF,new Vec3(0,sign*4,0));
+            check(Military.insideArea(f.s,f.v.position()),"Vertical movement escaped at "+sign);
+        }
         h.succeed();
     }
 

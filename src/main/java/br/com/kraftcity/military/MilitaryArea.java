@@ -14,7 +14,11 @@ final class MilitaryArea {
     private final AABB bounds;
 
     MilitaryArea(EmploymentData.Station station){
-        bounds=new AABB(station.pos).inflate(100,10,100);
+        bounds=boundsAt(station.pos);
+    }
+
+    static AABB boundsAt(BlockPos post){
+        return new AABB(post).inflate(100,15,100);
     }
 
     boolean contains(Vec3 point){return bounds.contains(point);}

@@ -75,6 +75,10 @@ public final class ToolVisualCheck extends Screen {
             compare(mc,"fishing_rod_cast",material+"_fishing_rod_cast",false);
             verifyCastModel(mc,rod,material);
         }
+        var creative=net.minecraft.core.NonNullList.<ItemStack>create();
+        IndustrialTools.TAB.fillItemList(creative);
+        check(creative.stream().map(ItemStack::getItem).toList().equals(IndustrialTools.matrix().stream().flatMap(List::stream).toList()),
+            "Professional creative tab matrix order");
         System.out.println("TOOL_TEXTURES_AND_HAND_TRANSFORMS_PASSED");
         var screen=new ToolVisualCheck();
         for(int i=0;i<screen.workers.length;i++){
@@ -92,7 +96,8 @@ public final class ToolVisualCheck extends Screen {
         Villager worker=workers[0];
         ModelPart origin=new ModelPart(List.of(),Map.of());
         for(Item item:new Item[]{Items.IRON_HOE,IndustrialTools.HOE.get(),Items.IRON_AXE,Items.IRON_SWORD,
-            Items.SHEARS,IndustrialTools.SHEARS.get(3).get(),Items.FISHING_ROD,IndustrialTools.RODS.get(3).get(),Items.IRON_PICKAXE,Items.BOW,Items.CROSSBOW,Items.TRIDENT}){
+            Items.SHEARS,IndustrialTools.SHEARS.get(3).get(),Items.FISHING_ROD,IndustrialTools.RODS.get(3).get(),
+            IndustrialTools.SHEARS.get(IndustrialTools.STONE).get(),IndustrialTools.RODS.get(IndustrialTools.STONE).get(),Items.IRON_PICKAXE,Items.BOW,Items.CROSSBOW,Items.TRIDENT}){
             var stack=new ItemStack(item);
             worker.setItemSlot(EquipmentSlot.MAINHAND,stack);
             var held=new Geometry();
@@ -193,16 +198,15 @@ public final class ToolVisualCheck extends Screen {
             itemRenderer.renderGuiItem(new ItemStack(IRON[i]),width/2-62,height/2-27+i*23);
             itemRenderer.renderGuiItem(new ItemStack(emerald[i]),width/2+46,height/2-27+i*23);
         }
-        drawRow(IndustrialTools.RODS,height/2+52);
-        drawRow(IndustrialTools.SHEARS,height/2+76);
+        drawRow(IndustrialTools.matrix().get(3),height/2+52);
+        drawRow(IndustrialTools.matrix().get(4),height/2+76);
         renderedPhase=phase;
     }
 
-    private void drawRow(Map<Integer,? extends java.util.function.Supplier<Item>> items,int y){
-        int x=width/2-65;
-        for(int i=0;i<IndustrialTools.NAMES.length;i++){
-            var item=items.get(i);
-            itemRenderer.renderGuiItem(new ItemStack(item==null?(i==0?Items.FISHING_ROD:Items.SHEARS):item.get()),x,y);
+    private void drawRow(List<Item> items,int y){
+        int x=width/2-77;
+        for(var item:items){
+            itemRenderer.renderGuiItem(new ItemStack(item),x,y);
             x+=23;
         }
     }
@@ -223,6 +227,13 @@ public final class ToolVisualCheck extends Screen {
         Item[] stowed={IndustrialTools.HOE.get(),IndustrialTools.AXE.get(),IndustrialTools.SWORD.get(),
             IndustrialTools.SHEARS.get(3).get(),IndustrialTools.RODS.get(3).get(),Items.IRON_PICKAXE};
         var buffers=minecraft.renderBuffers().bufferSource();
+        if(phase<3){
+            var view=phase==1?ItemTransforms.TransformType.FIRST_PERSON_RIGHT_HAND:ItemTransforms.TransformType.THIRD_PERSON_RIGHT_HAND;
+            var stoneShears=new ItemStack(IndustrialTools.SHEARS.get(IndustrialTools.STONE).get());
+            var stoneRod=new ItemStack(IndustrialTools.RODS.get(IndustrialTools.STONE).get());
+            renderTool(pose,stoneShears,view,width/2-35,height/2+77,buffers);
+            renderTool(pose,stoneRod,view,width/2+35,height/2+77,buffers);
+        }
         for(int i=0;i<IRON.length;i++){
             int x=width/2-150+i*108,y=height/2;
             var ironStack=new ItemStack(IRON[i]);

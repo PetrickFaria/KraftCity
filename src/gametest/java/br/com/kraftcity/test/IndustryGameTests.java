@@ -370,10 +370,71 @@ public final class IndustryGameTests {
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void custom_tool_recipes_tiers_and_variants_are_registered(GameTestHelper h){
         check(IndustrialTools.tier(new ItemStack(IndustrialTools.HOE.get()))==3,"emerald tier");
-        for(String id:List.of("emerald_hoe","emerald_axe","emerald_sword","wood_shears","gold_shears","emerald_shears","diamond_shears","netherite_shears","iron_fishing_rod","gold_fishing_rod","emerald_fishing_rod","diamond_fishing_rod","netherite_fishing_rod"))
+        for(String id:List.of("emerald_hoe","emerald_axe","emerald_sword","wood_shears","gold_shears","emerald_shears","diamond_shears","netherite_shears","iron_fishing_rod","gold_fishing_rod","emerald_fishing_rod","diamond_fishing_rod","netherite_fishing_rod","stone_shears","stone_fishing_rod"))
             check(h.getLevel().getRecipeManager().byKey(new net.minecraft.resources.ResourceLocation("residenciasaldeoes",id)).isPresent(),"missing recipe "+id);
         check(Items.SHEARS.getMaxDamage()==238&&Items.FISHING_ROD.getMaxDamage()==64,"vanilla overwritten");h.succeed();
     }
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void seven_materials_and_stone_stack_data(GameTestHelper h){
+        var rows=IndustrialTools.matrix();
+        var unique=new HashSet<Item>();
+        for(var row:rows){
+            check(row.size()==7,"Incomplete material coverage");
+            check(row.stream().allMatch(unique::add),"Duplicate item in tool matrix");
+        }
+        check(rows.size()==5&&unique.size()==35&&rows.get(3).get(2)==Items.SHEARS
+            &&rows.get(4).get(0)==Items.FISHING_ROD,"Missing tool or changed vanilla identity");
+        var shears=new ItemStack(rows.get(3).get(1));
+        var rod=new ItemStack(rows.get(4).get(1));
+        for(var tool:List.of(shears,rod)){
+            check(tool.getMaxDamage()==Tiers.STONE.getUses()&&tool.getItem().isValidRepairItem(tool,new ItemStack(Items.COBBLESTONE)),
+                "Stone durability or repair material");
+            tool.setDamageValue(10);
+            tool.getOrCreateTag().putString("GameTest","stone");
+            check(ItemStack.matches(tool,ItemStack.of(tool.save(new CompoundTag()))),"Stone tool lost NBT");
+        }
+        var player=FakePlayerFactory.get(h.getLevel(),new GameProfile(UUID.randomUUID(),"StoneToolCrafting"));
+        var menu=new net.minecraft.world.inventory.CraftingMenu(0,player.getInventory());
+        var grid=new net.minecraft.world.inventory.CraftingContainer(menu,3,3);
+        grid.setItem(1,new ItemStack(Items.COBBLESTONE));
+        grid.setItem(3,new ItemStack(Items.COBBLESTONE));
+        checkStoneRecipe(h,grid,"stone_shears",shears.getItem());
+        grid.clearContent();
+        for(int index:new int[]{2,4,6})grid.setItem(index,new ItemStack(Items.COBBLESTONE));
+        for(int index:new int[]{5,8})grid.setItem(index,new ItemStack(Items.STRING));
+        checkStoneRecipe(h,grid,"stone_fishing_rod",rod.getItem());
+        h.succeed();
+    }
+
+    private static void checkStoneRecipe(GameTestHelper h,net.minecraft.world.inventory.CraftingContainer grid,String id,Item item){
+        var recipe=h.getLevel().getRecipeManager().getRecipeFor(net.minecraft.world.item.crafting.RecipeType.CRAFTING,grid,h.getLevel()).orElseThrow();
+        check(recipe.getId().equals(new net.minecraft.resources.ResourceLocation("residenciasaldeoes",id))
+            &&recipe.assemble(grid).is(item),"Stone recipe did not craft "+id);
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void shepherd_works_with_stone_shears(GameTestHelper h){
+        var shears=new ItemStack(IndustrialTools.matrix().get(3).get(1));
+        var shepherd=fixture(h,Profession.SHEPHERD);
+        shepherd.s.setItem(27,shears);
+        var sheep=animal(shepherd,EntityType.SHEEP,false);
+        step(shepherd,1);
+        check(sheep.isSheared()&&sheep.isAlive()&&shears.getDamageValue()>0,"Stone shears failed professional work");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void fisherman_works_with_stone_rod(GameTestHelper h){
+        var rod=new ItemStack(IndustrialTools.matrix().get(4).get(1));
+        var fisherman=fixture(h,Profession.FISHERMAN);
+        fisherman.s.setItem(27,rod);
+        water(fisherman);
+        step(fisherman,IndustrialRules.fishingTicks(EmploymentConfig.FISH_TICKS.get(),1)/EmploymentConfig.ACTION_TICKS.get()+1);
+        check(count(fisherman,Items.COD)+count(fisherman,Items.SALMON)+count(fisherman,Items.PUFFERFISH)
+            +count(fisherman,Items.TROPICAL_FISH)==1&&rod.getDamageValue()>0,"Stone rod failed professional work");
+        h.succeed();
+    }
+
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void dawn_takes_at_most_five_useful_farmer_items_once_per_day(GameTestHelper h){
         var f=fixture(h,Profession.SHEPHERD);var farmer=f.p.offset(0,0,4);var barrel=f.p.south();

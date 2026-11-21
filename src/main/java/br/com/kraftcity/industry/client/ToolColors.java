@@ -18,7 +18,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 
 @Mod.EventBusSubscriber(modid=KraftCity.MOD_ID,bus=Mod.EventBusSubscriber.Bus.MOD,value=Dist.CLIENT)
 public final class ToolColors {
-    private static final int[] COLORS={0xAC7948,0xDFDFDF,0xFFD850,0x48E88C,0x65DAF5,0x545361};
+    private static final int[] COLORS={0xAC7948,0xDFDFDF,0xFFD850,0x48E88C,0x65DAF5,0x545361,0x949494};
     private static final ResourceLocation CAST=new ResourceLocation("cast");
 
     @SubscribeEvent public static void register(RegisterTextureAtlasSpriteLoadersEvent event){
