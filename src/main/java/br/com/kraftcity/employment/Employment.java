@@ -104,10 +104,15 @@ public final class Employment {
             v.getBrain().eraseMemory(MemoryModuleType.PATH);
             var away=net.minecraft.world.entity.ai.util.DefaultRandomPos.getPosAway(v,12,5,zombie.position());
             if(away!=null){
-                if(v.getNavigation().moveTo(away.x,away.y,away.z,1.25)&&nightShelter)NIGHT_DETOUR.add(v);
+                if(v.getNavigation().moveTo(away.x,away.y,away.z,escapeSpeed(level,v))&&nightShelter)NIGHT_DETOUR.add(v);
             }
             else if(starting)v.getNavigation().stop();
         }
+    }
+
+    private static double escapeSpeed(ServerLevel level,Villager worker){
+        var station=EmploymentData.get(level).assigned(worker.getUUID());
+        return station!=null&&station.profession==Profession.FARMER?.95:1.25;
     }
 
     private static net.minecraft.world.phys.AABB escapeBounds(ServerLevel level,Villager worker,boolean nightShelter){
@@ -149,7 +154,7 @@ public final class Employment {
         var nav=worker.getNavigation();
         for(int i=0;i<Math.min(20,candidates.size());i++){
             var path=nav.createPath(candidates.get(i),0);
-            if(within(path,bounds)&&!path.getTarget().equals(origin)&&nav.moveTo(path,1.25))return;
+            if(within(path,bounds)&&!path.getTarget().equals(origin)&&nav.moveTo(path,escapeSpeed(level,worker)))return;
         }
         if(!within(nav.getPath(),bounds)){
             nav.stop();

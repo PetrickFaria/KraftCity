@@ -78,6 +78,50 @@ public final class IndustryGameTests {
         check(f.l.getFluidState(f.p).isEmpty(),"created water source");
         f.s.setItem(30,ItemStack.EMPTY);check(!Irrigation.hydrates(f.l,p.below()),"ghost irrigation");h.succeed();
     }
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_sows_soil_but_leaves_dirt_path_in_zigzag(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var pathBlocks=List.of(f.p.north(),f.p.south());
+        var soils=List.of(f.p.east(),f.p.west(),f.p.south().east());
+        for(var pos:pathBlocks)f.l.setBlockAndUpdate(pos,Blocks.DIRT_PATH.defaultBlockState());
+        for(int i=0;i<soils.size();i++)f.l.setBlockAndUpdate(soils.get(i),
+            List.of(Blocks.DIRT,Blocks.GRASS_BLOCK,Blocks.FARMLAND).get(i).defaultBlockState());
+        f.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,12));
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        f.s.setItem(30,new ItemStack(Items.WATER_BUCKET));
+        for(var pos:soils){
+            var feet=Vec3.atBottomCenterOf(pos.above());
+            f.v.setPos(feet.x,feet.y,feet.z);
+            step(f,8);
+            check(f.l.getBlockState(pos).is(Blocks.FARMLAND)&&f.l.getBlockState(pos.above()).is(Blocks.WHEAT),
+                "Valid plot remained unplanted: "+pos);
+        }
+        for(var pos:pathBlocks){
+            var feet=Vec3.atBottomCenterOf(pos.above());
+            f.v.setPos(feet.x,feet.y,feet.z);
+            step(f,12);
+            check(f.l.getBlockState(pos).is(Blocks.DIRT_PATH)&&f.l.isEmptyBlock(pos.above()),"Dirt path was cultivated");
+        }
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_legacy_input_is_saved_until_stock_has_room(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        for(int i=0;i<EmploymentData.COMMON;i++)f.s.setItem(i,new ItemStack(Items.STONE,64));
+        f.s.setItem(EmploymentData.INPUT_B,new ItemStack(Items.BEETROOT_SEEDS,7));
+        IndustrialWork.restoreFarmerInput(f.s);
+        var saved=EmploymentData.get(f.l).save(new net.minecraft.nbt.CompoundTag());
+        var restored=EmploymentData.load(saved).station(f.s.id);
+        check(restored.getItem(EmploymentData.INPUT_B).getCount()==7,"Full stock lost the legacy slot after save");
+        restored.setItem(0,ItemStack.EMPTY);
+        IndustrialWork.restoreFarmerInput(restored);
+        IndustrialWork.restoreFarmerInput(restored);
+        check(restored.getItem(0).is(Items.BEETROOT_SEEDS)&&restored.getItem(0).getCount()==7
+            &&restored.getItem(EmploymentData.INPUT_B).isEmpty(),"Legacy stock was lost or duplicated");
+        h.succeed();
+    }
+
     @GameTest(template="empty",timeoutTicks=60,batch="farmer_yield_subproducts")
     public static void wooden_hoe_yield_keeps_potato_subproducts_and_replanting(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);
@@ -216,7 +260,7 @@ public final class IndustryGameTests {
             var restored=EmploymentData.load(EmploymentData.get(f.l).save(new CompoundTag())).station(f.s.id);
             check(restored.getItem(26).getCount()==7&&restored.industry.getLong("fish_elapsed")==42&&restored.worker.equals(f.v.getUUID()),"persist "+p);
             var player=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"SharedJob"));var a=new WorkMenu(1,player.getInventory(),f.s,false,null);var b=new WorkMenu(2,player.getInventory(),f.s,false,f.v.getUUID());
-            check(a.inventory==b.inventory&&a.slots.size()==(p==Profession.FARMER?67:68),"dual menu "+p);
+            check(a.inventory==b.inventory&&a.slots.size()==(p==Profession.FARMER?66:68),"dual menu "+p);
         }h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
@@ -871,6 +915,44 @@ public final class IndustryGameTests {
             check(!f.v.isSleeping(),"farmer still sleeping at dawn");
             check(f.l.getBlockState(ripe).getValue(CropBlock.AGE)<7,"farmer did not resume work");
         }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=850,batch="farmer_long_home_return")
+    public static void farmer_discards_and_walks_to_linked_home_a_hundred_blocks_away(GameTestHelper h){
+        var level=h.getLevel();
+        var post=h.absolutePos(new BlockPos(8,2,8));
+        var home=post.west(100);
+        for(var pos:BlockPos.betweenClosed(home.offset(-4,0,-4),post.offset(3,0,4))){
+            level.setBlockAndUpdate(pos,Blocks.SEA_LANTERN.defaultBlockState());
+            for(int y=1;y<=3;y++)level.setBlockAndUpdate(pos.above(y),Blocks.AIR.defaultBlockState());
+        }
+        level.setBlockAndUpdate(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState());
+        ((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)level.getBlockEntity(home)).setSize(9);
+        var bed=placeBed(level,home.east(2).above());
+        level.setBlockAndUpdate(post,WorkModule.INDUSTRIAL.get().defaultBlockState());
+        var station=((WorkBlockEntity)level.getBlockEntity(post)).station();
+        var worker=h.spawn(EntityType.VILLAGER,new BlockPos(8,3,8));
+        worker.setAge(0);
+        check(ResidenceData.get(level).link(level,home,worker).equals("ok"),"Long-range home link failed");
+        var employer=FakePlayerFactory.get(level,new GameProfile(UUID.randomUUID(),"LongFarmRoute"));
+        employer.setPos(worker.getX(),worker.getY(),worker.getZ());
+        station.setItem(31,new ItemStack(Items.EMERALD,EmploymentConfig.cost(Profession.Sector.INDUSTRIAL)));
+        check(Employment.hire(employer,station,worker.getUUID(),Profession.FARMER).equals("ok"),"Long-range hire failed");
+        var target=post.north().above();
+        level.setBlockAndUpdate(target,Blocks.BARREL.defaultBlockState());
+        var barrel=(BarrelBlockEntity)level.getBlockEntity(target);
+        station.setItem(0,new ItemStack(Items.COBBLESTONE,3));
+        level.setDayTime(13000);
+        var previous=new Vec3[]{worker.position()};
+        h.startSequence().thenWaitUntil(()->check(barrel.countItem(Items.COBBLESTONE)==3,"No twilight discard"))
+            .thenWaitUntil(()->{
+                var current=worker.position();
+                if(!worker.isSleeping()&&current.distanceToSqr(previous[0])>300
+                    &&Math.abs(current.x-previous[0].x)>30)check(false,"Worker skipped the long path");
+                if(current.distanceToSqr(previous[0])>1)previous[0]=current;
+                check(worker.getSleepingPos().filter(bed::equals).isPresent(),"Long walk still in progress at "+worker.position());
+            }).thenExecute(()->check(station.getItem(0).isEmpty()&&ResidenceData.get(level).owner(worker.getUUID()).pos.equals(home),
+                "Long return altered the link or inventory")).thenSucceed();
     }
 
     @GameTest(template="empty",timeoutTicks=500,batch="farmer_natural_twilight")

@@ -13,7 +13,7 @@ public final class WorkMenu extends AbstractContainerMenu {
     public static final int PAYMENT_LIMIT=15;
     public static final int FARM_WIDTH=306, FARM_HEIGHT=235, FARM_GRID_X=73, FARM_PLAYER_Y=157;
     public static final int FARM_AUX_Y=41, FARM_STOCK_Y=69;
-    public static int farmAuxX(int slot){return 49+slot*64;}
+    public static int farmAuxX(int slot){return 16+slot*76;}
     public final boolean farmer;
     private final int ownSlots;
     public final BlockPos pos;
@@ -41,8 +41,10 @@ public final class WorkMenu extends AbstractContainerMenu {
         if(!hiring){
             for(int row=0;row<3;row++)for(int col=0;col<9;col++)
                 addSlot(new Slot(inventory,row*9+col,(farmer?FARM_GRID_X:94)+col*18,(farmer?FARM_STOCK_Y:26)+row*18));
-            for(int i=0;i<4;i++)
-                addSlot(new Slot(inventory,EmploymentData.TOOL+i,farmer?farmAuxX(i):94+i*36,farmer?FARM_AUX_Y:101));
+            if(farmer){
+                int[] inputs={EmploymentData.TOOL,EmploymentData.INPUT_A,EmploymentData.EQUIPMENT};
+                for(int i=0;i<inputs.length;i++)addSlot(new Slot(inventory,inputs[i],farmAuxX(i),FARM_AUX_Y));
+            }else for(int i=0;i<4;i++)addSlot(new Slot(inventory,EmploymentData.TOOL+i,94+i*36,101));
         }
         if(!farmer)addSlot(new Slot(inventory,EmploymentData.PAYMENT,hiring?187:274,hiring?158:101){
             @Override public boolean mayPlace(ItemStack stack){
@@ -113,7 +115,7 @@ public final class WorkMenu extends AbstractContainerMenu {
     public void openHiring(ServerPlayer p){if(stillValid(p)&&station().worker==null){var s=station();p.closeContainer();WorkBlock.open(p,s,null,true);}}
     @Override public void broadcastChanges(){
         if(player instanceof ServerPlayer p){var s=station();if(!stillValid(p)||s==null||(hiring&&s.worker!=null)||(!hiring&&s.profession==null)){p.closeContainer();return;}
-            long now=p.level.getGameTime();if(lastSync==Long.MIN_VALUE||now-lastSync>=10){lastSync=now;sync(p);}}
+            long now=p.level.getGameTime();if(lastSync==Long.MIN_VALUE||now-lastSync>=10){lastSync=now;if(farmer)br.com.kraftcity.industry.IndustrialWork.restoreFarmerInput(s);sync(p);}}
         super.broadcastChanges();
     }
     @Override public void clicked(int slot,int button,ClickType type,Player p){if(stillValid(p))super.clicked(slot,button,type,p);}
@@ -126,7 +128,7 @@ public final class WorkMenu extends AbstractContainerMenu {
             slots.get(own-1).safeInsert(item);
             if(item.getCount()==before.getCount())return ItemStack.EMPTY;
         }
-        else if(!hiring){if(!moveItemStackTo(item,0,31,false))return ItemStack.EMPTY;}
+        else if(!hiring){if(!moveItemStackTo(item,0,farmer?own:31,false))return ItemStack.EMPTY;}
         else return ItemStack.EMPTY;
         if(item.isEmpty())slot.set(ItemStack.EMPTY);else slot.setChanged();slot.onTake(p,item);return before;
     }

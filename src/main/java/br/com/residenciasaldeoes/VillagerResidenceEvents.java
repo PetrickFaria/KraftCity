@@ -1320,7 +1320,7 @@ public class VillagerResidenceEvents {
         if(target!=null&&!alreadyHeadingHome&&(competingPath||competingWalkTarget||now-last>=RETURN_RETRY_TICKS)){
             tag.putLong(RETURN_LAST_ATTEMPT,now);
             villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-            Path destinationPath=villager.getNavigation().createPath(target,0);
+            Path destinationPath=residentialPath(villager,target,home.pos,workerRest);
             double speed=returningFromNightDoor?NIGHT_DOOR_WALK_SPEED:0.85D;
             if(workerRest&&(destinationPath==null||!destinationPath.canReach())){
                 tag.remove(RETURN_TARGET);
@@ -1665,6 +1665,18 @@ public class VillagerResidenceEvents {
         else nav.stop();
     }
 
+    private static Path residentialPath(Villager worker,BlockPos target,BlockPos anchor,boolean employed){
+        var navigation=worker.getNavigation();
+        if(!employed||worker.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(anchor))>101*101
+            ||worker.blockPosition().distSqr(target)<=32*32)return navigation.createPath(target,0);
+        navigation.setMaxVisitedNodesMultiplier(5);
+        try{
+            return navigation.createPath(target,0,112);
+        }finally{
+            navigation.resetMaxVisitedNodesMultiplier();
+        }
+    }
+
     private static BlockPos findSafeSpot(ServerLevel level,Villager v,BlockPos anchor,int size){
         return findSafeSpot(level,v,anchor,size,false);
     }
@@ -1698,7 +1710,7 @@ public class VillagerResidenceEvents {
             if(!level.noCollision(v,new AABB(fx+.15,fy,fz+.15,fx+.85,fy+1.95,fz+.85)))continue;
             if(reachable){
                 if(++paths>12)return null;
-                var path=v.getNavigation().createPath(feet,0);
+                var path=residentialPath(v,feet,anchor,ownsWorkerRest(v));
                 if(path==null||!path.canReach()||threat!=null&&!clearOfThreat(path,threat))continue;
             }
             return feet;

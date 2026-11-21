@@ -34,6 +34,8 @@ public abstract class ResidentSteveModelMixin {
     @Unique private static final ThreadLocal<Deque<ResidentSteveRenderState>> RESIDENCIAS$renderStates =
             ThreadLocal.withInitial(ArrayDeque::new);
 
+    @Unique private RenderLayer<?,?> kraftcity$steveTool;
+
     @Inject(method = "render", at = @At("HEAD"))
     private void residenciasaldeoes$useSteveModel(LivingEntity entity, float yaw, float partialTick,
             com.mojang.blaze3d.vertex.PoseStack poses, net.minecraft.client.renderer.MultiBufferSource buffers,
@@ -49,6 +51,11 @@ public abstract class ResidentSteveModelMixin {
         List<RenderLayer> compatibleLayers = new ArrayList<>();
         for (RenderLayer layer : layers) {
             if (layer instanceof VillagerSkinLayer) compatibleLayers.add(layer);
+        }
+        if(br.com.kraftcity.employment.client.WorkerPose.active(villager)){
+            if(kraftcity$steveTool==null)kraftcity$steveTool=new br.com.residenciasaldeoes.client.SteveWorkerToolLayer(
+                (net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this);
+            compatibleLayers.add(kraftcity$steveTool);
         }
         layers = compatibleLayers;
     }

@@ -81,6 +81,11 @@ public final class DiscardBinding {
                 message(player, "Este Baú do Ender pertence a outro jogador.");
                 return;
             }
+        } else if (ArcaneDiscard.isEnder(tile)) {
+            if (!ArcaneDiscard.authorize(tile, player, station)) {
+                message(player, "Baú Arcano (Fim) bloqueado ou versão/canal incompatível.");
+                return;
+            }
         } else if (!supports(level, station, pos)) {
             message(player, "O recipiente está bloqueado ou não oferece um inventário de automação acessível.");
             return;
@@ -127,7 +132,8 @@ public final class DiscardBinding {
         if (level.hasChunkAt(pos)) {
             var tile = level.getBlockEntity(pos);
             if (tile==null || !tile.getPersistentData().hasUUID(TILE_ID)
-                || !station.industry.getUUID(ID).equals(tile.getPersistentData().getUUID(TILE_ID))) {
+                || !station.industry.getUUID(ID).equals(tile.getPersistentData().getUUID(TILE_ID))
+                || ArcaneDiscard.isEnder(tile) && !ArcaneDiscard.channelMatches(tile, station)) {
                 clear(station);
                 return false;
             }
@@ -135,9 +141,13 @@ public final class DiscardBinding {
         return true;
     }
 
+    static boolean targets(ServerLevel level, EmploymentData.Station station, BlockPos pos) {
+        return linked(level, station) && station.industry.getLong(TARGET)==pos.asLong();
+    }
+
     static boolean permitsEnder(ServerLevel level, EmploymentData.Station station, EnderChestBlockEntity chest) {
         if (!chest.getPersistentData().hasUUID(TILE_ID)) return true; // Previously authorized legacy endpoints.
-        return linked(level, station) && station.industry.getLong(TARGET)==chest.getBlockPos().asLong();
+        return targets(level, station, chest.getBlockPos());
     }
 
     public static void unlink(ServerPlayer player, EmploymentData.Station station) {
@@ -150,6 +160,7 @@ public final class DiscardBinding {
     private static void clear(EmploymentData.Station station) {
         station.industry.remove(TARGET);
         station.industry.remove(ID);
+        ArcaneDiscard.clear(station);
         station.setChanged();
     }
 

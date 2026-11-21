@@ -25,6 +25,8 @@
     "WorkerAcquirePoiMixin",
     "IndustrialNavigationMixin",
     "IndustrialIrrigationMixin",
+    "DiscardChestLidMixin",
+    "DiscardEnderLidMixin",
     "FarmerSoilMixin",
     "HarvestTraceMixin",
     "ProfessionalFoodMixin",

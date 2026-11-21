@@ -255,7 +255,7 @@ public final class EmploymentGameTests {
         check(blockMenu.inventory==workerMenu.inventory&&blockMenu.inventory==f.station,"Menus created separate inventory copies");
         blockMenu.slots.get(0).set(new ItemStack(Items.BREAD,7));
         check(workerMenu.slots.get(0).getItem().getCount()==7,"Worker menu did not see block mutation");
-        check(blockMenu.slots.size()==67&&blockMenu.slots.stream().noneMatch(slot->slot.container==f.station
+        check(blockMenu.slots.size()==66&&blockMenu.slots.stream().noneMatch(slot->slot.container==f.station
             &&slot.getContainerSlot()==EmploymentData.PAYMENT),"Farmer exposed hidden payment");
         for(int i=0;i<4;i++)check(blockMenu.getSlot(27+i).getContainerSlot()==27+i
             &&blockMenu.getSlot(27+i).y==WorkMenu.FARM_AUX_Y,"Auxiliary slots moved logically or misaligned");

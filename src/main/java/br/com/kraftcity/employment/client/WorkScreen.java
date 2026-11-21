@@ -21,7 +21,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     private Profession profession;
     private int page;
     private static final int FARM_AREA_X=66, FARM_AREA_Y=123, XP_WIDTH=182, XP_Y=22;
-    private static final String[] FARM_INPUTS={"Enxada","Farinha de Osso","Insumo","Balde de Água"};
+    private static final String[] FARM_INPUTS={"Enxada","Farinha de Osso","Balde de Água"};
 
     public WorkScreen(WorkMenu menu,Inventory inventory,Component title){
         super(menu,inventory,title);
@@ -86,7 +86,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         addRenderableWidget(new Button(leftPos+246,topPos+FARM_AREA_Y,51,17,
             Component.literal("Limites"),b->option(0,1)));
         if(state==null)return;
-        addRenderableWidget(new Button(leftPos+237,topPos+78,65,18,
+        addRenderableWidget(new Button(leftPos+225,topPos+40,74,18,
             Component.literal(state.discardLinked()?"Vinculado":"Vincular Baú"),b->{
                 if(!state.discardLinked()){
                     option(0,5);
@@ -153,7 +153,10 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         RenderSystem.setShaderColor(1,1,1,1);
         blit(pose,x,topPos+XP_Y,0,64,XP_WIDTH,5);
         int progress=farmerXpWidth();
-        if(progress>0)blit(pose,x,topPos+XP_Y,0,69,progress,5);
+        if(progress>0){
+            fill(pose,x,topPos+XP_Y+1,x+progress,topPos+XP_Y+5,0xFF007FAD);
+            fill(pose,x,topPos+XP_Y+1,x+progress,topPos+XP_Y+3,0xFF35D6F3);
+        }
     }
     @Override protected void renderLabels(PoseStack pose,int mx,int my){
         if(menu.farmer){

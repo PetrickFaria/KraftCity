@@ -18,10 +18,29 @@ import net.minecraft.world.item.*;
 import net.minecraft.world.level.block.*;
 
 /** Six production scenes use the same public server jobs and synchronized menus as real play. */
+@net.minecraftforge.fml.common.Mod.EventBusSubscriber(modid="residenciasaldeoes",value=net.minecraftforge.api.distmarker.Dist.CLIENT)
 public final class IndustryVisualCheck {
+    private static String pendingCapture,completedCapture;
+
+    @net.minecraftforge.eventbus.api.SubscribeEvent
+    public static void captureFrame(net.minecraftforge.event.TickEvent.RenderTickEvent event){
+        if(event.phase!=net.minecraftforge.event.TickEvent.Phase.END||pendingCapture==null)return;
+        var mc=Minecraft.getInstance();
+        Screenshot.grab(new File("../build"),pendingCapture,mc.getMainRenderTarget(),message->{});
+        completedCapture=pendingCapture;
+        pendingCapture=null;
+    }
+
+    private static boolean captureReady(String filename){
+        if(filename.equals(completedCapture))return true;
+        pendingCapture=filename;
+        return false;
+    }
     private static boolean farmerSceneDone,blueBoundsCleared;
     private static int bindingDelay;
     private static volatile boolean chestSelected;
+    private static List<ItemStack> stockBeforeCapture;
+    private static final net.minecraft.resources.ResourceLocation ARCANE = new net.minecraft.resources.ResourceLocation("bausarcanos","bau_ender");
     private static final Map<Profession,UUID> ids=new EnumMap<>(Profession.class);
     private static void check(boolean value,String message){if(!value)throw new IllegalStateException(message);}
     // Keep the demo workstations away from the generated GameTest grid.
@@ -48,7 +67,10 @@ public final class IndustryVisualCheck {
         l.setBlock(pos,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);var s=station(l,i);s.setItem(31,new ItemStack(Items.EMERALD,10));check(Employment.hire(p,s,v.getUUID(),profession).equals("ok"),"Industry visual hire");ids.put(profession,s.id);
         var target=pos.east();
         switch(profession){
-            case FARMER->{l.setBlock(pos.south().east(),Blocks.CHEST.defaultBlockState(),3);s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,10));s.setItem(27,new ItemStack(IndustrialTools.HOE.get()));s.setItem(30,new ItemStack(Items.WATER_BUCKET));l.setBlock(target,Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(target.above(),Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);s.industry.putInt("cursor",67);}
+            case FARMER->{
+                var arcane=arcaneBlock();
+                l.setBlock(pos.south().east(),(arcane==null?Blocks.CHEST:arcane).defaultBlockState(),3);
+                if(arcane!=null)l.setBlock(pos.south().east(2),arcane.defaultBlockState(),3);s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,10));s.setItem(27,new ItemStack(IndustrialTools.HOE.get()));s.setItem(30,new ItemStack(Items.WATER_BUCKET));l.setBlock(target,Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(target.above(),Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);s.industry.putInt("cursor",67);}
             case BUTCHER->{s.setItem(27,new ItemStack(IndustrialTools.AXE.get()));var old=animal(l,s,EntityType.COW);old.getPersistentData().putLong("KCIndustryBorn",-1000000);animal(l,s,EntityType.COW);animal(l,s,EntityType.COW);}
             case SHEPHERD->{s.setItem(27,new ItemStack(IndustrialTools.SHEARS.get(3).get()));animal(l,s,EntityType.SHEEP);}
             case FISHERMAN->{s.setItem(27,new ItemStack(IndustrialTools.RODS.get(3).get()));var water=pos.offset(0,-2,0);for(BlockPos at:BlockPos.betweenClosed(water.offset(-1,-1,-1),water.offset(1,1,1)))l.setBlock(at,Blocks.WATER.defaultBlockState(),3);s.industry.putLong("water",water.asLong());s.industry.putInt("fish_elapsed",IndustrialRules.fishingTicks(EmploymentConfig.FISH_TICKS.get(),1));}
@@ -85,6 +107,43 @@ public final class IndustryVisualCheck {
     private static void toggle(Minecraft mc){
         var screen=(WorkScreen)mc.screen;var b=screen.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.Button).map(c->(net.minecraft.client.gui.components.Button)c).filter(c->c.getMessage().getString().equals("Limites")).findFirst().orElseThrow();b.onPress();
     }
+    private static Block arcaneBlock(){
+        var registry=net.minecraftforge.registries.ForgeRegistries.BLOCKS;
+        return registry.containsKey(ARCANE)?registry.getValue(ARCANE):null;
+    }
+
+    private static void testArcaneTransfer(ServerLevel level,ServerPlayer player,EmploymentData.Station station,BlockPos target){
+        var worker=(Villager)level.getEntity(station.worker);
+        final int slot=EmploymentData.COMMON-1;
+        station.setItem(slot,new ItemStack(Items.COBBLESTONE,4));
+        int[] offer=new int[EmploymentData.COMMON];offer[slot]=4;
+        var tile=level.getBlockEntity(target);
+        var other=level.getBlockEntity(target.east());
+        try{
+            var type=tile.getClass();
+            var channel=type.getField("channel");
+            check(channel.getInt(tile)==channel.getInt(other),"Arcane fixtures do not share a channel");
+            var storageType=Class.forName("br.com.petrick.bausarcanos.EnderStorage",false,type.getClassLoader());
+            var storage=storageType.getMethod("get",net.minecraft.server.MinecraftServer.class).invoke(null,level.getServer());
+            var inventory=storageType.getMethod("inventory",UUID.class,int.class);
+            var owner=(net.minecraft.world.Container)inventory.invoke(storage,player.getUUID(),channel.getInt(tile));
+            var stranger=(net.minecraft.world.Container)inventory.invoke(storage,UUID.randomUUID(),channel.getInt(tile));
+            check(owner.isEmpty()&&stranger.isEmpty(),"Unexpected stock in Arcane test channels");
+            check(tile.getCapability(net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER).orElseThrow(IllegalStateException::new)
+                .getSlots()==0,"Arcane version no longer exposes its zero-slot automation capability");
+            br.com.kraftcity.logistics.DiscardChests.deposit(level,station,worker,target,offer,"deposit");
+            check(station.getItem(slot).isEmpty()&&owner.countItem(Items.COBBLESTONE)==4&&stranger.isEmpty(),
+                "Arcane discard did not reach the authorized personal channel exactly once");
+            var lid=type.getField("openers");
+            check(lid.getInt(tile)==1,"Arcane lid did not open for the transfer");
+            var aliasMenu=((net.minecraft.world.MenuProvider)other).createMenu(0,player.getInventory(),player);
+            check(aliasMenu.slots.stream().anyMatch(entry->entry.getItem().is(Items.COBBLESTONE)&&entry.getItem().getCount()==4),
+                "Second Arcane chest does not show the deposited items");
+            aliasMenu.removed(player);
+            System.out.println("FARMER_ARCANE_OWNER_CHANNEL_TRANSFER_PASSED");
+        }catch(ReflectiveOperationException ex){throw new IllegalStateException(ex);}
+    }
+
     private static void press(Minecraft mc,String label){
         var button=mc.screen.children().stream().filter(net.minecraft.client.gui.components.Button.class::isInstance)
             .map(net.minecraft.client.gui.components.Button.class::cast)
@@ -99,6 +158,7 @@ public final class IndustryVisualCheck {
         if(phase==6){
             if(!(mc.screen instanceof WorkScreen)
                 ||!(mc.player.containerMenu instanceof WorkMenu menu)||menu.snapshot==null)return false;
+            if(!captureReady("visual-farmer-discard-unbound.png"))return false;
             press(mc,"Vincular Baú");
         }
         if(phase==11){
@@ -112,8 +172,10 @@ public final class IndustryVisualCheck {
                 level.getServer().execute(()->{
                     var s=station(level,0);
                     if(!chestSelected&&br.com.kraftcity.logistics.DiscardBinding.linked(level,s)){
+                        var player=level.getServer().getPlayerList().getPlayer(playerId);
+                        if(arcaneBlock()!=null)testArcaneTransfer(level,player,s,target);
                         chestSelected=true;
-                        WorkBlock.open(level.getServer().getPlayerList().getPlayer(playerId),s);
+                        WorkBlock.open(player,s);
                     }
                 });
                 return false;
@@ -121,18 +183,40 @@ public final class IndustryVisualCheck {
             if(!(mc.screen instanceof WorkScreen)
                 ||!(mc.player.containerMenu instanceof WorkMenu menu)||menu.snapshot==null)return false;
             check(menu.snapshot.discardLinked(),"Bound chest was missing from the menu");
+            if(!captureReady("visual-farmer-discard-linked.png"))return false;
             press(mc,"Vinculado");
             check(mc.screen instanceof net.minecraft.client.gui.screens.ConfirmScreen,"No unlink confirmation");
-            press(mc,"Cancelar");
-            check(menu.snapshot.discardLinked(),"Cancel changed the link");
         }
-        if(phase==25){
+        if(phase==24){
+            if(!captureReady("visual-farmer-discard-confirm.png"))return false;
+            press(mc,"Cancelar");
+            check(((WorkMenu)mc.player.containerMenu).snapshot.discardLinked(),"Cancel changed the link");
+        }
+        if(phase==26){
             press(mc,"Vinculado");
             press(mc,"Desvincular");
         }
         if(phase==32){
             if(((WorkMenu)mc.player.containerMenu).snapshot.discardLinked())return false;
             System.out.println("FARMER_DISCARD_BINDING_GUI_PASSED");
+        }
+        if(phase==33)level.getServer().execute(()->{
+            var station=station(level,0);
+            var original=new ArrayList<ItemStack>();
+            for(int i=0;i<EmploymentData.COMMON;i++){
+                original.add(station.getItem(i).copy());
+                station.setItem(i,new ItemStack(Items.COBBLESTONE,64));
+            }
+            stockBeforeCapture=List.copyOf(original);
+        });
+        if(phase==34){
+            var menu=(WorkMenu)mc.player.containerMenu;
+            if(menu.slots.subList(0,EmploymentData.COMMON).stream().anyMatch(slot->slot.getItem().getCount()!=64))return false;
+            if(!captureReady("visual-farmer-discard-full.png"))return false;
+            level.getServer().execute(()->{
+                var station=station(level,0);
+                for(int i=0;i<stockBeforeCapture.size();i++)station.setItem(i,stockBeforeCapture.get(i));
+            });
         }
         return true;
     }
@@ -145,7 +229,7 @@ public final class IndustryVisualCheck {
                 return;
             }
             if(phase==0)mc.getSingleplayerServer().execute(()->setup(mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()),i));
-            if(phase==45){check(mc.screen instanceof WorkScreen,"Industry menu missing");check(mc.player.containerMenu instanceof WorkMenu m&&m.slots.size()==(i==0?67:68)&&m.snapshot!=null,"Industry menu not synchronized");}
+            if(phase==45){check(mc.screen instanceof WorkScreen,"Industry menu missing");check(mc.player.containerMenu instanceof WorkMenu m&&m.slots.size()==(i==0?66:68)&&m.snapshot!=null,"Industry menu not synchronized");}
             if(i==0&&phase==35){
                 var menu=(WorkMenu)mc.player.containerMenu;
                 check(menu.snapshot.level()==2&&menu.snapshot.size()==5,"Lv2 changed the active area");
@@ -179,6 +263,22 @@ public final class IndustryVisualCheck {
             var l=mc.getSingleplayerServer().overworld();
             var original=(br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)l.getBlockEntity(new BlockPos(1,-58,8));
             for(int slot=0;slot<10;slot++)check(original.getItem(slot).getCount()==slot+1,"Original stacks changed during industrial scenes");
+            if(arcaneBlock()!=null){
+                var s=station(l,0);
+                var player=l.getServer().getPlayerList().getPlayer(mc.player.getUUID());
+                var target=post(0).south().east();
+                var tile=l.getBlockEntity(target);
+                try{
+                    check(tile.getClass().getField("openers").getInt(tile)==0,"Arcane lid was left open");
+                }catch(ReflectiveOperationException ex){throw new IllegalStateException(ex);}
+                br.com.kraftcity.logistics.DiscardBinding.begin(player,s);
+                net.minecraftforge.common.ForgeHooks.onRightClickBlock(player,net.minecraft.world.InteractionHand.MAIN_HAND,target,
+                    new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(target),
+                        net.minecraft.core.Direction.UP,target,false));
+                check(br.com.kraftcity.logistics.DiscardBinding.linked(l,s),"Arcane rebind after unlink failed");
+                s.industry.putUUID("visual_arcane_owner",player.getUUID());
+                s.setChanged();
+            }
             l.setDayTime(13001);EmploymentVisualCheck.restoreNightFixture(l);
             for(var id:ids.values()){var s=EmploymentData.get(l).station(id);s.industry.putString("visual_test","six_jobs_passed");s.setChanged();}
         });
@@ -197,6 +297,17 @@ public final class IndustryVisualCheck {
             if(i==2)check(count(s,Items.WHITE_WOOL)>0,"Shepherd output lost");
             if(i==3)check(count(s,Items.COD)+count(s,Items.SALMON)+count(s,Items.TROPICAL_FISH)+count(s,Items.PUFFERFISH)>0,"Fish output lost");
             if(i==5)check(count(s,Items.HONEY_BOTTLE)>0,"Honey output lost");
+        }
+        if(arcaneBlock()!=null){
+            var s=station(l,0);
+            check(br.com.kraftcity.logistics.DiscardBinding.linked(l,s),"Arcane link lost after reopening");
+            var player=l.getServer().getPlayerList().getPlayer(s.industry.getUUID("visual_arcane_owner"));
+            var tile=l.getBlockEntity(post(0).south().east(2));
+            var menu=((net.minecraft.world.MenuProvider)tile).createMenu(0,player.getInventory(),player);
+            check(menu.slots.stream().anyMatch(slot->slot.getItem().is(Items.COBBLESTONE)&&slot.getItem().getCount()==4),
+                "Reopened Arcane alias lost its original stock");
+            menu.removed(player);
+            System.out.println("FARMER_ARCANE_RESTART_PASSED");
         }
         FarmerVisualCheck.verifyRestore(l);
         System.out.println("INDUSTRY_SIX_JOBS_WORLD_RESTART_PASSED");

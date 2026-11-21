@@ -17,6 +17,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class FarmerHoeLayerMixin {
     @Unique private static boolean kraftcity$visualHoeSeen;
     @Inject(method="render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/entity/LivingEntity;FFFFFF)V",
+        at=@At("HEAD"),cancellable=true)
+    private void kraftcity$useActiveWorkerArm(PoseStack pose,MultiBufferSource buffers,int light,LivingEntity entity,
+                                           float limb,float speed,float partial,float age,float yaw,float pitch,CallbackInfo ci){
+        if(br.com.kraftcity.employment.client.WorkerPose.active(entity))ci.cancel();
+    }
+
+    @Inject(method="render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/entity/LivingEntity;FFFFFF)V",
         at=@At(value="INVOKE",target="Lnet/minecraft/client/renderer/ItemInHandRenderer;renderItem(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/client/renderer/block/model/ItemTransforms$TransformType;ZLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V"))
     private void kraftcity$farmerHoe(PoseStack pose,MultiBufferSource buffers,int light,LivingEntity entity,
                                     float limb,float speed,float partial,float age,float yaw,float pitch,CallbackInfo ci){

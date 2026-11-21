@@ -11,7 +11,7 @@ import net.minecraftforge.network.*;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class WorkNetwork {
-    public static final SimpleChannel CHANNEL=NetworkRegistry.newSimpleChannel(new ResourceLocation("residenciasaldeoes","employment"),()->"9","9"::equals,"9"::equals);
+    public static final SimpleChannel CHANNEL=NetworkRegistry.newSimpleChannel(new ResourceLocation("residenciasaldeoes","employment"),()->"10","10"::equals,"10"::equals);
     public record Candidate(UUID id,String name,int cost){}
     public record Hire(int menu,UUID station,UUID worker,int profession){
         void encode(FriendlyByteBuf b){b.writeVarInt(menu);b.writeUUID(station);b.writeUUID(worker);b.writeInt(profession);}
@@ -47,7 +47,16 @@ public final class WorkNetwork {
         static Snapshot decode(FriendlyByteBuf b){int menu=b.readVarInt();UUID id=b.readUUID();int count=b.readVarInt();if(count<0||count>65536)throw new IllegalArgumentException("Candidate snapshot too large");var list=new ArrayList<Candidate>();for(int i=0;i<count;i++)list.add(new Candidate(b.readUUID(),b.readUtf(128),b.readInt()));return new Snapshot(menu,id,List.copyOf(list),b.readInt(),b.readUtf(128),b.readBoolean(),b.readLong(),b.readInt(),b.readLong(),b.readInt(),b.readBoolean(),b.readBoolean(),b.readInt(),b.readInt(),b.readLong(),b.readUtf(256),b.readUtf(256),b.readBoolean());}
         void handle(Supplier<NetworkEvent.Context> ctx){DistExecutor.unsafeRunWhenOn(Dist.CLIENT,()->()->br.com.kraftcity.employment.client.WorkScreen.receive(this));ctx.get().setPacketHandled(true);}
     }
+    public record Activity(int entity,UUID worker,boolean farmer){
+        void encode(FriendlyByteBuf b){b.writeVarInt(entity);b.writeUUID(worker);b.writeBoolean(farmer);}
+        static Activity decode(FriendlyByteBuf b){return new Activity(b.readVarInt(),b.readUUID(),b.readBoolean());}
+        void handle(Supplier<NetworkEvent.Context> c){
+            DistExecutor.unsafeRunWhenOn(Dist.CLIENT,()->()->br.com.kraftcity.employment.client.WorkerPose.receive(entity,worker,farmer));
+            c.get().setPacketHandled(true);
+        }
+    }
     public static void register(){
+        CHANNEL.messageBuilder(Activity.class,5,NetworkDirection.PLAY_TO_CLIENT).encoder(Activity::encode).decoder(Activity::decode).consumerMainThread(Activity::handle).add();
         CHANNEL.messageBuilder(Dismiss.class,4,NetworkDirection.PLAY_TO_SERVER).encoder(Dismiss::encode).decoder(Dismiss::decode).consumerMainThread(Dismiss::handle).add();
         CHANNEL.messageBuilder(Hire.class,0,NetworkDirection.PLAY_TO_SERVER).encoder(Hire::encode).decoder(Hire::decode).consumerMainThread(Hire::handle).add();
         CHANNEL.messageBuilder(Snapshot.class,1,NetworkDirection.PLAY_TO_CLIENT).encoder(Snapshot::encode).decoder(Snapshot::decode).consumerMainThread(Snapshot::handle).add();

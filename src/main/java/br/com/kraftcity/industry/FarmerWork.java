@@ -381,7 +381,7 @@ public final class FarmerWork {
     }
 
     private static boolean tillable(BlockState soil){
-        return soil.is(Blocks.DIRT)||soil.is(Blocks.GRASS_BLOCK)||soil.is(Blocks.DIRT_PATH);
+        return soil.is(Blocks.DIRT)||soil.is(Blocks.GRASS_BLOCK);
     }
     private static boolean sowAt(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos pos,int slot,ItemStack tool){
         var seed=s.getItem(slot);

@@ -125,9 +125,14 @@ public final class IndustrialWork {
         if(!s.getItem(slot).isEmpty())return;
         for(int i=0;i<27;i++)if(match.test(s.getItem(i))){s.setItem(slot,s.removeItemNoUpdate(i));s.setChanged();return;}
     }
+    public static void restoreFarmerInput(EmploymentData.Station station){
+        var legacy=station.getItem(EmploymentData.INPUT_B);
+        if(!legacy.isEmpty()&&insert(station,legacy.copy(),true))station.setItem(EmploymentData.INPUT_B,ItemStack.EMPTY);
+    }
+
     public static void replenish(EmploymentData.Station s){
         switch(s.profession){
-            case FARMER->{move(s,27,x->x.getItem() instanceof HoeItem);move(s,28,x->x.is(Items.BONE_MEAL));move(s,30,x->x.is(Items.WATER_BUCKET));}
+            case FARMER->{restoreFarmerInput(s);move(s,27,x->x.getItem() instanceof HoeItem);move(s,28,x->x.is(Items.BONE_MEAL));move(s,30,x->x.is(Items.WATER_BUCKET));}
             case BUTCHER->{move(s,27,x->x.getItem() instanceof AxeItem);for(int i=28;i<=30;i++)move(s,i,IndustrialWork::food);}
             case SHEPHERD->{move(s,27,x->x.getItem() instanceof ShearsItem);move(s,28,x->x.is(Items.WHEAT));}
             case FISHERMAN->move(s,27,x->x.getItem() instanceof FishingRodItem);

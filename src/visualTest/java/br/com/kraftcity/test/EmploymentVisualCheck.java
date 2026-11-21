@@ -262,7 +262,7 @@ public final class EmploymentVisualCheck {
     public static void verifyRestore(ServerLevel level){
         var s=station(level,POST);check(s!=null&&s.active&&s.worker!=null&&s.profession==Profession.FARMER,"Employment lost after process restart");
         var progress=WorkforceData.get(level).progress(s.worker,Profession.FARMER.id());
-        check(s.getItem(0).getCount()==13&&s.getItem(27).is(Items.IRON_HOE)&&s.getItem(28).getCount()==3&&s.getItem(29).getCount()==2&&s.getItem(30).is(Items.WATER_BUCKET)&&s.getItem(31).isEmpty()&&progress.level()==3&&progress.xp()==57,"Professional inventory/history lost after restart");
+        check(s.getItem(0).getCount()==13&&s.getItem(27).is(Items.IRON_HOE)&&s.getItem(28).getCount()==3&&s.getItem(29).isEmpty()&&s.countItem(Items.PUMPKIN_SEEDS)==2&&s.getItem(30).is(Items.WATER_BUCKET)&&s.getItem(31).isEmpty()&&progress.level()==3&&progress.xp()==57,"Professional inventory/history lost after restart");
         check(ResidenceData.get(level).owner(s.worker).pos.equals(HOME)&&ResidenceData.get(level).bedClaim(s.worker).bed().equals(BED),"Housing/bed link lost after restart");
         var vacant=station(level,COMMERCIAL);
         check(vacant.worker==null&&vacant.getItem(31).getCount()==20,"Dismissed workstation did not stay vacant");

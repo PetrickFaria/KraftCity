@@ -86,7 +86,7 @@ public final class DiscardChests {
             if(state.hasProperty(WorkBlock.FACING))facing=state.getValue(WorkBlock.FACING);
         }
         var left=facing.getCounterClockWise();
-        var positions=discover(level,area,pos->exposed(level,pos)&&(at(level,pos)!=null||capability(level,pos)!=null));
+        var positions=discover(level,area,pos->exposed(level,pos)&&!ArcaneDiscard.isEnder(level.getBlockEntity(pos))&&(at(level,pos)!=null||capability(level,pos)!=null));
         positions.sort(Comparator.<BlockPos>comparingDouble(p->borderDistance(area,p))
             .thenComparingInt(p->-(p.getX()-station.pos.getX())*left.getStepX()-(p.getZ()-station.pos.getZ())*left.getStepZ())
             .thenComparingInt(BlockPos::getX).thenComparingInt(BlockPos::getY).thenComparingInt(BlockPos::getZ));
@@ -118,7 +118,7 @@ public final class DiscardChests {
         if(state.is(Blocks.ENDER_CHEST)){
             return be instanceof EnderChestBlockEntity chest&&EnderDiscard.inventory(chest)!=null?be:null;
         }
-        if(be instanceof WorkerDiscardAccess)return be;
+        if(ArcaneDiscard.isEnder(be)||be instanceof WorkerDiscardAccess)return be;
         for(var side:Direction.values())if(be.getCapability(ForgeCapabilities.ITEM_HANDLER,side).isPresent())return be;
         return be.getCapability(ForgeCapabilities.ITEM_HANDLER).isPresent()?be:null;
     }
@@ -132,6 +132,11 @@ public final class DiscardChests {
             var station=worker.level instanceof ServerLevel level?EmploymentData.get(level).assigned(worker.getUUID()):null;
             return station!=null&&station.profession==br.com.kraftcity.employment.Profession.FARMER
                 &&DiscardBinding.permitsEnder((ServerLevel)worker.level,station,chest)?EnderDiscard.inventory(chest):null;
+        }
+        if(ArcaneDiscard.isEnder(be)){
+            if(!(worker.level instanceof ServerLevel level))return null;
+            var station=EmploymentData.get(level).assigned(worker.getUUID());
+            return station==null?null:ArcaneDiscard.inventory(level,be,station);
         }
         if(be instanceof WorkerDiscardAccess linked)return linked.discardInventory(worker,side);
         var exposed=be.getCapability(ForgeCapabilities.ITEM_HANDLER,side).orElse(null);
@@ -218,6 +223,7 @@ public final class DiscardChests {
         var be=container==null?capability(level,pos):null;
         var handler=be==null?null:accessibleHandler(be,worker);
         if(container==null&&handler==null)return;
+        boolean activated=false;
         for(int i=0;i<offers.length;i++){
             int count=Math.min(offers[i],station.getItem(i).getCount());
             if(count==0)continue;
@@ -229,6 +235,7 @@ public final class DiscardChests {
                 count=Math.min(count,accepted);
                 stack.setCount(count);
             }
+            if(!activated){DiscardLids.afterApproval(level,level.getBlockEntity(pos));activated=true;}
             var rest=container==null?ItemHandlerHelper.insertItemStacked(handler,stack,false):IndustrialWork.transfer(container,stack);
             int moved=count-Math.min(count,rest.getCount());
             if(moved>0){station.removeItem(i,moved);offers[i]-=moved;}

@@ -45,6 +45,18 @@ public final class EmploymentEvents {
     @SubscribeEvent public void tick(TickEvent.ServerTickEvent event){
         var server=ServerLifecycleHooks.getCurrentServer();if(event.phase!=TickEvent.Phase.END||server==null)return;
         if(server.getTickCount()%5==0)for(var level:server.getAllLevels())WorkerGates.closeVacant(level);
+        if(server.getTickCount()%10==0)for(var s:EmploymentData.get(server.overworld()).stations()){
+            if(!s.active||s.worker==null||s.profession==null)continue;
+            var level=server.getLevel(s.dimension);
+            if(level==null||!(level.getEntity(s.worker) instanceof Villager worker)||worker.isSleeping()
+                ||Employment.fleeing(worker)||worker.getTarget()!=null||worker.isUsingItem())continue;
+            boolean working=s.sector==Profession.Sector.MILITARY
+                ?br.com.kraftcity.military.Military.onDuty(level,s)
+                :br.com.kraftcity.industry.IndustrialWork.day(level)&&!level.isThundering()
+                    ||s.profession==Profession.FARMER&&br.com.kraftcity.industry.FarmerLogistics.ending(worker);
+            if(working)WorkNetwork.CHANNEL.send(net.minecraftforge.network.PacketDistributor.TRACKING_ENTITY.with(()->worker),
+                new WorkNetwork.Activity(worker.getId(),worker.getUUID(),s.profession==Profession.FARMER));
+        }
         if(server.getTickCount()%20!=0)return;
         for(var s:EmploymentData.get(server.overworld()).stations())Employment.reconcile(server.overworld(),s);
     }
