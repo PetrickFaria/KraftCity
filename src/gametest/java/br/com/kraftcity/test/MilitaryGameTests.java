@@ -164,6 +164,13 @@ public final class MilitaryGameTests {
             f.l.setBlockAndUpdate(pos.above(7),Blocks.STONE.defaultBlockState());
         }
         clearTestHostiles(f);
+        // Full-suite fixtures share a world. Keep earlier soldiers from intercepting
+        // this scenario's attackers while retaining all of their saved state.
+        var nearbySoldiers=f.l.getEntitiesOfClass(Villager.class,f.v.getBoundingBox().inflate(80),
+            villager->villager!=f.v&&!villager.isNoAi()&&Military.isSoldier(villager));
+        nearbySoldiers.forEach(villager->villager.setNoAi(true));
+        var previousDifficulty=f.l.getDifficulty();
+        f.l.getServer().setDifficulty(Difficulty.NORMAL,true);
         var resident=mob(f,EntityType.VILLAGER,-5);
         check("ok".equals(ResidenceData.get(f.l).link(f.l,f.home,resident)),"Resident for patrol scenario");
         var farmer=mob(f,EntityType.VILLAGER,4);
@@ -194,6 +201,7 @@ public final class MilitaryGameTests {
                 "Returned soldier did not center on post"))
             .thenExecute(()->{
                 var threat=mob(f,EntityType.ZOMBIE,4);
+                threat.setPersistenceRequired();
                 threat.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE,1000));
                 threat.setHealth(2);
                 check(threat.doHurtTarget(farmer),"Zombie did not actually attack the farmer");
@@ -235,6 +243,8 @@ public final class MilitaryGameTests {
                 f.l.setThunderLevel(0);
                 f.s.military.remove("visual_test_threat");
                 f.l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(naturalSpawns,f.l.getServer());
+                f.l.getServer().setDifficulty(previousDifficulty,true);
+                nearbySoldiers.forEach(villager->villager.setNoAi(false));
                 farmer.discard();
                 resident.discard();
             })
