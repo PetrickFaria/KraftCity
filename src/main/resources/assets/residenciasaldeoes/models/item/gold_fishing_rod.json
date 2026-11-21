@@ -1,6 +1,14 @@
 {
-  "parent": "minecraft:item/generated",
+  "parent": "minecraft:item/fishing_rod",
   "textures": {
-    "layer0": "minecraft:item/fishing_rod"
-  }
+    "layer0": "residenciasaldeoes:item/gold_fishing_rod"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "cast": 1
+      },
+      "model": "residenciasaldeoes:item/gold_fishing_rod_cast"
+    }
+  ]
 }

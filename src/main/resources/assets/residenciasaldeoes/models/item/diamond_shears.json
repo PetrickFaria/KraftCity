@@ -1,6 +1,6 @@
 {
-  "parent": "minecraft:item/generated",
+  "parent": "minecraft:item/shears",
   "textures": {
-    "layer0": "minecraft:item/shears"
+    "layer0": "residenciasaldeoes:item/diamond_shears"
   }
 }

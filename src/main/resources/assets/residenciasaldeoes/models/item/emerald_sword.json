@@ -1,6 +1,6 @@
 {
-  "parent": "minecraft:item/generated",
+  "parent": "minecraft:item/iron_sword",
   "textures": {
-    "layer0": "minecraft:item/diamond_sword"
+    "layer0": "residenciasaldeoes:item/emerald_sword"
   }
 }

@@ -24,14 +24,23 @@ public final class EmploymentEvents {
         br.com.kraftcity.workforce.WorkforceData.get(server.overworld()).rebindHistory(event.previous,event.current);
     }
     @SubscribeEvent public void removed(EntityLeaveLevelEvent event){
-        if(event.getEntity() instanceof Villager v&&event.getLevel() instanceof ServerLevel l
-                &&!br.com.kraftcity.military.Military.transferring(v.getUUID())&&v.getRemovalReason()!=null&&v.getRemovalReason().shouldDestroy())Employment.release(l,v.getUUID());
+        if(!(event.getLevel() instanceof ServerLevel level)||event.getEntity().getRemovalReason()==null
+            ||!event.getEntity().getRemovalReason().shouldDestroy())return;
+        if(event.getEntity() instanceof Villager v&&!EmploymentData.get(level).awaitingCure(v.getUUID())
+            &&!br.com.kraftcity.military.Military.transferring(v.getUUID()))Employment.release(level,v.getUUID());
+        if(event.getEntity() instanceof net.minecraft.world.entity.monster.ZombieVillager zombie)
+            WorkerConversion.loseInfectedWorker(level,zombie.getUUID());
     }
     @SubscribeEvent public void workerBreeding(net.minecraftforge.event.entity.living.BabyEntitySpawnEvent event){
         if(event.getParentA() instanceof Villager first&&Employment.active(first)
             ||event.getParentB() instanceof Villager second&&Employment.active(second))event.setCanceled(true);
     }
-    @SubscribeEvent public void died(LivingDeathEvent event){if(event.getEntity() instanceof Villager v&&v.level instanceof ServerLevel l)Employment.release(l,v.getUUID());}
+    @SubscribeEvent public void died(LivingDeathEvent event){if(event.getEntity() instanceof Villager v&&v.level instanceof ServerLevel l&&!WorkerConversion.mayInfect(v,event.getSource()))Employment.release(l,v.getUUID());}
+    @SubscribeEvent(priority=EventPriority.HIGHEST)
+    public void denyDuplicateInfectedIdentity(EntityJoinLevelEvent event){
+        if(event.getLevel() instanceof ServerLevel level&&event.getEntity() instanceof Villager villager
+            &&WorkerConversion.blockedIdentity(level,villager))event.setCanceled(true);
+    }
     @SubscribeEvent public void joined(EntityJoinLevelEvent event){if(event.getEntity() instanceof Villager v&&event.getLevel() instanceof ServerLevel l){var s=EmploymentData.get(l).assigned(v.getUUID());if(s!=null&&!s.dimension.equals(l.dimension()))Employment.release(l,v.getUUID());else Employment.valid(l,v.getUUID());}}
     @SubscribeEvent(priority=EventPriority.HIGHEST)
     public void survival(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent event){
@@ -45,6 +54,7 @@ public final class EmploymentEvents {
 
     @SubscribeEvent public void tick(TickEvent.ServerTickEvent event){
         var server=ServerLifecycleHooks.getCurrentServer();if(event.phase!=TickEvent.Phase.END||server==null)return;
+        WorkerConversion.finishDeaths(server);
         if(server.getTickCount()%5==0)for(var level:server.getAllLevels())WorkerGates.closeVacant(level);
         if(server.getTickCount()%10==0)for(var s:EmploymentData.get(server.overworld()).stations()){
             if(!s.active||s.worker==null||s.profession==null)continue;

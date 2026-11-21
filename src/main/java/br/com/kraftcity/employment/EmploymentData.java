@@ -25,6 +25,20 @@ public final class EmploymentData extends SavedData {
     public void saveDetachedSoldier(UUID id,CompoundTag snapshot){detachedSoldiers.put(id.toString(),snapshot.copy());setDirty();}
     public CompoundTag detachedSoldier(UUID id){return detachedSoldiers.getCompound(id.toString()).copy();}
     public void forgetDetachedSoldier(UUID id){if(detachedSoldiers.contains(id.toString())){detachedSoldiers.remove(id.toString());setDirty();}}
+    private final Map<UUID,UUID> infections=new LinkedHashMap<>();
+    boolean rememberInfection(UUID zombie,UUID worker){
+        if(infections.containsKey(zombie)||awaitingCure(worker))return false;
+        infections.put(zombie,worker);
+        setDirty();
+        return true;
+    }
+    UUID infectedWorker(UUID zombie){return infections.get(zombie);}
+    public boolean awaitingCure(UUID worker){return infections.containsValue(worker);}
+    UUID forgetInfection(UUID zombie){
+        var worker=infections.remove(zombie);
+        if(worker!=null)setDirty();
+        return worker;
+    }
     public Collection<Station> stations(){return List.copyOf(stations.values());}
     void remove(UUID id){if(stations.remove(id)!=null){revision++;setDirty();}}
     public Station station(UUID id){return stations.get(id);}
@@ -64,11 +78,18 @@ public final class EmploymentData extends SavedData {
             t.put("military",s.military.copy());ListTag gear=new ListTag();for(int i=0;i<6;i++){CompoundTag e=s.equipment.getItem(i).save(new CompoundTag());e.putInt("slot",i);gear.add(e);}t.put("military_equipment",gear);
             t.put("items",items);t.put("industry",s.industry.copy());t.put("commerce",s.commerce.copy());entries.add(t);
         }
-        root.put("stations",entries);root.put("detachedSoldiers",detachedSoldiers.copy());return root;
+        root.put("stations",entries);root.put("detachedSoldiers",detachedSoldiers.copy());
+        var infected=new CompoundTag();
+        infections.forEach((zombie,worker)->infected.putUUID(zombie.toString(),worker));
+        root.put("infections",infected);
+        return root;
     }
     public static EmploymentData load(CompoundTag root){
         if(root.getInt("schema")!=1)throw new IllegalArgumentException("Unsupported employment schema");
         EmploymentData data=new EmploymentData();data.detachedSoldiers.merge(root.getCompound("detachedSoldiers"));
+        var infections=root.getCompound("infections");
+        for(var key:infections.getAllKeys())if(infections.hasUUID(key))
+            data.infections.put(UUID.fromString(key),infections.getUUID(key));
         for(Tag raw:root.getList("stations",Tag.TAG_COMPOUND)){
             CompoundTag t=(CompoundTag)raw;Station s=new Station(data,t.getUUID("id"),Profession.Sector.valueOf(t.getString("sector")));
             s.military=t.getCompound("military").copy();for(Tag rawGear:t.getList("military_equipment",Tag.TAG_COMPOUND)){var e=(CompoundTag)rawGear;int slot=e.getInt("slot");if(slot<0||slot>=6)throw new IllegalArgumentException("Invalid military equipment slot");s.equipment.setItem(slot,ItemStack.of(e));}

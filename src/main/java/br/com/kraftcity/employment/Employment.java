@@ -173,7 +173,11 @@ public final class Employment {
         for(int slot=0;slot<EmploymentData.SLOTS;slot++)recovery.setItem(slot,station.removeItemNoUpdate(slot));
         Containers.dropContents(level,station.pos,recovery);
         var block=new ItemStack(WorkModule.INDUSTRIAL.get());
-        if(area>5)block.getOrCreateTag().putInt("KraftCityFarmerArea",area);
+        if(area>5){
+            block.getOrCreateTag().putInt("KraftCityFarmerArea",area);
+            if(station.industry.hasUUID("farmer_area_owner"))
+                block.getOrCreateTag().putUUID("KraftCityFarmerAreaOwner",station.industry.getUUID("farmer_area_owner"));
+        }
         net.minecraft.world.level.block.Block.popResource(level,station.pos,block);
     }
 
@@ -212,7 +216,10 @@ public final class Employment {
         var data=EmploymentData.get(level);
         for(ServerLevel world:level.getServer().getAllLevels())if(world.getEntity(worker) instanceof Villager v)br.com.kraftcity.industry.IndustrialWork.restoreHand(v);
         for(var s:data.stations())if(worker.equals(s.worker)){
-            if(s.profession==Profession.FARMER)br.com.kraftcity.industry.IndustrialRules.size(level,s);
+            if(s.profession==Profession.FARMER){
+                br.com.kraftcity.industry.IndustrialRules.size(level,s);
+                s.industry.putUUID("farmer_area_owner",worker);
+            }
             s.worker=null;s.industry.putLong("employment_epoch",epoch(s)+1);if(s.sector==Profession.Sector.COMMERCIAL)s.commerce.putLong("epoch",s.commerce.getLong("epoch")+1);s.setChanged();}
         var workforce=WorkforceData.get(level);var old=workforce.worker(worker).orElse(null);
         if(old!=null&&old.workstation().isPresent()){
@@ -304,7 +311,16 @@ public final class Employment {
             finally { CONVERTING.remove(); }
         }
         if(!(level.getBlockEntity(s.pos) instanceof WorkBlockEntity converted))throw new IllegalStateException("Missing professional block entity");
-        if(profession==Profession.FARMER&&s.profession==null&&!s.industry.contains("size"))s.industry.putInt("size",5);
+        if(profession==Profession.FARMER){
+            if(!s.industry.hasUUID("farmer_area_owner")||!worker.equals(s.industry.getUUID("farmer_area_owner"))){
+                s.industry.putInt("size",5);
+                s.industry.remove("zigzag_size");
+                s.industry.remove("zigzag_harvest");
+                s.industry.remove("zigzag_plant");
+                s.industry.remove("cursor");
+            }
+            s.industry.putUUID("farmer_area_owner",worker);
+        }
         converted.bind(s.id);s.profession=profession;s.worker=worker;s.industry.putLong("employment_epoch",epoch(s)+1);s.setChanged();
         var workforce=WorkforceData.get(level);var progress=workforce.progress(worker,profession.id());
         var previous=workforce.worker(worker).orElse(null);

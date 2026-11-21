@@ -271,6 +271,7 @@ public class ResidenceData extends SavedData {
         }
         if(current==null)return false;
         if(current.equals(id))return owner(id)!=null;
+        if(br.com.kraftcity.employment.EmploymentData.get(level).awaitingCure(current))return false;
         // A copied capture item cannot take over while the registered entity is loaded.
         for(ServerLevel serverLevel:level.getServer().getAllLevels())if(serverLevel.getEntity(current)!=null)return false;
         if(owner(id)!=null)return false;

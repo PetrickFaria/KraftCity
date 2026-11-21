@@ -61,6 +61,8 @@ public final class WorkBlock extends BaseEntityBlock {
                     int area=stack.getTag().getInt("KraftCityFarmerArea");
                     if(area>=7&&area<=13&&area%2==1){
                         station.industry.putInt("size",area);
+                        if(stack.getTag().hasUUID("KraftCityFarmerAreaOwner"))
+                            station.industry.putUUID("farmer_area_owner",stack.getTag().getUUID("KraftCityFarmerAreaOwner"));
                         station.setChanged();
                     }
                 }

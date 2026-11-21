@@ -1,6 +1,6 @@
 {
-  "parent": "minecraft:item/generated",
+  "parent": "minecraft:item/iron_axe",
   "textures": {
-    "layer0": "minecraft:item/diamond_axe"
+    "layer0": "residenciasaldeoes:item/emerald_axe"
   }
 }

@@ -57,7 +57,7 @@ assert 'level.hasChunkAt(home.pos)' in events and 'pendingProduction' in events
 assert 'recorded&&fragments>0' in events
 assert 'SoundEvents.VILLAGER_NO' in events and 'SoundEvents.BELL_BLOCK' not in events
 assert 'playProductionBell(level,residents)' in events and 'return;' not in events[events.index('private void playProductionBell'):events.index('@SubscribeEvent public void onVillagerJoin')]
-assert 'finishEmeraldTransfer(sl,v,v.getPersistentData().getCompound(EMERALD_TRANSFER),true)' in events
+assert 'finishEmeraldTransfer(level,villager,villager.getPersistentData().getCompound(EMERALD_TRANSFER),true)' in events
 assert 'pending_fragments' in be and 'last_production_game_time' in be
 assert 'ContainerHelper.saveAllItems(tag,outputItems)' in be
 assert 'ContainerHelper.loadAllItems(tag,outputItems)' in be

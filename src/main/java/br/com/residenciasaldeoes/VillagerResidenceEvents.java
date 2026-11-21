@@ -1866,8 +1866,9 @@ public class VillagerResidenceEvents {
             String name=data.residentName(villager.getUUID());
             broadcastResidentNotice(level,villager,data,RESIDENT_WITCH_NOTICE,Component.literal(name+" foi transformado em bruxa."));
             data.unlinkConverted(level,villager,event.getOutcome());
-        }else if(event.getOutcome() instanceof net.minecraft.world.entity.monster.ZombieVillager){
-            data.unlinkConverted(level,villager,event.getOutcome());
+        }else if(event.getOutcome() instanceof net.minecraft.world.entity.monster.ZombieVillager zombie
+            &&!br.com.kraftcity.employment.WorkerConversion.infected(level,villager,zombie)){
+            data.unlinkConverted(level,villager,zombie);
         }
     }
     @SubscribeEvent public void onVillagerDrops(LivingDropsEvent event){
@@ -1879,5 +1880,21 @@ public class VillagerResidenceEvents {
         int count=villager.getRandom().nextInt(10)==0?2:1;
         event.getDrops().add(new ItemEntity(villager.level,villager.getX(),villager.getY(),villager.getZ(),new ItemStack(ResidenciasDosAldeoes.EMERALD_FRAGMENT.get(),count)));
     }
-    @SubscribeEvent public void onDeath(LivingDeathEvent event){if(event.getEntity() instanceof Villager v&&v.level instanceof ServerLevel sl){ResidenceData data=ResidenceData.get(sl);if(data.owner(v.getUUID())!=null){String name=data.residentName(v.getUUID());broadcastResidentNotice(sl,v,data,RESIDENT_DEATH_NOTICE,describeResidentDeath(name,event.getSource()));}if(v.getPersistentData().contains(EMERALD_TRANSFER))finishEmeraldTransfer(sl,v,v.getPersistentData().getCompound(EMERALD_TRANSFER),true);data.unlink(sl,v.getUUID());}}
+    @SubscribeEvent public void onDeath(LivingDeathEvent event){
+        if(!(event.getEntity() instanceof Villager villager)||!(villager.level instanceof ServerLevel level))return;
+        var source=event.getSource();
+        if(br.com.kraftcity.employment.WorkerConversion.mayInfect(villager,source)){
+            br.com.kraftcity.employment.WorkerConversion.deferDeath(villager,level,()->finishVillagerDeath(level,villager,source));
+        }else finishVillagerDeath(level,villager,source);
+    }
+
+    private void finishVillagerDeath(ServerLevel level,Villager villager,DamageSource source){
+        var id=villager.getUUID();
+        var data=ResidenceData.get(level);
+        if(data.owner(id)!=null)broadcastResidentNotice(level,villager,data,RESIDENT_DEATH_NOTICE,
+            describeResidentDeath(data.residentName(id),source));
+        if(villager.getPersistentData().contains(EMERALD_TRANSFER))
+            finishEmeraldTransfer(level,villager,villager.getPersistentData().getCompound(EMERALD_TRANSFER),true);
+        data.unlink(level,id);
+    }
 }
