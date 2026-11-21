@@ -49,6 +49,9 @@ public final class EmploymentVisualCheck {
         int left=(320-WorkMenu.FARM_WIDTH)/2,top=(240-WorkMenu.FARM_HEIGHT)/2;
         for(var slot:menu.slots)check(left+slot.x>=0&&left+slot.x+16<=320&&top+slot.y>=0&&top+slot.y+16<=240,
             "Farmer slot outside compact GUI");
+        int spacing=WorkMenu.farmAuxX(2)-WorkMenu.farmAuxX(1);
+        check(spacing>(mc.font.width("Farinha de Osso")+mc.font.width("Balde de Água"))/2+3,
+            "Farmer auxiliary labels overlap");
         check(button(screen,"Demitir")!=null&&button(screen,"Limites")!=null,"Controls missing in compact GUI");
         screen.init(mc,mc.getWindow().getGuiScaledWidth(),mc.getWindow().getGuiScaledHeight());
     }

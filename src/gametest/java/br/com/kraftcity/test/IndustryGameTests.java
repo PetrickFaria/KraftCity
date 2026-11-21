@@ -918,10 +918,24 @@ public final class IndustryGameTests {
     }
 
     @GameTest(template="empty",timeoutTicks=850,batch="farmer_long_home_return")
-    public static void farmer_discards_and_walks_to_linked_home_a_hundred_blocks_away(GameTestHelper h){
+    public static void farmer_discards_and_walks_twenty_blocks_home(GameTestHelper h){verifyLongHomeReturn(h,20,32);}
+
+    @GameTest(template="empty",timeoutTicks=850,batch="farmer_long_home_return")
+    public static void farmer_discards_and_walks_forty_five_blocks_home(GameTestHelper h){verifyLongHomeReturn(h,45,40);}
+
+    @GameTest(template="empty",timeoutTicks=850,batch="farmer_long_home_return")
+    public static void farmer_discards_and_walks_sixty_four_blocks_home(GameTestHelper h){verifyLongHomeReturn(h,64,48);}
+
+    @GameTest(template="empty",timeoutTicks=850,batch="farmer_long_home_return")
+    public static void farmer_discards_and_walks_ninety_blocks_home(GameTestHelper h){verifyLongHomeReturn(h,90,56);}
+
+    @GameTest(template="empty",timeoutTicks=850,batch="farmer_long_home_return")
+    public static void farmer_discards_and_walks_to_linked_home_a_hundred_blocks_away(GameTestHelper h){verifyLongHomeReturn(h,100,64);}
+
+    private static void verifyLongHomeReturn(GameTestHelper h,int distance,int height){
         var level=h.getLevel();
-        var post=h.absolutePos(new BlockPos(8,2,8));
-        var home=post.west(100);
+        var post=h.absolutePos(new BlockPos(8,2,8)).above(height);
+        var home=post.west(distance);
         for(var pos:BlockPos.betweenClosed(home.offset(-4,0,-4),post.offset(3,0,4))){
             level.setBlockAndUpdate(pos,Blocks.SEA_LANTERN.defaultBlockState());
             for(int y=1;y<=3;y++)level.setBlockAndUpdate(pos.above(y),Blocks.AIR.defaultBlockState());
@@ -931,7 +945,10 @@ public final class IndustryGameTests {
         var bed=placeBed(level,home.east(2).above());
         level.setBlockAndUpdate(post,WorkModule.INDUSTRIAL.get().defaultBlockState());
         var station=((WorkBlockEntity)level.getBlockEntity(post)).station();
-        var worker=h.spawn(EntityType.VILLAGER,new BlockPos(8,3,8));
+        var worker=EntityType.VILLAGER.create(level);
+        var start=Vec3.atBottomCenterOf(post.above());
+        worker.setPos(start.x,start.y,start.z);
+        level.addFreshEntity(worker);
         worker.setAge(0);
         check(ResidenceData.get(level).link(level,home,worker).equals("ok"),"Long-range home link failed");
         var employer=FakePlayerFactory.get(level,new GameProfile(UUID.randomUUID(),"LongFarmRoute"));
@@ -950,7 +967,9 @@ public final class IndustryGameTests {
                 if(!worker.isSleeping()&&current.distanceToSqr(previous[0])>300
                     &&Math.abs(current.x-previous[0].x)>30)check(false,"Worker skipped the long path");
                 if(current.distanceToSqr(previous[0])>1)previous[0]=current;
-                check(worker.getSleepingPos().filter(bed::equals).isPresent(),"Long walk still in progress at "+worker.position());
+                check(worker.getSleepingPos().filter(bed::equals).isPresent(),"Long walk still in progress at "+worker.position()+" bed="+bed+" state="+level.getBlockState(bed)
+                    +" claim="+ResidenceData.get(level).bedClaim(worker.getUUID())+" target="+worker.getNavigation().getTargetPos()
+                    +" done="+worker.getNavigation().isDone()+" homeSize="+ResidenceData.get(level).owner(worker.getUUID()).size);
             }).thenExecute(()->check(station.getItem(0).isEmpty()&&ResidenceData.get(level).owner(worker.getUUID()).pos.equals(home),
                 "Long return altered the link or inventory")).thenSucceed();
     }

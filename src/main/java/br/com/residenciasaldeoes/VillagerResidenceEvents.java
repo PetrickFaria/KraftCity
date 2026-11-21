@@ -1169,6 +1169,11 @@ public class VillagerResidenceEvents {
         }
 
         if(inside){
+            if(workerRest&&entityData.getBoolean(RETURN_ACTIVE)){
+                villager.getNavigation().stop();
+                villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                villager.getBrain().eraseMemory(MemoryModuleType.PATH);
+            }
             clearHomeReturn(entityData);
             if(weather&&!night){
                 if(employed)shelterDuringStorm(level,villager,home);

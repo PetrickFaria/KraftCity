@@ -13,7 +13,7 @@ public final class WorkMenu extends AbstractContainerMenu {
     public static final int PAYMENT_LIMIT=15;
     public static final int FARM_WIDTH=306, FARM_HEIGHT=235, FARM_GRID_X=73, FARM_PLAYER_Y=157;
     public static final int FARM_AUX_Y=41, FARM_STOCK_Y=69;
-    public static int farmAuxX(int slot){return 16+slot*76;}
+    public static int farmAuxX(int slot){return 14+slot*84;}
     public final boolean farmer;
     private final int ownSlots;
     public final BlockPos pos;

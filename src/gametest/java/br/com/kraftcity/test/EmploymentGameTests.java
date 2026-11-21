@@ -257,7 +257,9 @@ public final class EmploymentGameTests {
         check(workerMenu.slots.get(0).getItem().getCount()==7,"Worker menu did not see block mutation");
         check(blockMenu.slots.size()==66&&blockMenu.slots.stream().noneMatch(slot->slot.container==f.station
             &&slot.getContainerSlot()==EmploymentData.PAYMENT),"Farmer exposed hidden payment");
-        for(int i=0;i<4;i++)check(blockMenu.getSlot(27+i).getContainerSlot()==27+i
+        int[] inputs={EmploymentData.TOOL,EmploymentData.INPUT_A,EmploymentData.EQUIPMENT};
+        for(int i=0;i<inputs.length;i++)check(blockMenu.getSlot(27+i).getContainerSlot()==inputs[i]
+            &&blockMenu.getSlot(27+i).x==WorkMenu.farmAuxX(i)
             &&blockMenu.getSlot(27+i).y==WorkMenu.FARM_AUX_Y,"Auxiliary slots moved logically or misaligned");
         var reconnected=new WorkMenu(43,f.player.getInventory(),f.station,false,null);
         check(reconnected.slots.get(0).getItem().getCount()==7,"Reconnect lost block items");h.succeed();
@@ -283,7 +285,9 @@ public final class EmploymentGameTests {
         menu.quickMoveStack(f.player,0);
         check(f.station.getItem(31).getCount()==25,"Stale hiring menu manipulated hired station");
         var hired=new WorkMenu(31,f.player.getInventory(),f.station,false,null);
-        hired.quickMoveStack(f.player,31);
+        int stockSlots=EmploymentData.COMMON+3;
+        check(hired.getSlot(stockSlots).getContainerSlot()==9,"Unexpected player inventory position");
+        hired.quickMoveStack(f.player,stockSlots);
         check(f.station.getItem(31).getCount()==25&&f.station.countItem(Items.EMERALD)==74,"Hidden balance used by quick move");
         h.succeed();
     }
