@@ -82,7 +82,10 @@ public final class MilitaryVisualCheck {
             click(mc,"Limites");
             check(br.com.kraftcity.military.client.MilitaryPreview.enabled(POST),"Military overlay did not enable");
         }
-        if(t==83)capture(mc,"visual-military-limits.png");
+        if(t==83){
+            check(br.com.kraftcity.military.client.MilitaryPreview.enabled(POST),"Active staffed post preview was discarded");
+            capture(mc,"visual-military-limits.png");
+        }
         if(t==84){
             click(mc,"Limites");
             check(!br.com.kraftcity.military.client.MilitaryPreview.enabled(POST),"Military overlay remained enabled");
@@ -98,13 +101,61 @@ public final class MilitaryVisualCheck {
         if(t==160)capture(mc,"visual-military-night.png");
         if(t==170)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var s=station(l);var v=(Villager)l.getEntity(worker);check(Military.mode(s)==Military.Mode.GUARD&&Military.shift(s)==Military.Shift.NIGHT,"Guard/night packets");v.setNoAi(false);v.setPos(POST.getX()+.5,POST.getY()+1,POST.getZ()+.5);});
         if(t==190){capture(mc,"visual-military-guard.png");mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var v=(Villager)l.getEntity(worker);check(v.distanceToSqr(Vec3.atBottomCenterOf(POST.above()))<.3&&v.getNavigation().isDone(),"Guard left post without target");});}
-        if(t==195)mc.player.closeContainer();
-        if(t==200)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();Military.select(station(l),EntityType.COW,true);var cow=EntityType.COW.create(l);cow.setNoAi(true);cow.setPos(POST.getX()+5.5,POST.getY(),POST.getZ()+.5);l.addFreshEntity(cow);enemy=cow.getUUID();});
+        if(t==174)mc.getSingleplayerServer().execute(()->{
+            var player=player(mc);
+            var level=player.getLevel();
+            var guard=(Villager)level.getEntity(worker);
+            check(guard.getMaxHealth()==14,"Integrated guard LV1");
+            var home=ResidenceData.get(level);
+            for(int actor=0;actor<3;actor++){
+                var villager=EntityType.VILLAGER.create(level);
+                villager.setAge(0);villager.setNoAi(true);
+                villager.setPos(HOME.getX()+.5,POST.getY(),HOME.getZ()+1.5);
+                level.addFreshEntity(villager);
+                check(home.link(level,HOME,villager).equals("ok"),"Integrated citizen link");
+                check(villager.getMaxHealth()==14,"Integrated citizen health");
+                if(actor==2)continue;
+                var profession=actor==0?Profession.SOLDIER:Profession.FARMER;
+                var post=POST.north(7+actor*3);
+                level.setBlock(post,WorkModule.generic(profession.sector).defaultBlockState(),3);
+                var station=((WorkBlockEntity)level.getBlockEntity(post)).station();
+                station.setItem(31,new ItemStack(Items.EMERALD,32));
+                var employer=net.minecraftforge.common.util.FakePlayerFactory.get(level,new com.mojang.authlib.GameProfile(UUID.randomUUID(),"MilitaryIntegration"));
+                employer.setPos(Vec3.atBottomCenterOf(post.above()));
+                villager.setPos(Vec3.atBottomCenterOf(post.above()));
+                check(Employment.hire(employer,station,villager.getUUID(),profession).equals("ok"),"Integrated hire "+profession);
+                WorkforceData.get(level).setProgress(villager.getUUID(),profession.id(),5,300000);
+                Military.residentHealth(level,villager);
+                check(villager.getMaxHealth()==(actor==0?30:14)&&villager.getHealth()==14,"Integrated LV5 HP");
+            }
+            var chest=POST.west(2).south(2);
+            level.setBlock(chest,Blocks.BARREL.defaultBlockState(),3);
+        });
+        if(t==195)click(mc,"Vincular baú");
+        if(t==199){
+            var chest=POST.west(2).south(2);
+            mc.gameMode.useItemOn(mc.player,InteractionHand.MAIN_HAND,
+                new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(chest),Direction.SOUTH,chest,false));
+        }
+        if(t==215)mc.getSingleplayerServer().execute(()->{
+            var l=player(mc).getLevel();var s=station(l);
+            check(POST.west(2).south(2).equals(br.com.kraftcity.logistics.DiscardBinding.boundPosition(l,s)),"Integrated client chest link");
+            check(s.getItem(0).getCount()==16,"Integrated combat discarded ammo before safety");
+        });
+        if(t==200)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();
+            var creeper=EntityType.CREEPER.create(l);creeper.setNoAi(true);creeper.setPos(Vec3.atBottomCenterOf(POST.west(3)));l.addFreshEntity(creeper);
+            var guard=(Villager)l.getEntity(worker);var station=station(l);
+            check(!Military.authorized(l,station,guard,creeper)&&Military.selected(station,EntityType.ZOMBIE),"Integrated hostile policy");creeper.discard();
+            Military.select(station(l),EntityType.COW,true);var cow=EntityType.COW.create(l);cow.setNoAi(true);cow.setPos(POST.getX()+5.5,POST.getY(),POST.getZ()+.5);l.addFreshEntity(cow);enemy=cow.getUUID();});
         if(t==230)capture(mc,"visual-military-attack.png");
         if(t>210&&t%10==0&&!won)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var cow=l.getEntity(enemy);if(cow==null||!cow.isAlive()){var s=station(l);check(s.equipment.getItem(0).getDamageValue()>0&&WorkforceData.get(l).progress(worker,Profession.SOLDIER.id()).xp()>0,"No real military hit/XP");Military.select(s,EntityType.COW,false);won=true;System.out.println("MILITARY_GRAPHICAL_COMBAT_AND_XP_PASSED");}});
         if(won&&wonAt<0)wonAt=t;
         if(wonAt>=0){int elapsed=t-wonAt;
-            if(elapsed==70)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var s=station(l);var v=(Villager)l.getEntity(worker);check(v.distanceToSqr(Vec3.atBottomCenterOf(POST.above()))<.4,"Guard did not physically return");Military.select(s,EntityType.COW,false);s.military.putString("mode","FREE");System.out.println("MILITARY_GUARD_RETURN_PASSED");});
+            if(elapsed==90)mc.getSingleplayerServer().execute(()->{
+                var l=player(mc).getLevel();var s=station(l);var v=(Villager)l.getEntity(worker);
+                var chest=(net.minecraft.world.level.block.entity.BarrelBlockEntity)l.getBlockEntity(POST.west(2).south(2));
+                check(chest.countItem(Items.ARROW)==16,"Integrated guard did not unload after battle");
+                check(v.distanceToSqr(Vec3.atBottomCenterOf(POST.above()))<.4,"Guard did not physically return");Military.select(s,EntityType.COW,false);s.military.putString("mode","FREE");System.out.println("MILITARY_INTEGRATED_DISCARD_AND_HEALTH_PASSED");System.out.println("MILITARY_GUARD_RETURN_PASSED");});
             if(elapsed==160)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var v=(Villager)l.getEntity(worker);check(Military.insideArea(station(l),v.position()),"Patrol left the military area");var s=station(l);s.military.putString("mode","FOLLOW");s.military.remove("orderedTarget");var cow=EntityType.COW.create(l);cow.setNoAi(true);cow.setPos(v.getX()+3,v.getY(),v.getZ());l.addFreshEntity(cow);enemy=cow.getUUID();Military.select(s,EntityType.COW,false);});
             if(elapsed==180)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var s=station(l);check(!s.military.hasUUID("target"),"Follow attacked unprovoked");var cow=(LivingEntity)l.getEntity(enemy);cow.hurt(net.minecraft.world.damagesource.DamageSource.playerAttack(player(mc)),1);check(s.military.hasUUID("orderedTarget"),"Player hit did not authorize follow");Military.select(s,EntityType.COW,false);s.military.putString("mode","GUARD");cow.discard();var z=Military.zombify(l,(Villager)l.getEntity(worker));check(z!=null&&z.getUUID().equals(worker),"Zombie transformation");z.setNoAi(true);player(mc).teleportTo(l,z.getX()+.5,z.getY(),z.getZ()+4,180,15);System.out.println("MILITARY_FREE_FOLLOW_AND_TRANSFORM_PASSED");});
             if(elapsed==200)capture(mc,"visual-military-zombie.png");
@@ -187,5 +238,9 @@ public final class MilitaryVisualCheck {
             &&br.com.kraftcity.employment.client.WorkerPose.soldier(villager)).size()==1;
     }
 
-    public static void verifyRestore(ServerLevel l){var s=station(l);check(s.active&&s.worker!=null&&s.profession==Profession.SOLDIER&&s.getItem(31).isEmpty()&&s.military.getBoolean("visual_passed"),"Military saved contract");check(l.getEntity(s.worker) instanceof Villager&&ResidenceData.get(l).owner(s.worker)!=null,"Military saved identity/home");check(s.equipment.getItem(0).is(Items.IRON_SWORD)&&s.equipment.getItem(0).getDamageValue()==s.military.getInt("visual_wear")&&s.equipment.getItem(1).is(Items.SHIELD)&&s.getItem(0).getCount()==16,"Military gear/inventory save");check(WorkforceData.get(l).progress(s.worker,Profession.SOLDIER.id()).xp()==s.military.getLong("visual_xp")&&Military.mode(s)==Military.Mode.GUARD&&Military.shift(s)==Military.Shift.NIGHT&&!Military.selected(s,EntityType.CREEPER),"Military progression/mode/shift save");System.out.println("MILITARY_WORLD_RESTART_PASSED");}
+    public static void verifyRestore(ServerLevel l){var s=station(l);check(s.active&&s.worker!=null&&s.profession==Profession.SOLDIER&&s.getItem(31).isEmpty()&&s.military.getBoolean("visual_passed"),"Military saved contract");check(l.getEntity(s.worker) instanceof Villager&&ResidenceData.get(l).owner(s.worker)!=null,"Military saved identity/home");check(s.equipment.getItem(0).is(Items.IRON_SWORD)&&s.equipment.getItem(0).getDamageValue()==s.military.getInt("visual_wear")&&s.equipment.getItem(1).is(Items.SHIELD)&&s.getItem(0).isEmpty(),"Military gear/inventory save");check(WorkforceData.get(l).progress(s.worker,Profession.SOLDIER.id()).xp()==s.military.getLong("visual_xp")&&Military.mode(s)==Military.Mode.GUARD&&Military.shift(s)==Military.Shift.NIGHT&&!Military.selected(s,EntityType.CREEPER),"Military progression/mode/shift save");var chestPos=POST.west(2).south(2);
+        check(chestPos.equals(br.com.kraftcity.logistics.DiscardBinding.boundPosition(l,s))
+            &&l.getBlockEntity(chestPos) instanceof net.minecraft.world.level.block.entity.BarrelBlockEntity barrel
+            &&barrel.countItem(Items.ARROW)==16,"Military linked barrel or stock lost");
+        System.out.println("MILITARY_WORLD_RESTART_PASSED");}
 }

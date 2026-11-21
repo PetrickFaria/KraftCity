@@ -1,6 +1,7 @@
 package br.com.kraftcity.military.client;
 
 import br.com.kraftcity.military.Military;
+import br.com.kraftcity.employment.Profession;
 import br.com.kraftcity.employment.WorkModule;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import java.util.HashSet;
@@ -44,7 +45,11 @@ public final class MilitaryPreview {
             ||br.com.kraftcity.industry.client.WorkPreview.isOculusShadowPass())return;
         updateWorld();
         if(level==null||POSTS.isEmpty())return;
-        POSTS.removeIf(pos->level.hasChunkAt(pos)&&!level.getBlockState(pos).is(WorkModule.MILITARY.get()));
+        POSTS.removeIf(pos->{
+            if(!level.hasChunkAt(pos))return false;
+            var state=level.getBlockState(pos);
+            return !state.is(WorkModule.MILITARY.get())&&!state.is(WorkModule.PROFESSIONAL.get(Profession.SOLDIER).get());
+        });
         if(POSTS.isEmpty())return;
         var pose=event.getPoseStack();
         var camera=event.getCamera().getPosition();
