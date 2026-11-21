@@ -1151,7 +1151,8 @@ public class VillagerResidenceEvents {
         if(villager.getPersistentData().contains(NIGHT_DOOR_TASK)){tickNightDoorClosure(level,villager);return;}
         if(!farmerNight&&br.com.kraftcity.industry.FarmerLogistics.beforeHome(level,villager))return;
         if(workerRest&&br.com.kraftcity.industry.FarmerLogistics.leaveWater(level,villager))return;
-        boolean employed=br.com.kraftcity.employment.Employment.active(villager);
+        var station=br.com.kraftcity.employment.EmploymentData.get(level).assigned(villager.getUUID());
+        boolean employed=station!=null;
         long time=Math.floorMod(level.getDayTime(),DAY_LENGTH);
         boolean night=time>=NIGHT_START&&time<NIGHT_END;
         if(employed&&!night&&villager.isSleeping()){
@@ -1232,7 +1233,9 @@ public class VillagerResidenceEvents {
             }
             clearHomeReturn(entityData);
             if(weather&&!night){
-                if(employed)shelterDuringStorm(level,villager,home);
+                if(station!=null&&station.profession==br.com.kraftcity.employment.Profession.FARMER)
+                    circulateDuringStorm(level,villager,home);
+                else if(employed)shelterDuringStorm(level,villager,home);
                 else keepResidentInsideDuringRain(level,data,villager,home,true,true);
                 return;
             }
@@ -1614,6 +1617,11 @@ public class VillagerResidenceEvents {
         return findRandomReachableInteriorSpot(level,villager,home,false);
     }
     private BlockPos findRandomReachableInteriorSpot(ServerLevel level,Villager villager,ResidenceData.Home home,boolean avoidDoors){
+        var path=findRandomReachableInteriorPath(level,villager,home,avoidDoors,false);
+        return path==null?null:path.getTarget();
+    }
+    private Path findRandomReachableInteriorPath(ServerLevel level,Villager villager,ResidenceData.Home home,
+                                                 boolean avoidDoors,boolean covered){
         int r=home.size/2;
         List<BlockPos> candidates=new ArrayList<>();
         for(int y=home.pos.getY()+1;y<home.pos.getY()+home.size+1;y++)
@@ -1621,6 +1629,7 @@ public class VillagerResidenceEvents {
                 for(int z=home.pos.getZ()-r;z<=home.pos.getZ()+r;z++){
                     BlockPos feet=new BlockPos(x,y,z);
                     if(!level.hasChunkAt(feet)||!level.hasChunkAt(feet.above())||!level.hasChunkAt(feet.below()))continue;
+                    if(covered&&level.canSeeSky(feet.above()))continue;
                     BlockState floor=level.getBlockState(feet.below()),at=level.getBlockState(feet),above=level.getBlockState(feet.above());
                     if(!floor.isFaceSturdy(level,feet.below(),Direction.UP)||!at.getCollisionShape(level,feet).isEmpty()||!above.getCollisionShape(level,feet.above()).isEmpty())continue;
                     if(!at.getFluidState().isEmpty()||!above.getFluidState().isEmpty()||at.isBurning(level,feet)||above.isBurning(level,feet.above()))continue;
@@ -1633,7 +1642,7 @@ public class VillagerResidenceEvents {
             if(candidate.distSqr(villager.blockPosition())<4.0D)continue;
             Path path=villager.getNavigation().createPath(candidate,0);
             if(path==null||!path.canReach()||!pathStaysInside(path,home)||(avoidDoors&&!pathAvoidsWoodenDoors(level,path)))continue;
-            return candidate;
+            return path;
         }
         return null;
     }
@@ -1741,6 +1750,23 @@ public class VillagerResidenceEvents {
         }
         return null;
     }
+    private void circulateDuringStorm(ServerLevel level,Villager farmer,ResidenceData.Home home){
+        if(farmer.isNoAi()||farmer.isTrading()||farmer.isPassenger())return;
+        var brain=farmer.getBrain();
+        brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+        brain.eraseMemory(MemoryModuleType.PATH);
+        var navigation=farmer.getNavigation();
+        var path=navigation.getPath();
+        if(path!=null&&!navigation.isDone()){
+            if(pathStaysInside(path,home))return;
+            navigation.stop();
+        }
+        if(farmer.tickCount%10!=0)return;
+        var route=findRandomReachableInteriorPath(level,farmer,home,false,true);
+        if(route==null)route=findRandomReachableInteriorPath(level,farmer,home,false,false);
+        if(route!=null)navigation.moveTo(route,.65D);
+    }
+
     public static void shelterDuringStorm(ServerLevel level,Villager villager,ResidenceData.Home home){
         if(!home.dimension.equals(level.dimension())||!level.hasChunkAt(home.pos))return;
         var brain=villager.getBrain();

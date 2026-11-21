@@ -1,6 +1,16 @@
 package br.com.kraftcity.test;
 
 import br.com.kraftcity.KraftCity;
+import br.com.kraftcity.builder.client.BuilderArmsLayer;
+import br.com.residenciasaldeoes.client.ResidentAppearanceModels;
+import br.com.residenciasaldeoes.data.ResidentModelType;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.platform.Lighting;
+import com.mojang.blaze3d.systems.RenderSystem;
+import java.util.ArrayList;
+import java.util.List;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.world.phys.Vec3;
 import br.com.kraftcity.industry.IndustrialTools;
 import br.com.kraftcity.employment.client.WorkerPose;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -26,6 +36,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 public final class ToolVisualCheck extends Screen {
+    private static final String[] CAPTURES={"materials","first-person","third-person","worker-hand","worker-animation",
+        "worker-back","worker-back-side","worker-back-running","worker-back-front"};
     private static final Item[] IRON={Items.IRON_SWORD,Items.IRON_AXE,Items.IRON_HOE};
     private static Item[] emerald(){
         return new Item[]{IndustrialTools.SWORD.get(),IndustrialTools.AXE.get(),IndustrialTools.HOE.get()};
@@ -72,7 +84,52 @@ public final class ToolVisualCheck extends Screen {
             mc.level.putNonPlayerEntity(-900-i,worker);
             screen.workers[i]=worker;
         }
+        screen.verifyMountedGeometry();
         mc.setScreen(screen);
+    }
+
+    private void verifyMountedGeometry(){
+        Villager worker=workers[0];
+        ModelPart origin=new ModelPart(List.of(),Map.of());
+        for(Item item:new Item[]{Items.IRON_HOE,IndustrialTools.HOE.get(),Items.IRON_AXE,Items.IRON_SWORD,
+            Items.SHEARS,IndustrialTools.SHEARS.get(3).get(),Items.FISHING_ROD,IndustrialTools.RODS.get(3).get(),Items.IRON_PICKAXE,Items.BOW,Items.CROSSBOW,Items.TRIDENT}){
+            var stack=new ItemStack(item);
+            worker.setItemSlot(EquipmentSlot.MAINHAND,stack);
+            var held=new Geometry();
+            BuilderArmsLayer.renderTool(new PoseStack(),type->held,LightTexture.FULL_BRIGHT,worker,origin);
+            WorkerPose.receive(worker.getId(),worker.getUUID(),true,true,stack);
+            var inactive=new Geometry();
+            BuilderArmsLayer.renderBack(new PoseStack(),type->inactive,LightTexture.FULL_BRIGHT,worker,origin,3.5F);
+            check(inactive.vertices.isEmpty(),"Working tool rendered on the back");
+            worker.setItemSlot(EquipmentSlot.MAINHAND,ItemStack.EMPTY);
+            WorkerPose.receive(worker.getId(),worker.getUUID(),true,false,stack);
+            for(float rear:new float[]{2F,2.25F,3.5F}){
+                var stowed=new Geometry();
+                BuilderArmsLayer.renderBack(new PoseStack(),type->stowed,LightTexture.FULL_BRIGHT,worker,origin,rear);
+                check(!held.vertices.isEmpty()&&held.vertices.size()==stowed.vertices.size(),"Tool vertex count differs: "+item);
+                for(int i=0;i<held.vertices.size();i++){
+                    int next=i%4==3?i-3:i+1;
+                    var vertex=stowed.vertices.get(i);
+                    check(Math.abs(held.vertices.get(i).distanceToSqr(held.vertices.get(next))
+                        -vertex.distanceToSqr(stowed.vertices.get(next)))<1e-6,"Mounted tool scale differs: "+item);
+                    check(vertex.z>=rear/16D && vertex.z<(rear+2)/16D,"Mounted tool clips or floats: "+item);
+                }
+            }
+        }
+        System.out.println("WORKER_BACK_TOOL_GEOMETRY_PASSED");
+    }
+
+    private static final class Geometry implements VertexConsumer {
+        private final List<Vec3> vertices=new ArrayList<>();
+        @Override public VertexConsumer vertex(double x,double y,double z){vertices.add(new Vec3(x,y,z));return this;}
+        @Override public VertexConsumer color(int r,int g,int b,int a){return this;}
+        @Override public VertexConsumer uv(float u,float v){return this;}
+        @Override public VertexConsumer overlayCoords(int u,int v){return this;}
+        @Override public VertexConsumer uv2(int u,int v){return this;}
+        @Override public VertexConsumer normal(float x,float y,float z){return this;}
+        @Override public void endVertex(){}
+        @Override public void defaultColor(int r,int g,int b,int a){}
+        @Override public void unsetDefaultColor(){}
     }
 
     private static void verifyCastModel(Minecraft mc,Item rod,String material){
@@ -156,10 +213,15 @@ public final class ToolVisualCheck extends Screen {
             case 2->"Terceira pessoa";
             case 3->"Trabalhador com a ferramenta na mão";
             case 4->"Animação de trabalho";
-            default->"Ferramenta nas costas";
+            case 5->"Ferramentas nas costas";
+            case 6->"Vista lateral durante a caminhada";
+            case 7->"Vista traseira durante a corrida";
+            default->"Vista frontal";
         };
         drawCenteredString(pose,font,Component.literal(label),width/2,height/2-105,0xFFFFFF);
         var green=emerald();
+        Item[] stowed={IndustrialTools.HOE.get(),IndustrialTools.AXE.get(),IndustrialTools.SWORD.get(),
+            IndustrialTools.SHEARS.get(3).get(),IndustrialTools.RODS.get(3).get(),Items.IRON_PICKAXE};
         var buffers=minecraft.renderBuffers().bufferSource();
         for(int i=0;i<IRON.length;i++){
             int x=width/2-150+i*108,y=height/2;
@@ -169,9 +231,12 @@ public final class ToolVisualCheck extends Screen {
                 var view=phase==1?ItemTransforms.TransformType.FIRST_PERSON_RIGHT_HAND:ItemTransforms.TransformType.THIRD_PERSON_RIGHT_HAND;
                 renderTool(pose,ironStack,view,x,y,buffers);
                 renderTool(pose,emeraldStack,view,x+54,y,buffers);
-            }else{
+            }else if(phase<=5){
                 renderWorker(workers[i*2],ironStack,x,y+42);
                 renderWorker(workers[i*2+1],emeraldStack,x+54,y+42);
+            }else{
+                renderWorker(workers[i*2],new ItemStack(stowed[i*2]),x,y+42);
+                renderWorker(workers[i*2+1],new ItemStack(stowed[i*2+1]),x+54,y+42);
             }
         }
     }
@@ -189,20 +254,56 @@ public final class ToolVisualCheck extends Screen {
     }
 
     private void renderWorker(Villager worker,ItemStack item,int x,int y){
-        boolean held=phase!=5;
+        boolean held=phase<5;
+        ResidentAppearanceModels.set(worker.getUUID(),phase>=6&&worker.getId()%2!=0?ResidentModelType.STEVE:ResidentModelType.VILLAGER);
+        float stride=phase==6?.45F:phase==7?.95F:0;
+        worker.animationSpeed=worker.animationSpeedOld=stride;
+        worker.animationPosition=4F;
         worker.setItemSlot(EquipmentSlot.MAINHAND,held?item:ItemStack.EMPTY);
         WorkerPose.receive(worker.getId(),worker.getUUID(),true,held,held?ItemStack.EMPTY:item);
         worker.attackAnim=phase==4?.5F:0;
         worker.oAttackAnim=worker.attackAnim;
-        InventoryScreen.renderEntityInInventoryRaw(x,y,34,held?0.9F:8.5F,0F,worker);
+        if(held)InventoryScreen.renderEntityInInventoryRaw(x,y,34,.9F,0F,worker);
+        else renderMountedWorker(worker,x,y,switch(phase){case 6->270F;case 8->180F;default->12F;});
+    }
+
+    private void renderMountedWorker(Villager worker,int x,int y,float facing){
+        worker.setYRot(facing);
+        worker.yBodyRot=worker.yBodyRotO=facing;
+        worker.yHeadRot=worker.yHeadRotO=facing;
+        var view=RenderSystem.getModelViewStack();
+        view.pushPose();
+        view.translate(x,y,1050);
+        view.scale(1,1,-1);
+        RenderSystem.applyModelViewMatrix();
+        var pose=new PoseStack();
+        pose.translate(0,0,1000);
+        pose.scale(34,34,34);
+        pose.mulPose(Vector3f.ZP.rotationDegrees(180));
+        var dispatcher=minecraft.getEntityRenderDispatcher();
+        var buffers=minecraft.renderBuffers().bufferSource();
+        Lighting.setupForEntityInInventory();
+        dispatcher.setRenderShadow(false);
+        try{
+            dispatcher.render(worker,0,0,0,0,1,pose,buffers,LightTexture.FULL_BRIGHT);
+            buffers.endBatch();
+        }finally{
+            dispatcher.setRenderShadow(true);
+            view.popPose();
+            RenderSystem.applyModelViewMatrix();
+            Lighting.setupFor3DItems();
+        }
     }
 
     public static void captureRenderedPhase(Minecraft mc){
         if(!(mc.screen instanceof ToolVisualCheck screen)||screen.renderedPhase!=screen.phase)return;
-        String name=new String[]{"materials","first-person","third-person","worker-hand","worker-animation","worker-back"}[screen.phase];
+        String name=CAPTURES[screen.phase];
         Screenshot.grab(new File("../build"),"visual-tool-"+name+".png",mc.getMainRenderTarget(),message->{});
-        if(++screen.phase>5){
-            for(var worker:screen.workers)mc.level.removeEntity(worker.getId(),Entity.RemovalReason.DISCARDED);
+        if(++screen.phase==CAPTURES.length){
+            for(var worker:screen.workers){
+                ResidentAppearanceModels.set(worker.getUUID(),ResidentModelType.VILLAGER);
+                mc.level.removeEntity(worker.getId(),Entity.RemovalReason.DISCARDED);
+            }
             mc.setScreen(null);
         }
     }

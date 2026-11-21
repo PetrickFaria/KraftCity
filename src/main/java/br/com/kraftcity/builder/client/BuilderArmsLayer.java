@@ -17,8 +17,10 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.HoeItem;
+import net.minecraft.world.item.Items;
 
 public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<Villager>> {
+    private static final ItemTransforms.TransformType HAND=ItemTransforms.TransformType.THIRD_PERSON_RIGHT_HAND;
     private final ModelPart root;
     private static boolean reportedHoe,reportedBack;
 
@@ -35,7 +37,7 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
     public void render(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,float stride,float amount,float partial,float age,float yaw,float pitch){
         if(worker.isInvisible())return;
         var stowed=WorkerPose.stowed(worker);
-        if(!stowed.isEmpty()&&!worker.isSleeping())renderBack(pose,buffers,light,worker,getParentModel().root().getChild("body"));
+        if(!stowed.isEmpty()&&!worker.isSleeping())renderBack(pose,buffers,light,worker,getParentModel().root().getChild("body"),3.5F);
         boolean building=BuilderClient.working(worker);
         if(!building&&!WorkerPose.active(worker))return;
         float action=WorkerPose.action(worker,age);
@@ -53,16 +55,22 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
         if(WorkerPose.active(worker))renderTool(pose,buffers,light,worker,right);
     }
 
-    public static void renderBack(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,ModelPart body){
+    public static void renderBack(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,ModelPart body,float rearPixels){
         var item=WorkerPose.stowed(worker);
         if(item.isEmpty()||worker.isSleeping()||worker.isInvisible())return;
+        var renderer=Minecraft.getInstance().getItemRenderer();
+        var model=renderer.getModel(item,worker.level,worker,worker.getId()+HAND.ordinal());
+        var scale=model.getTransforms().getTransform(HAND).scale;
         pose.pushPose();
         body.translateAndRotate(pose);
-        pose.translate(0,.43,.27);
-        pose.mulPose(Vector3f.YP.rotationDegrees(180));
+        // Generated item models are one texture pixel thick around their centered Z plane.
+        // Keep the hand's display scale, but lay the sprite flat against the back.
+        pose.translate(0,.43,(rearPixels+.25+.5*Math.abs(scale.z()))/16);
         pose.mulPose(Vector3f.ZP.rotationDegrees(32));
-        Minecraft.getInstance().getEntityRenderDispatcher().getItemInHandRenderer().renderItem(worker,item,
-            ItemTransforms.TransformType.THIRD_PERSON_RIGHT_HAND,false,pose,buffers,light);
+        pose.scale(scale.x(),scale.y(),scale.z());
+        // The trident's custom entity mesh starts at a pole pivot instead of an item sprite center.
+        if(item.is(Items.TRIDENT))pose.translate(.5,.5+23.0/32,.5);
+        renderer.render(item,ItemTransforms.TransformType.NONE,false,pose,buffers,light,OverlayTexture.NO_OVERLAY,model);
         pose.popPose();
         if(Boolean.getBoolean("residencias.visualCheck")&&!reportedBack){
             reportedBack=true;
@@ -85,7 +93,7 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
             }
         }
         Minecraft.getInstance().getEntityRenderDispatcher().getItemInHandRenderer().renderItem(worker,item,
-            ItemTransforms.TransformType.THIRD_PERSON_RIGHT_HAND,false,pose,buffers,light);
+            HAND,false,pose,buffers,light);
         pose.popPose();
     }
 }
