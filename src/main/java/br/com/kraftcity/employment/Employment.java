@@ -226,6 +226,8 @@ public final class Employment {
             old.profession().ifPresent(p->{var progress=workforce.progress(worker,p);workforce.setProgress(worker,p,old.level(),progress.xp());});
             workforce.put(new WorkerRecord(worker,old.profession(),old.level(),Optional.empty(),old.area(),old.inventory()));
         }
+        for(ServerLevel world:level.getServer().getAllLevels())if(world.getEntity(worker) instanceof Villager v)
+            br.com.kraftcity.military.Military.residentHealth(world,v);
     }
     public static boolean valid(ServerLevel level,UUID worker){
         var station=EmploymentData.get(level).assigned(worker);if(station==null)return false;
@@ -331,6 +333,6 @@ public final class Employment {
         villager.releasePoi(MemoryModuleType.JOB_SITE);villager.releasePoi(MemoryModuleType.POTENTIAL_JOB_SITE);
         villager.getBrain().eraseMemory(MemoryModuleType.JOB_SITE);villager.getBrain().eraseMemory(MemoryModuleType.POTENTIAL_JOB_SITE);
         if(profession==Profession.BUILDER)workforce.setProgress(worker,profession.id(),br.com.kraftcity.builder.BuilderWork.level(progress.xp()),progress.xp());
-        payment.shrink(price);s.setChanged();if(profession==Profession.SOLDIER)br.com.kraftcity.military.Military.trained(level,s,villager,player);return "ok";
+        payment.shrink(price);s.setChanged();if(profession==Profession.SOLDIER)br.com.kraftcity.military.Military.trained(level,s,villager,player);else br.com.kraftcity.military.Military.residentHealth(level,villager);return "ok";
     }
 }

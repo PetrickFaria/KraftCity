@@ -1,6 +1,7 @@
 package br.com.kraftcity.military.client;
 
 import br.com.kraftcity.military.*;
+import br.com.kraftcity.employment.client.WorkerTextures;
 import com.mojang.blaze3d.vertex.PoseStack;
 import java.util.*;
 import net.minecraft.client.Minecraft;
@@ -34,16 +35,25 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
         search=addRenderableWidget(new EditBox(font,leftPos+146,topPos+46,194,18,Component.literal("Buscar criatura")));search.setValue(query);search.setResponder(v->{query=v;page=0;buttonsForRows();});
         buttonsForRows();return;
     }
-        boolean oldItems=java.util.stream.IntStream.range(9,31).anyMatch(i->!menu.inventory.getItem(i).isEmpty());
-        if(oldItems||menu.legacyStorage)button(180,128,162,menu.legacyStorage?"Voltar ao armazenamento":"Itens da versão anterior",
+        boolean oldItems=java.util.stream.IntStream.range(9,32).anyMatch(i->!menu.inventory.getItem(i).isEmpty());
+        if(oldItems||menu.legacyStorage)button(180,82,162,menu.legacyStorage?"Voltar ao armazenamento":"Itens da versão anterior",
             ()->{menu.legacyStorage=!menu.legacyStorage;buttons();});
         var state=menu.state;
         if(state!=null&&state.employed())addRenderableWidget(new Button(leftPos+276,topPos+2,66,14,
             Component.translatable("gui.kraftcity.dismiss"),b->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(
                 new br.com.kraftcity.employment.WorkNetwork.Dismiss(menu.containerId,menu.stationId,state.epoch()))));
-        String[] modes={"Patrulhar","Guarnecer","Seguir"};for(int i=0;i<3;i++){final int c=i;button(8+82*i,104,78,(menu.state!=null&&menu.state.mode()==i?"> ":"")+modes[i],()->send(0,Military.Mode.values()[c].name()));}
-        button(258,104,84,menu.state!=null&&menu.state.night()?"Noturno":"Diurno",()->send(1,menu.state!=null&&menu.state.night()?"DAY":"NIGHT"));
-        button(8,128,164,"Blacklist de criaturas",()->{blacklist=true;page=0;buttons();send(3,"");});
+        var modes=new Military.Mode[]{Military.Mode.FOLLOW,Military.Mode.FREE,Military.Mode.GUARD};
+        String[] names={"Seguir","Patrulhar","Guarnecer"};
+        for(int i=0;i<modes.length;i++){
+            var mode=modes[i];
+            button(8+82*i,104,78,(state!=null&&state.mode()==mode.ordinal()?"> ":"")+names[i],()->send(0,mode.name()));
+        }
+        button(258,104,84,"Limites",()->MilitaryPreview.toggle(menu.pos));
+        button(8,128,76,state!=null&&state.night()?"> Noturno":"Noturno",()->send(1,"NIGHT"));
+        button(90,128,76,state!=null&&!state.night()?"> Diurno":"Diurno",()->send(1,"DAY"));
+        button(258,128,84,"Blacklist",()->{blacklist=true;page=0;buttons();send(3,"");});
+        if(state!=null&&state.employed())
+            button(8,151,84,state.discard()!=null?"Desvincular baú":"Vincular baú",()->send(state.discard()!=null?6:5,""));
         if(!menu.legacyStorage&&menu.state!=null&&!menu.state.employed())button(180,28,162,"Treinar residente",()->send(4,""));
     }
     private final List<Button> rows=new ArrayList<>();
@@ -51,20 +61,45 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
         for(int i=0;i<8&&page*8+i<list.size();i++){var e=list.get(page*8+i);String label=(e.selected()?"[✓] ":"[ ] ")+font.plainSubstrByWidth(name(e)+" — "+e.id(),310);rows.add(button(8,74+23*i,334,label,()->send(2,e.id())));}
         rows.add(button(8,264,66,"<",()->{page--;buttonsForRows();}));rows.add(button(80,264,66,">",()->{page++;buttonsForRows();}));rows.add(button(212,264,130,"Voltar ao soldado",()->{blacklist=false;buttons();}));
     }
-    @Override protected void renderBg(PoseStack pose,float partial,int x,int y){fill(pose,leftPos,topPos,leftPos+350,topPos+283,0xFF252F29);fill(pose,leftPos+3,topPos+3,leftPos+347,topPos+280,0xFF435847);if(!blacklist)for(var slot:menu.slots){if(!slot.isActive())continue;fill(pose,leftPos+slot.x-1,topPos+slot.y-1,leftPos+slot.x+17,topPos+slot.y+17,0xFF202820);fill(pose,leftPos+slot.x,topPos+slot.y,leftPos+slot.x+16,topPos+slot.y+16,0xFFAAB79C);}}
-    @Override protected void renderLabels(PoseStack pose,int x,int y){drawCenteredString(pose,font,blacklist?"Blacklist — inimigos adicionais":menu.state!=null&&menu.state.employed()?font.plainSubstrByWidth("Soldado · "+menu.state.workerName(),192):"Soldado",175,6,0xFFFFFF);if(blacklist)return;
-        if(menu.legacyStorage)font.draw(pose,"Recuperar itens da versão anterior",94,22,0xFFFFFF);
+    @Override protected void renderBg(PoseStack pose,float partial,int x,int y){
+        fill(pose,leftPos,topPos,leftPos+350,topPos+283,0xFF252F29);
+        fill(pose,leftPos+3,topPos+3,leftPos+347,topPos+280,0xFF435847);
+        if(blacklist)return;
+        fill(pose,leftPos+4,topPos+4,leftPos+346,topPos+29,0xFF44372A);
+        int progress=menu.state!=null&&menu.state.employed()
+            ?menu.state.level()>=5?WorkerTextures.XP_WIDTH:(int)(WorkerTextures.XP_WIDTH*(menu.state.xp()%75000)/75000):0;
+        WorkerTextures.drawExperience(pose,leftPos+(350-WorkerTextures.XP_WIDTH)/2,topPos+WorkerTextures.XP_Y,progress,true);
+        for(var slot:menu.slots){
+            if(!slot.isActive())continue;
+            fill(pose,leftPos+slot.x-1,topPos+slot.y-1,leftPos+slot.x+17,topPos+slot.y+17,0xFF202820);
+            fill(pose,leftPos+slot.x,topPos+slot.y,leftPos+slot.x+16,topPos+slot.y+16,0xFFAAB79C);
+        }
+    }
+    @Override protected void renderLabels(PoseStack pose,int x,int y){
+        var state=menu.state;
+        String title="Soldado";
+        if(blacklist)title="Blacklist — inimigos autorizados";
+        else if(state!=null&&state.employed()){
+            String suffix=" (Soldado) - Lv"+state.level();
+            var name=state.workerName();
+            int room=imageWidth-134-font.width(suffix);
+            if(font.width(name)>room)name=font.plainSubstrByWidth(name,Math.max(0,room-font.width("…"))).stripTrailing()+"…";
+            title=name+suffix;
+        }
+        drawCenteredString(pose,font,title,175,8,0xFFF6E8CC);
+        if(blacklist)return;
+        if(menu.legacyStorage)font.draw(pose,"Recuperar itens da versão anterior",94,30,0xFFFFFF);
         else{
-            font.draw(pose,"Equipamentos",8,38,0xFFFFFF);
+            font.draw(pose,"Equipamentos",8,42,0xFFFFFF);
+            if(state!=null&&state.discard()!=null)font.draw(pose,"Baú: "+state.discard().toShortString(),205,42,0xFFFFFF);
             font.draw(pose,"Armazenamento",94,153,0xFFFFFF);
             String[] labels={"Arma","Esc.","Cap.","Peito","Pern.","Botas"};
             for(int i=0;i<6;i++)font.draw(pose,labels[i],16+36*i,52,0xFFFFFF);
-            font.draw(pose,"Esmer.",267,52,0xFFFFFF);
         }
         var s=menu.state;
         if(s!=null){
-            font.draw(pose,"Vida: "+Math.round(s.hp())+"/"+Math.round(s.max())+"   Lv"+s.level()+"   XP: "+String.format(Locale.ROOT,"%.1f",s.xp()/1000.),8,88,0xFFFFFF);
-            if(!menu.legacyStorage)font.draw(pose,s.zombie()?"Soldado Zumbi: Fraqueza + Maçã Dourada":s.employed()?"Em serviço conforme o turno":"Sem soldado",8,22,0xFFFFDD88);
+            font.draw(pose,"Vida: "+Math.round(s.hp())+"/"+Math.round(s.max()),8,88,0xFFFFFF);
+            if(!menu.legacyStorage)font.draw(pose,s.zombie()?"Soldado Zumbi: Fraqueza + Maçã Dourada":s.employed()?"Em serviço conforme o turno":"Sem soldado",8,30,0xFFFFDD88);
         }
         font.draw(pose,playerInventoryTitle,94,190,0xFFFFFF);
     }

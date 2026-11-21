@@ -18,7 +18,7 @@ public final class WorkNetwork {
         static Hire decode(FriendlyByteBuf b){return new Hire(b.readVarInt(),b.readUUID(),b.readUUID(),b.readInt());}
         void handle(Supplier<NetworkEvent.Context> ctx){var p=ctx.get().getSender();
             if(p!=null&&p.containerMenu instanceof WorkMenu m&&m.containerId==menu&&m.stationId.equals(station)){
-                if(profession==-2)m.openHiring(p);else if(profession==-3)m.recoverBalance(p);else m.hire(p,worker,profession);
+                if(profession==-2)m.openHiring(p);else if(profession==-3)m.recoverBalance(p);else if(profession==-4)m.selectMilitaryCandidate(p,worker);else m.hire(p,worker,profession);
             }
             ctx.get().setPacketHandled(true);
         }

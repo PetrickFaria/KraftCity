@@ -203,6 +203,7 @@ public class ResidenceData extends SavedData {
         setResidentName(id,displayName);
         if(originalName==null)v.setCustomName(net.minecraft.network.chat.Component.literal(displayName));
         v.setCustomNameVisible(true);
+        br.com.kraftcity.military.Military.residentHealth(level,v);
         setDirty(); return "ok";
     }
     /** Reorders only this home's resident UUIDs. The final index is clamped to its current list. */
@@ -257,6 +258,7 @@ public class ResidenceData extends SavedData {
             if(entity!=null)restoreName(entity,legacyDefault);else pendingNameRestorations.put(id,legacyDefault);
         }
         unlink(id);
+        if(entity instanceof Villager villager)br.com.kraftcity.military.Military.residentHealth(level,villager);
     }
     public void unlink(UUID id) { net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(new br.com.kraftcity.api.ResidentUnlinkedEvent(id));releaseBed(id);residentBabyStates.remove(id);residentFragmentBalances.remove(id);residentFragmentsInTransit.remove(id);boolean hadSkin=residentSkins.remove(id)!=null;boolean hadOpacity=residentOpacities.remove(id)!=null;boolean hadModel=residentModels.remove(id)!=null;boolean hadAppearance=hadSkin||hadOpacity||hadModel;if(hadAppearance)br.com.residenciasaldeoes.network.ModNetwork.clearResidentAppearance(id);residentLinkedAtGameTime.remove(id);UUID identity=residentIdentityByVillager.remove(id);if(identity!=null)residentIdentityOwners.remove(identity);Home h=owner(id); if(h!=null){h.residents.remove(id);owners.remove(id);residentNames.remove(id);residentNameStates.remove(id);setDirty();} }
     /** Rebinds a captured resident when a capture mod recreates it with another UUID. */

@@ -26,6 +26,7 @@ public final class WorkMenu extends AbstractContainerMenu {
     public final Container inventory;
     public WorkNetwork.Snapshot snapshot;
     private String status="";
+    private int militaryPaymentLimit;
     private long lastSync=Long.MIN_VALUE;
     public WorkMenu(int id,Inventory inv,FriendlyByteBuf b){
         this(id,inv,b.readBlockPos(),b.readUUID(),b.readBoolean(),b.readEnum(Profession.Sector.class),b.readInt(),b.readBoolean()?b.readUUID():null,null);
@@ -48,10 +49,10 @@ public final class WorkMenu extends AbstractContainerMenu {
         }
         if(!farmer)addSlot(new Slot(inventory,EmploymentData.PAYMENT,hiring?187:274,hiring?158:101){
             @Override public boolean mayPlace(ItemStack stack){
-                return stack.is(Items.EMERALD)&&(!hiring||sector!=Profession.Sector.INDUSTRIAL
-                    ||getItem().getCount()<PAYMENT_LIMIT);
+                return stack.is(Items.EMERALD)&&getItem().getCount()<getMaxStackSize();
             }
-            @Override public int getMaxStackSize(){return hiring&&sector==Profession.Sector.INDUSTRIAL?PAYMENT_LIMIT:super.getMaxStackSize();}
+            @Override public int getMaxStackSize(){if(hiring&&sector==Profession.Sector.MILITARY)return militaryPaymentLimit;
+                return hiring&&sector==Profession.Sector.INDUSTRIAL?PAYMENT_LIMIT:super.getMaxStackSize();}
         });
         ownSlots=slots.size();
         int playerX=farmer?FARM_GRID_X:94;
@@ -68,20 +69,42 @@ public final class WorkMenu extends AbstractContainerMenu {
         if(viaWorker!=null)return viaWorker.equals(s.worker)&&Employment.valid(l,viaWorker)&&l.getEntity(viaWorker)!=null&&l.getEntity(viaWorker).distanceToSqr(p)<64;
         return p.distanceToSqr(pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5)<64;
     }
+    public void setMilitaryPaymentLimit(int limit){
+        if(hiring&&sector==Profession.Sector.MILITARY)militaryPaymentLimit=Math.max(0,limit);
+    }
+    public void selectMilitaryCandidate(ServerPlayer p,UUID worker){
+        if(!hiring||sector!=Profession.Sector.MILITARY||!stillValid(p))return;
+        boolean eligible=Employment.candidates(p.getLevel()).stream().anyMatch(v->v.getUUID().equals(worker));
+        int price=eligible?Employment.cost(p.getLevel(),sector,worker):0;
+        setMilitaryPaymentLimit(price);
+        var station=station();
+        var payment=station.getItem(EmploymentData.PAYMENT);
+        int excess=payment.getCount()-price;
+        if(eligible&&payment.is(Items.EMERALD)&&excess>0&&roomFor(p.getInventory(),payment,excess)){
+            var refund=station.removeItem(EmploymentData.PAYMENT,excess);
+            p.getInventory().add(refund);
+            if(!refund.isEmpty()){
+                var retained=station.getItem(EmploymentData.PAYMENT);
+                if(retained.isEmpty())station.setItem(EmploymentData.PAYMENT,refund);
+                else retained.grow(refund.getCount());
+            }
+            station.setChanged();
+        }
+    }
     public void hire(ServerPlayer p,UUID worker,int selected){
         if(!hiring||!stillValid(p)||selected<0||selected>=Profession.values().length)return;
         var job=Profession.values()[selected];
         var station=station();
         var payment=station.getItem(EmploymentData.PAYMENT);
         int price=Employment.cost(p.getLevel(),station.sector,worker);
-        if(job==Profession.FARMER&&price>=0&&payment.is(Items.EMERALD)&&payment.getCount()>price
+        if((job==Profession.FARMER||job==Profession.SOLDIER)&&price>=0&&payment.is(Items.EMERALD)&&payment.getCount()>price
             &&!roomFor(p.getInventory(),payment,payment.getCount()-price)){
             status="Libere espaço para receber o troco.";
             sync(p);
             return;
         }
         String result=Employment.hire(p,station,worker,job);
-        if(result.equals("ok")&&job==Profession.FARMER)returnBalance(p,station);
+        if(result.equals("ok")&&(job==Profession.FARMER||job==Profession.SOLDIER))returnBalance(p,station);
         status=switch(result){case "ok"->"Contratação concluída.";case "pending"->"Preço comercial pendente.";
             case "payment"->"Esmeraldas insuficientes.";case "ineligible"->"Morador indisponível.";default->"Seleção inválida.";};
         if(result.equals("ok")){var s=station();p.closeContainer();WorkBlock.open(p,s);}else sync(p);

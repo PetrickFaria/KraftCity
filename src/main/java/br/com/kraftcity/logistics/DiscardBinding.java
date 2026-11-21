@@ -35,7 +35,7 @@ public final class DiscardBinding {
     public static void begin(ServerPlayer player, EmploymentData.Station station) {
         var level = player.getLevel();
         if (!valid(level, station) || !level.mayInteract(player, station.pos) || !realPlayer(player)) {
-            message(player, "Você não tem acesso para vincular um recipiente a este Fazendeiro.");
+            message(player, "Você não tem acesso para vincular um recipiente a este trabalhador.");
             return;
         }
         if (linked(level, station)) {
@@ -57,7 +57,7 @@ public final class DiscardBinding {
         if (!realPlayer(player) || selection.level!=level || selection.expires<level.getGameTime() || !valid(level, station)
             || !level.mayInteract(player, station.pos) || linked(level, station)) {
             SELECTIONS.remove(player);
-            message(player, "Seleção encerrada. Abra o Fazendeiro para tentar novamente.");
+            message(player, "Seleção encerrada. Abra o posto para tentar novamente.");
             return;
         }
         if (event.isCanceled() || event.getUseBlock()==Event.Result.DENY || event.getUseItem()==Event.Result.DENY) {
@@ -67,7 +67,7 @@ public final class DiscardBinding {
         event.setCancellationResult(InteractionResult.SUCCESS);
         event.setCanceled(true);
         var pos = event.getPos();
-        if (!DiscardChests.inRange(IndustrialWork.area(level, station), pos)) {
+        if (!inRange(level,station,pos)) {
             message(player, "O recipiente deve estar a até cinco blocos da área de trabalho.");
             return;
         }
@@ -112,7 +112,7 @@ public final class DiscardBinding {
     }
 
     private static boolean valid(ServerLevel level, EmploymentData.Station station) {
-        return station!=null && station.profession==Profession.FARMER && station.at(level, station.pos)
+        return station!=null && (station.profession==Profession.FARMER||station.profession==Profession.SOLDIER) && station.at(level, station.pos)
             && level.hasChunkAt(station.pos) && level.getBlockEntity(station.pos) instanceof WorkBlockEntity post
             && station.id.equals(post.identity());
     }
@@ -122,10 +122,21 @@ public final class DiscardBinding {
             && player.server.getPlayerList().getPlayer(player.getUUID())==player;
     }
 
+    public static boolean inRange(ServerLevel level,EmploymentData.Station station,BlockPos pos){
+        if(station.profession==Profession.SOLDIER)
+            return Math.abs(pos.getX()-station.pos.getX())<=5&&Math.abs(pos.getY()-station.pos.getY())<=5
+                &&Math.abs(pos.getZ()-station.pos.getZ())<=5;
+        return DiscardChests.inRange(IndustrialWork.area(level,station),pos);
+    }
+
+    public static BlockPos boundPosition(ServerLevel level,EmploymentData.Station station){
+        return linked(level,station)?BlockPos.of(station.industry.getLong(TARGET)):null;
+    }
+
     public static boolean linked(ServerLevel level, EmploymentData.Station station) {
         if (!station.industry.hasUUID(ID)) return false;
         var pos = BlockPos.of(station.industry.getLong(TARGET));
-        if (!DiscardChests.inRange(IndustrialWork.area(level, station), pos)) {
+        if (!inRange(level,station,pos)) {
             clear(station);
             return false;
         }

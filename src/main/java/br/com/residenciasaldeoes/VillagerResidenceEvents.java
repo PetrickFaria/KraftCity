@@ -1136,6 +1136,7 @@ public class VillagerResidenceEvents {
 
     @SubscribeEvent public void onVillagerTick(LivingEvent.LivingTickEvent event){
         if(!(event.getEntity() instanceof Villager villager)||!(villager.level instanceof ServerLevel level))return;
+        if(villager.tickCount%20==0)br.com.kraftcity.military.Military.residentHealth(level,villager);
         healDuringSleep(level,villager);
         boolean workerRest=ownsWorkerRest(villager);
         if(br.com.kraftcity.employment.Employment.fleeing(villager)

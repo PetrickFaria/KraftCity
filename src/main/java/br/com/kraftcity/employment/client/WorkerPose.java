@@ -64,12 +64,24 @@ public final class WorkerPose {
         var item=worker.getMainHandItem();
         boolean bow=item.getItem() instanceof BowItem;
         boolean crossbow=item.getItem() instanceof CrossbowItem;
-        if(!(bow||crossbow)||!worker.isUsingItem())return;
         float yaw=Mth.clamp(Mth.wrapDegrees(worker.getYHeadRot()-worker.yBodyRot),-50,50)*Mth.DEG_TO_RAD;
-        right.xRot=(crossbow?-1.08F:-Mth.HALF_PI)+worker.getXRot()*Mth.DEG_TO_RAD;
-        left.xRot=right.xRot;
-        right.yRot=yaw-.15F;
-        left.yRot=yaw+.45F;
+        float pitch=worker.getXRot()*Mth.DEG_TO_RAD;
+        if(crossbow&&(worker.isUsingItem()||CrossbowItem.isCharged(item))){
+            int duration=CrossbowItem.getChargeDuration(item);
+            if(worker.isUsingItem()&&worker.getTicksUsingItem()<duration-4){
+                net.minecraft.client.model.AnimationUtils.animateCrossbowCharge(right,left,worker,true);
+            }else{
+                var head=new ModelPart(java.util.List.of(),java.util.Map.of());
+                head.xRot=pitch;head.yRot=yaw;
+                net.minecraft.client.model.AnimationUtils.animateCrossbowHold(right,left,head,true);
+            }
+        }else if(bow&&worker.isUsingItem()){
+            float draw=Mth.clamp(worker.getTicksUsingItem()/20F,0,1);
+            right.xRot=-Mth.HALF_PI+pitch;
+            left.xRot=right.xRot;
+            right.yRot=yaw-.15F-.25F*(1-draw);
+            left.yRot=yaw+.45F;
+        }
     }
 
     public static float walking(float stride,float amount){

@@ -19,9 +19,11 @@ import net.minecraftforge.fml.common.Mod;
 public final class WorkerTextures {
     public static final ResourceLocation ICONS=new ResourceLocation("textures/gui/icons.png");
     private static final ResourceLocation XP=new ResourceLocation(KraftCity.MOD_ID,"worker_xp");
+    private static final ResourceLocation RED_XP=new ResourceLocation(KraftCity.MOD_ID,"soldier_xp");
+    public static final int XP_WIDTH=182, XP_Y=22;
     public static final ResourceLocation DEFAULT_ROBE=new ResourceLocation("textures/entity/villager/type/plains.png");
     private static final Map<ArmSource,ArmTexture> ARMS=new LinkedHashMap<>(32,.75F,true);
-    private static boolean xpLoaded;
+    private static boolean xpLoaded,redXpLoaded;
     private static int serial;
 
     private record ArmSource(ResourceLocation skin,ResourceLocation robe) {}
@@ -33,24 +35,48 @@ public final class WorkerTextures {
             var textures=Minecraft.getInstance().getTextureManager();
             if(xpLoaded)textures.release(XP);
             xpLoaded=false;
+            if(redXpLoaded)textures.release(RED_XP);
+            redXpLoaded=false;
             ARMS.values().forEach(arms->textures.release(arms.generated));
             ARMS.clear();
         });
     }
 
     public static ResourceLocation experience(){
-        if(xpLoaded)return XP;
+        return experience(false);
+    }
+
+    private static ResourceLocation experience(boolean red){
+        var texture=red?RED_XP:XP;
+        if(red?redXpLoaded:xpLoaded)return texture;
         var mc=Minecraft.getInstance();
         try(var input=mc.getResourceManager().open(ICONS)){
             NativeImage image=NativeImage.read(input);
             for(int y=69*image.getHeight()/256;y<74*image.getHeight()/256;y++)
                 for(int x=0;x<182*image.getWidth()/256;x++)
-                    image.setPixelRGBA(x,y,cyan(image.getPixelRGBA(x,y)));
-            mc.getTextureManager().register(XP,new DynamicTexture(image));
-            xpLoaded=true;
-            return XP;
+                    image.setPixelRGBA(x,y,red?red(image.getPixelRGBA(x,y)):cyan(image.getPixelRGBA(x,y)));
+            mc.getTextureManager().register(texture,new DynamicTexture(image));
+            if(red)redXpLoaded=true;else xpLoaded=true;
+            return texture;
         }catch(IOException failure){
             return ICONS;
+        }
+    }
+
+    private static int red(int pixel){
+        int green=(pixel>>>8)&255;
+        if(green<=(pixel&255)||green<=((pixel>>>16)&255))return pixel;
+        return (pixel&0xFF000000)|((green*53/255)<<16)|((green*57/255)<<8)|(green*229/255);
+    }
+
+    public static void drawExperience(com.mojang.blaze3d.vertex.PoseStack pose,int x,int y,int progress,boolean red){
+        com.mojang.blaze3d.systems.RenderSystem.setShader(net.minecraft.client.renderer.GameRenderer::getPositionTexShader);
+        com.mojang.blaze3d.systems.RenderSystem.setShaderColor(1,1,1,1);
+        com.mojang.blaze3d.systems.RenderSystem.setShaderTexture(0,ICONS);
+        net.minecraft.client.gui.GuiComponent.blit(pose,x,y,0F,64F,XP_WIDTH,5,256,256);
+        if(progress>0){
+            com.mojang.blaze3d.systems.RenderSystem.setShaderTexture(0,experience(red));
+            net.minecraft.client.gui.GuiComponent.blit(pose,x,y,0F,69F,progress,5,256,256);
         }
     }
 

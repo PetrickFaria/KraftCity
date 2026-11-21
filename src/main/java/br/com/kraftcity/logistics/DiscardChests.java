@@ -130,7 +130,8 @@ public final class DiscardChests {
     public static IItemHandler handler(BlockEntity be,Villager worker,Direction side){
         if(be instanceof EnderChestBlockEntity chest&&be.getBlockState().is(Blocks.ENDER_CHEST)){
             var station=worker.level instanceof ServerLevel level?EmploymentData.get(level).assigned(worker.getUUID()):null;
-            return station!=null&&station.profession==br.com.kraftcity.employment.Profession.FARMER
+            return station!=null&&(station.profession==br.com.kraftcity.employment.Profession.FARMER
+                ||station.profession==br.com.kraftcity.employment.Profession.SOLDIER)
                 &&DiscardBinding.permitsEnder((ServerLevel)worker.level,station,chest)?EnderDiscard.inventory(chest):null;
         }
         if(ArcaneDiscard.isEnder(be)){

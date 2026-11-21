@@ -36,13 +36,14 @@ public final class SoldierMenu extends AbstractContainerMenu {
             @Override public boolean isActive(){return legacyStorage;}
             @Override public boolean mayPlace(ItemStack stack){return false;}
         });
-        addSlot(new Slot(inventory,31,274,63){@Override public boolean isActive(){return !legacyStorage;}@Override public boolean mayPlace(ItemStack x){return x.is(Items.EMERALD);}});
+        addSlot(new Slot(inventory,31,166,70){@Override public boolean isActive(){return legacyStorage;}@Override public boolean mayPlace(ItemStack x){return false;}});
         for(int i=0;i<6;i++){
-            final int index=i;
+            final int gearIndex=i;
             addSlot(new Slot(equipment,i,20+36*i,63){
                 @Override public boolean isActive(){return !legacyStorage;}
                 @Override public int getMaxStackSize(){return 1;}
-                @Override public boolean mayPlace(ItemStack x){return validGear(index,x);}
+                @Override public int getMaxStackSize(ItemStack stack){return 1;}
+                @Override public boolean mayPlace(ItemStack x){return validGear(gearIndex,x);}
             });
         }
         for(int row=0;row<3;row++)for(int col=0;col<9;col++)addSlot(new Slot(inv,9+row*9+col,94+18*col,201+18*row));
@@ -50,7 +51,8 @@ public final class SoldierMenu extends AbstractContainerMenu {
     }
     public static boolean validGear(int i,ItemStack stack){
         if(stack.isEmpty())return false;
-        if(i==0)return stack.getItem() instanceof SwordItem||stack.getItem() instanceof BowItem||stack.getItem() instanceof CrossbowItem;
+        if(i==0)return stack.getItem() instanceof SwordItem||stack.getItem() instanceof BowItem||stack.getItem() instanceof CrossbowItem
+            ||stack.canPerformAction(net.minecraftforge.common.ToolActions.SWORD_SWEEP);
         if(i==1)return stack.canPerformAction(net.minecraftforge.common.ToolActions.SHIELD_BLOCK);
         return i>=2&&i<Military.GEAR.length&&(stack.getItem() instanceof ArmorItem armor&&armor.getSlot()==Military.GEAR[i]
             ||stack.getEquipmentSlot()==Military.GEAR[i]);
@@ -91,18 +93,18 @@ public final class SoldierMenu extends AbstractContainerMenu {
         var copy=stack.copy();
         if(index<PLAYER_START){
             if(!moveItemStackTo(stack,PLAYER_START,slots.size(),true))return ItemStack.EMPTY;
-        }else if(stack.is(Items.EMERALD)){
-            if(!moveItemStackTo(stack,31,32,false))return ItemStack.EMPTY;
         }else{
-            boolean moved=false;
-            for(int i=0;i<6;i++)if(validGear(i,stack)&&moveItemStackTo(stack,GEAR_START+i,GEAR_START+i+1,false)){
-                moved=true;
-                break;
-            }
-            if(!moved&&!moveItemStackTo(stack,0,STORAGE,false))return ItemStack.EMPTY;
+            int gear=-1;
+            for(int i=0;i<6;i++)if(validGear(i,stack)){gear=i;break;}
+            if(gear>=0){
+                var destination=getSlot(GEAR_START+gear);
+                if(destination.hasItem()||!destination.mayPlace(stack))return ItemStack.EMPTY;
+                destination.set(stack.split(1));
+            }else if(!moveItemStackTo(stack,0,STORAGE,false))return ItemStack.EMPTY;
         }
         if(stack.isEmpty())slot.set(ItemStack.EMPTY);else slot.setChanged();
         slot.onTake(actor,stack);
+        syncEquipment();
         return copy;
     }
 }

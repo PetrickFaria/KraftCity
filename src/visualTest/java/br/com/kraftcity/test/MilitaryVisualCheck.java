@@ -62,23 +62,40 @@ public final class MilitaryVisualCheck {
         if(t==25){check(mc.screen instanceof WorkScreen,"Military hiring screen");String id=worker.toString().substring(0,6);for(int i=0;i<100&&mc.screen.children().stream().noneMatch(x->x instanceof Button b&&b.getMessage().getString().contains(id));i++)click(mc,">");click(mc,id);click(mc,"Soldado");}
         if(t==30)capture(mc,"visual-military-hiring.png");
         if(t==35)click(mc,"Treinar");
-        if(t==60){check(mc.screen instanceof SoldierScreen&&mc.player.containerMenu instanceof SoldierMenu m&&m.slots.size()==74&&m.state!=null&&m.state.employed(),"Soldier menu not synchronized");mc.getSingleplayerServer().execute(()->{var p=player(mc);var s=station(p.getLevel());check(s.worker.equals(worker)&&s.getItem(31).getCount()==15,"Military contract/payment");p.getInventory().setItem(9,new ItemStack(Items.IRON_SWORD));p.getInventory().setItem(10,new ItemStack(Items.SHIELD));p.getInventory().setItem(11,new ItemStack(Items.IRON_CHESTPLATE));s.setItem(0,new ItemStack(Items.ARROW,16));});}
-        if(t==72)for(int i=0;i<3;i++)mc.gameMode.handleInventoryMouseClick(mc.player.containerMenu.containerId,
-            SoldierMenu.PLAYER_START+i,1,net.minecraft.world.inventory.ClickType.PICKUP,mc.player);
+        if(t==60){check(mc.screen instanceof SoldierScreen&&mc.player.containerMenu instanceof SoldierMenu m&&m.slots.size()==74&&m.state!=null&&m.state.employed(),"Soldier menu not synchronized");mc.getSingleplayerServer().execute(()->{var p=player(mc);var s=station(p.getLevel());check(s.worker.equals(worker)&&s.getItem(31).isEmpty(),"Military contract/payment");p.getInventory().setItem(9,new ItemStack(Items.IRON_SWORD));p.getInventory().setItem(10,new ItemStack(Items.SHIELD));p.getInventory().setItem(11,new ItemStack(Items.IRON_CHESTPLATE));s.setItem(0,new ItemStack(Items.ARROW,16));WorkforceData.get(p.getLevel()).setProgress(worker,Profession.SOLDIER.id(),1,15000);});}
+        if(t==70)mc.gameMode.handleInventoryMouseClick(mc.player.containerMenu.containerId,
+            SoldierMenu.PLAYER_START,0,net.minecraft.world.inventory.ClickType.PICKUP,mc.player);
+        if(t==72)mc.gameMode.handleInventoryMouseClick(mc.player.containerMenu.containerId,
+            SoldierMenu.GEAR_START,0,net.minecraft.world.inventory.ClickType.PICKUP,mc.player);
+        if(t==74)for(int i=1;i<3;i++)mc.gameMode.handleInventoryMouseClick(mc.player.containerMenu.containerId,
+            SoldierMenu.PLAYER_START+i,0,net.minecraft.world.inventory.ClickType.QUICK_MOVE,mc.player);
         if(t==80){
             var equipped=((SoldierMenu)mc.player.containerMenu).equipment;
             check(equipped.getItem(0).is(Items.IRON_SWORD)&&equipped.getItem(1).is(Items.SHIELD)
-                &&equipped.getItem(3).is(Items.IRON_CHESTPLATE),"Quick equip did not synchronize through the game client");
+                &&equipped.getItem(3).is(Items.IRON_CHESTPLATE),"Manual or shift equip did not synchronize through the game client");
             check(mc.screen.children().stream().anyMatch(widget->widget instanceof Button button&&button.getMessage().getString().equals("Demitir")),
                 "Soldier dismissal button missing");
+            check(!((SoldierMenu)mc.player.containerMenu).getSlot(31).isActive(),"Permanent payment slot visible");
             capture(mc,"visual-military-soldier.png");
         }
+        if(t==82){
+            click(mc,"Limites");
+            check(br.com.kraftcity.military.client.MilitaryPreview.enabled(POST),"Military overlay did not enable");
+        }
+        if(t==83)capture(mc,"visual-military-limits.png");
+        if(t==84){
+            click(mc,"Limites");
+            check(!br.com.kraftcity.military.client.MilitaryPreview.enabled(POST),"Military overlay remained enabled");
+        }
         if(t==85)click(mc,"Blacklist");
-        if(t==110){var m=(SoldierMenu)mc.player.containerMenu;check(m.catalog.stream().anyMatch(e->e.id().equals("minecraft:creeper")&&!e.selected()),"Creeper enabled by default");click(mc,"Pacíficos");click(mc,"Origem:");}
+        if(t==110){var m=(SoldierMenu)mc.player.containerMenu;check(m.catalog.stream().anyMatch(e->e.id().equals("minecraft:creeper")&&!e.selected())&&m.catalog.stream().anyMatch(e->e.id().equals("minecraft:zombie")&&e.selected()),"Hostile checkboxes disagreed with defaults");click(mc,"Pacíficos");click(mc,"Origem:");}
         if(t==120)click(mc,"minecraft:cow");
         if(t==140){capture(mc,"visual-military-blacklist.png");mc.getSingleplayerServer().execute(()->{var s=station(player(mc).getLevel());check(Military.selected(s,EntityType.COW),"Cow selection packet failed");Military.select(s,EntityType.COW,false);});}
         if(t==145)click(mc,"Voltar ao soldado");
-        if(t==150){click(mc,"Guarnecer");click(mc,"Diurno");}
+        if(t==146)click(mc,"Seguir");
+        if(t==149)capture(mc,"visual-military-follow.png");
+        if(t==150){click(mc,"Guarnecer");click(mc,"Noturno");}
+        if(t==160)capture(mc,"visual-military-night.png");
         if(t==170)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var s=station(l);var v=(Villager)l.getEntity(worker);check(Military.mode(s)==Military.Mode.GUARD&&Military.shift(s)==Military.Shift.NIGHT,"Guard/night packets");v.setNoAi(false);v.setPos(POST.getX()+.5,POST.getY()+1,POST.getZ()+.5);});
         if(t==190){capture(mc,"visual-military-guard.png");mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var v=(Villager)l.getEntity(worker);check(v.distanceToSqr(Vec3.atBottomCenterOf(POST.above()))<.3&&v.getNavigation().isDone(),"Guard left post without target");});}
         if(t==195)mc.player.closeContainer();
@@ -170,5 +187,5 @@ public final class MilitaryVisualCheck {
             &&br.com.kraftcity.employment.client.WorkerPose.soldier(villager)).size()==1;
     }
 
-    public static void verifyRestore(ServerLevel l){var s=station(l);check(s.active&&s.worker!=null&&s.profession==Profession.SOLDIER&&s.getItem(31).getCount()==15&&s.military.getBoolean("visual_passed"),"Military saved contract");check(l.getEntity(s.worker) instanceof Villager&&ResidenceData.get(l).owner(s.worker)!=null,"Military saved identity/home");check(s.equipment.getItem(0).is(Items.IRON_SWORD)&&s.equipment.getItem(0).getDamageValue()==s.military.getInt("visual_wear")&&s.equipment.getItem(1).is(Items.SHIELD)&&s.getItem(0).getCount()==16,"Military gear/inventory save");check(WorkforceData.get(l).progress(s.worker,Profession.SOLDIER.id()).xp()==s.military.getLong("visual_xp")&&Military.mode(s)==Military.Mode.GUARD&&Military.shift(s)==Military.Shift.NIGHT&&!Military.selected(s,EntityType.CREEPER),"Military progression/mode/shift save");System.out.println("MILITARY_WORLD_RESTART_PASSED");}
+    public static void verifyRestore(ServerLevel l){var s=station(l);check(s.active&&s.worker!=null&&s.profession==Profession.SOLDIER&&s.getItem(31).isEmpty()&&s.military.getBoolean("visual_passed"),"Military saved contract");check(l.getEntity(s.worker) instanceof Villager&&ResidenceData.get(l).owner(s.worker)!=null,"Military saved identity/home");check(s.equipment.getItem(0).is(Items.IRON_SWORD)&&s.equipment.getItem(0).getDamageValue()==s.military.getInt("visual_wear")&&s.equipment.getItem(1).is(Items.SHIELD)&&s.getItem(0).getCount()==16,"Military gear/inventory save");check(WorkforceData.get(l).progress(s.worker,Profession.SOLDIER.id()).xp()==s.military.getLong("visual_xp")&&Military.mode(s)==Military.Mode.GUARD&&Military.shift(s)==Military.Shift.NIGHT&&!Military.selected(s,EntityType.CREEPER),"Military progression/mode/shift save");System.out.println("MILITARY_WORLD_RESTART_PASSED");}
 }

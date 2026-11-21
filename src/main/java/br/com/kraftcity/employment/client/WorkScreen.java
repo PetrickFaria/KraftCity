@@ -62,7 +62,14 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         page=Math.max(0,Math.min(page,Math.max(0,(candidates.size()-1)/6)));
         for(int i=0;i<6&&page*6+i<candidates.size();i++){
             var c=candidates.get(page*6+i);
-            addRenderableWidget(new Button(leftPos+8,topPos+30+i*20,162,18,Component.literal((c.id().equals(selected)?"> ":"")+font.plainSubstrByWidth(c.name(),92)+" ["+c.id().toString().substring(0,6)+"]"),b->{selected=c.id();buttons();}));
+            addRenderableWidget(new Button(leftPos+8,topPos+30+i*20,162,18,Component.literal((c.id().equals(selected)?"> ":"")+font.plainSubstrByWidth(c.name(),92)+" ["+c.id().toString().substring(0,6)+"]"),b->{
+                selected=c.id();
+                if(menu.sector==Profession.Sector.MILITARY){
+                    menu.setMilitaryPaymentLimit(c.cost());
+                    WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Hire(menu.containerId,menu.stationId,selected,-4));
+                }
+                buttons();
+            }));
         }
         addRenderableWidget(new Button(leftPos+8,topPos+151,48,18,Component.literal("<"),b->{page--;buttons();})).active=page>0;
         addRenderableWidget(new Button(leftPos+122,topPos+151,48,18,Component.literal(">"),b->{page++;buttons();})).active=(page+1)*6<candidates.size();
@@ -147,16 +154,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
             int x=leftPos+FARM_AREA_X+(state.size()-5)/2*35;
             fill(pose,x-1,topPos+FARM_AREA_Y-1,x+33,topPos+FARM_AREA_Y+18,0xFFBFD375);
         }
-        int x=leftPos+(imageWidth-XP_WIDTH)/2;
-        RenderSystem.setShader(net.minecraft.client.renderer.GameRenderer::getPositionTexShader);
-        RenderSystem.setShaderTexture(0,GUI_ICONS_LOCATION);
-        RenderSystem.setShaderColor(1,1,1,1);
-        blit(pose,x,topPos+XP_Y,0,64,XP_WIDTH,5);
-        int progress=farmerXpWidth();
-        if(progress>0){
-            RenderSystem.setShaderTexture(0,WorkerTextures.experience());
-            blit(pose,x,topPos+XP_Y,0,69,progress,5);
-        }
+        WorkerTextures.drawExperience(pose,leftPos+(imageWidth-XP_WIDTH)/2,topPos+XP_Y,farmerXpWidth(),false);
     }
     @Override protected void renderLabels(PoseStack pose,int mx,int my){
         if(menu.farmer){

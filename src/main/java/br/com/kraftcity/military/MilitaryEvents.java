@@ -19,9 +19,9 @@ public final class MilitaryEvents {
         if(e.getEntity() instanceof net.minecraft.world.entity.projectile.Projectile shot
             &&shot.getOwner() instanceof Villager soldier&&Military.isSoldier(soldier))
             shot.getPersistentData().putUUID("KCSoldierShot",soldier.getUUID());
-        if(e.getEntity() instanceof Villager v){var job=Military.station(v);if(Military.military(job))Military.bind(job,v);else if(v.getPersistentData().getBoolean("KCSoldier")){for(var slot:Military.GEAR)v.setItemSlot(slot,net.minecraft.world.item.ItemStack.EMPTY);v.getPersistentData().remove("KCSoldier");v.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(20);}return;}if(!(e.getEntity() instanceof SoldierZombie z))return;var s=Military.station(z);
+        if(e.getEntity() instanceof Villager v){var job=Military.station(v);if(Military.military(job))Military.bind(job,v);else if(v.getPersistentData().getBoolean("KCSoldier")){for(var slot:Military.GEAR)v.setItemSlot(slot,net.minecraft.world.item.ItemStack.EMPTY);v.getPersistentData().remove("KCSoldier");Military.residentHealth(l,v);}return;}if(!(e.getEntity() instanceof SoldierZombie z))return;var s=Military.station(z);
         if(s!=null&&(!s.dimension.equals(l.dimension())||!s.active))Employment.release(l,z.getUUID());
-        if(s!=null&&s.active&&z.getUUID().equals(s.worker)&&s.dimension.equals(l.dimension()))Military.bind(s,z);else for(var slot:Military.GEAR)z.setItemSlot(slot,net.minecraft.world.item.ItemStack.EMPTY);
+        if(s!=null&&s.active&&z.getUUID().equals(s.worker)&&s.dimension.equals(l.dimension())){Military.stats(l,z);Military.bind(s,z);}else for(var slot:Military.GEAR)z.setItemSlot(slot,net.minecraft.world.item.ItemStack.EMPTY);
     }
     @SubscribeEvent public void removed(net.minecraftforge.event.entity.EntityLeaveLevelEvent e){
         if(!(e.getLevel() instanceof ServerLevel l)||!(e.getEntity() instanceof SoldierZombie z)||z.getRemovalReason()==null||!z.getRemovalReason().shouldDestroy())return;

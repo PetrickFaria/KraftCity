@@ -56,6 +56,12 @@ public final class ResidentSleepGameTests {
                 station.setItem(EmploymentData.PAYMENT,new ItemStack(Items.EMERALD,64));
                 check(Employment.hire(employer,station,villager.getUUID(),job).equals("ok"),"Could not hire "+job);
             }
+            check(villager.getMaxHealth()==14,"Unexpected starting health for "+job);
+            if(job!=null&&job!=Profession.SOLDIER){
+                br.com.kraftcity.workforce.WorkforceData.get(level).setProgress(villager.getUUID(),job.id(),5,1000);
+                br.com.kraftcity.military.Military.residentHealth(level,villager);
+                check(villager.getMaxHealth()==14,"Nonmilitary job gained health at Lv5: "+job);
+            }
             float initial=Math.min(12,villager.getMaxHealth()-4);
             villager.setHealth(initial);
             villager.startSleeping(bed);

@@ -85,7 +85,7 @@ public final class WorkPreview {
         lineBuffers.endBatch(RenderType.lines());
         RenderSystem.depthMask(true);RenderSystem.lineWidth(1.0F);
     }
-    private static boolean isOculusShadowPass(){
+    public static boolean isOculusShadowPass(){
         if(!ModList.get().isLoaded("oculus"))return false;
         try{
             Class<?> state=Class.forName("net.coderbot.iris.shadows.ShadowRenderingState",false,WorkPreview.class.getClassLoader());

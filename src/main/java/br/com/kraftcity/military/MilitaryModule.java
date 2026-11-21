@@ -20,7 +20,7 @@ public final class MilitaryModule {
     public static final RegistryObject<MenuType<SoldierMenu>> MENU=MENUS.register("soldier",()->IForgeMenuType.create(SoldierMenu::new));
     public static final ForgeConfigSpec SPEC;
     public static final ForgeConfigSpec.IntValue HEAL_TICKS, CONTRIBUTION_TICKS, DETECTION;
-    static{var b=new ForgeConfigSpec.Builder();HEAL_TICKS=b.comment("Provisorio: 1 ponto de vida a cada N ticks ativos; dormindo intervalo N/2.").defineInRange("curaNormalTicks",200,2,24000);CONTRIBUTION_TICKS=b.comment("Provisorio: validade de contribuicoes de combate; tick absoluto salvo no alvo.").defineInRange("contribuicaoTicks",1200,20,24000);DETECTION=b.comment("Raio de busca local. O maximo efetivo e 32 e os limites fixos do posto continuam valendo.").defineInRange("deteccaoPosto",48,15,128);SPEC=b.build();}
+    static{var b=new ForgeConfigSpec.Builder();HEAL_TICKS=b.comment("1 ponto de vida a cada N ticks acordado. Sono residencial segue a regra de 600 ticks.").defineInRange("curaNormalTicks",200,2,24000);CONTRIBUTION_TICKS=b.comment("Provisorio: validade de contribuicoes de combate; tick absoluto salvo no alvo.").defineInRange("contribuicaoTicks",1200,20,24000);DETECTION=b.comment("Raio de busca local. O maximo efetivo e 32 e os limites fixos do posto continuam valendo.").defineInRange("deteccaoPosto",48,15,128);SPEC=b.build();}
     public static void initialize(IEventBus bus){
         ENTITIES.register(bus);MENUS.register(bus);bus.addListener(MilitaryModule::attributes);bus.addListener(MilitaryModule::villagerAttributes);
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER,SPEC,"kraftcity-military-server.toml");

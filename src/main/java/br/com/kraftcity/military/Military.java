@@ -36,24 +36,63 @@ public final class Military {
     public static Shift shift(EmploymentData.Station s){return s.military.getString("shift").equals("NIGHT")?Shift.NIGHT:Shift.DAY;}
     public static int level(long milliXp){return 1+(int)Math.min(4,milliXp/75000);}
     public static int level(ServerLevel l,UUID id){return level(WorkforceData.get(l).progress(id,Profession.SOLDIER.id()).xp());}
-    public static double health(int level){return 8+2*Math.min(5,Math.max(1,level));}
+    public static double health(int level){return 14+4*(Math.min(5,Math.max(1,level))-1);}
     public static void trained(ServerLevel l,EmploymentData.Station s,Villager v,ServerPlayer player){
         if(!s.military.hasUUID("player"))s.military.putUUID("player",player.getUUID());
         s.military.putUUID("identity",v.getUUID());s.military.remove("target");s.military.remove("zombie");v.getPersistentData().putBoolean("KCSoldier",true);
-        stats(l,v);v.setHealth(v.getMaxHealth());bind(s,v);s.setChanged();
+        if(!v.getPersistentData().contains("KraftCityOriginalHealth"))v.getPersistentData().putDouble("KraftCityOriginalHealth",v.getAttribute(Attributes.MAX_HEALTH).getBaseValue());
+        stats(l,v);bind(s,v);s.setChanged();
     }
-    public static void stats(ServerLevel l,LivingEntity v){var a=v.getAttribute(Attributes.MAX_HEALTH);if(a!=null)a.setBaseValue(health(level(l,v.getUUID())));if(v.getHealth()>v.getMaxHealth())v.setHealth(v.getMaxHealth());}
+    public static void stats(ServerLevel l,LivingEntity v){
+        if(v instanceof Villager&&!v.getPersistentData().contains("KraftCityOriginalHealth"))
+            v.getPersistentData().putDouble("KraftCityOriginalHealth",20);
+        var a=v.getAttribute(Attributes.MAX_HEALTH);if(a!=null)a.setBaseValue(health(level(l,v.getUUID())));if(v.getHealth()>v.getMaxHealth())v.setHealth(v.getMaxHealth());}
     public static boolean onDuty(ServerLevel l,EmploymentData.Station s){long t=Math.floorMod(l.getDayTime(),24000);boolean night=t>=13000&&t<23000;return shift(s)==Shift.NIGHT?night:!night;}
+    public static void residentHealth(ServerLevel level,Villager villager){
+        if(isSoldier(villager)){
+            stats(level,villager);
+            return;
+        }
+        var data=villager.getPersistentData();
+        var health=villager.getAttribute(Attributes.MAX_HEALTH);
+        if(health==null)return;
+        boolean managed=ResidenceData.get(level).owner(villager.getUUID())!=null||Employment.active(villager);
+        if(managed){
+            if(!data.contains("KraftCityOriginalHealth"))data.putDouble("KraftCityOriginalHealth",health.getBaseValue());
+            health.setBaseValue(14);
+        }else if(data.contains("KraftCityOriginalHealth")){
+            health.setBaseValue(data.getDouble("KraftCityOriginalHealth"));
+            data.remove("KraftCityOriginalHealth");
+        }
+        if(villager.getHealth()>villager.getMaxHealth())villager.setHealth(villager.getMaxHealth());
+    }
     public static void bind(EmploymentData.Station s,Mob v){for(int i=0;i<6;i++){var gear=s.equipment.getItem(i);if(gear.isDamageableItem()&&gear.getDamageValue()>=gear.getMaxDamage())s.equipment.setItem(i,ItemStack.EMPTY);if(v.getItemBySlot(GEAR[i])!=s.equipment.getItem(i)){
             if(i==0){v.stopUsingItem();s.military.remove("drawAt");}
             v.setItemSlot(GEAR[i],s.equipment.getItem(i));
         }v.setDropChance(GEAR[i],0);}v.setCanPickUpLoot(false);v.setLeftHanded(false);}
     public static void release(ServerLevel l,UUID worker){var s=EmploymentData.get(l).assigned(worker);if(!military(s))return;s.military.remove("target");
-        for(var world:l.getServer().getAllLevels())if(world.getEntity(worker) instanceof SoldierZombie z){for(var slot:GEAR)z.setItemSlot(slot,ItemStack.EMPTY);}else if(world.getEntity(worker) instanceof Villager v){v.stopUsingItem();for(var slot:GEAR)v.setItemSlot(slot,ItemStack.EMPTY);v.getPersistentData().remove("KCSoldier");v.getAttribute(Attributes.MAX_HEALTH).setBaseValue(20);}
+        for(var world:l.getServer().getAllLevels())if(world.getEntity(worker) instanceof SoldierZombie z){for(var slot:GEAR)z.setItemSlot(slot,ItemStack.EMPTY);}else if(world.getEntity(worker) instanceof Villager v){v.stopUsingItem();for(var slot:GEAR)v.setItemSlot(slot,ItemStack.EMPTY);v.getPersistentData().remove("KCSoldier");}
         s.setChanged();
     }
-    public static boolean selected(EmploymentData.Station s,EntityType<?> type){var key=net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(type);if(key==null)return false;String id=key.toString();var choices=s.military.getCompound("blacklist");return choices.getBoolean(id);}
-    public static void select(EmploymentData.Station s,EntityType<?> type,boolean on){var c=s.military.getCompound("blacklist");c.putBoolean(net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(type).toString(),on);s.military.put("blacklist",c);s.setChanged();}
+    public static boolean selected(EmploymentData.Station s,EntityType<?> type){
+        var key=net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(type);
+        if(key==null)return false;
+        var choices=s.military.getCompound("blacklist");
+        if(s.military.contains("blacklist",net.minecraft.nbt.Tag.TAG_COMPOUND))return choices.getBoolean(key.toString());
+        return key.getNamespace().equals("minecraft")&&type!=EntityType.CREEPER&&(MilitaryNetwork.category(type,null)==2||type==EntityType.SPIDER||type==EntityType.CAVE_SPIDER);
+    }
+    public static void select(EmploymentData.Station s,EntityType<?> type,boolean on){
+        var key=net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(type);
+        if(key==null)return;
+        var choices=s.military.getCompound("blacklist");
+        if(!s.military.contains("blacklist",net.minecraft.nbt.Tag.TAG_COMPOUND)){
+            for(var candidate:net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES)
+                if(selected(s,candidate))choices.putBoolean(net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(candidate).toString(),true);
+        }
+        choices.putBoolean(key.toString(),on);
+        s.military.put("blacklist",choices);
+        s.setChanged();
+    }
     public static boolean protectedArea(ServerLevel level,LivingEntity target){
         return protectedArea(level,target,null);
     }
@@ -99,7 +138,9 @@ public final class Military {
     private static int priority(ServerLevel level,EmploymentData.Station station,Villager soldier,LivingEntity candidate,MilitaryArea area){
         if(!(candidate instanceof Mob)||!candidate.isAlive()||candidate.isInvulnerable()||!area.contains(candidate.position())||ally(level,soldier,candidate))
             return Integer.MAX_VALUE;
-        boolean enemy=MilitaryNetwork.category(candidate.getType(),candidate)==2||selected(station,candidate.getType());
+        if(!selected(station,candidate.getType()))return Integer.MAX_VALUE;
+        if(candidate instanceof Spider spider&&spider.getTarget()==null&&spider.getLightLevelDependentMagicValue()>=.5F
+            &&!struck(soldier,candidate))return Integer.MAX_VALUE;
         if(mode(station)==Mode.FOLLOW){
             var player=linkedPlayer(level,station);
             if(player!=null&&area.contains(player.position())){
@@ -110,7 +151,7 @@ public final class Military {
                     &&level.getGameTime()-orders.getLong(key)<=MilitaryModule.CONTRIBUTION_TICKS.get())return 0;
             }
             if(struck(soldier,candidate))return 1;
-            return enemy&&player!=null&&area.contains(player.position())&&candidate.distanceToSqr(player)<=100?2:Integer.MAX_VALUE;
+            return player!=null&&area.contains(player.position())&&candidate.distanceToSqr(player)<=100?2:Integer.MAX_VALUE;
         }
         boolean nearResident=false;
         for(var resident:level.getEntitiesOfClass(Villager.class,candidate.getBoundingBox().inflate(10),
@@ -120,7 +161,6 @@ public final class Military {
             nearResident=true;
         }
         if(struck(soldier,candidate))return 1;
-        if(!enemy)return Integer.MAX_VALUE;
         if(nearResident)return 2;
         if(protectedArea(level,candidate,area))return 3;
         return soldier.distanceToSqr(candidate)<=100?4:Integer.MAX_VALUE;
@@ -212,6 +252,7 @@ public final class Military {
             return;
         }
         if(s.military.hasUUID("target"))clearTask(v,s);
+        if(MilitaryDiscard.tick(l,s,v,area,mode(s)==Mode.FOLLOW?linkedPlayer(l,s):null))return;
         if(mode(s)==Mode.FOLLOW){
             var owner=linkedPlayer(l,s);
             if(owner!=null&&v.distanceToSqr(owner)>49){
@@ -246,8 +287,8 @@ public final class Military {
         }
     }
     private static void heal(ServerLevel level,Villager villager){
-        if(villager.isSleeping()&&br.com.residenciasaldeoes.VillagerResidenceEvents.usesResidentialSleepHealing(level,villager))return;
-        int interval=Math.max(1,MilitaryModule.HEAL_TICKS.get()/(villager.isSleeping()?2:1));
+        if(villager.isSleeping())return;
+        int interval=MilitaryModule.HEAL_TICKS.get();
         if(villager.tickCount%interval==0&&villager.getHealth()<villager.getMaxHealth())villager.heal(1);
     }
     private static void sleep(ServerLevel l,EmploymentData.Station s,Villager v){
@@ -274,7 +315,7 @@ public final class Military {
         if(!v.hasLineOfSight(t)){area.move(v,t.position(),MilitaryArea.CHASE);shield(v,true);return;}
         v.getNavigation().stop();if(now<s.military.getLong("attackAt")){shield(v,true);return;}
         v.stopUsingItem();v.swing(InteractionHand.MAIN_HAND);
-        if(v.doHurtTarget(t)){if(weapon.getItem() instanceof SwordItem)weapon.hurtAndBreak(1,v,e->e.broadcastBreakEvent(EquipmentSlot.MAINHAND));s.setChanged();}
+        if(v.doHurtTarget(t)){if(weapon.getItem() instanceof SwordItem||weapon.canPerformAction(net.minecraftforge.common.ToolActions.SWORD_SWEEP))weapon.hurtAndBreak(1,v,e->e.broadcastBreakEvent(EquipmentSlot.MAINHAND));s.setChanged();}
         s.military.putLong("attackAt",now+20);s.military.putLong("retreatUntil",now+10);
     }
     private static void shield(Villager v,boolean enabled){if(enabled&&v.getOffhandItem().canPerformAction(net.minecraftforge.common.ToolActions.SHIELD_BLOCK)&&!v.isUsingItem())v.startUsingItem(InteractionHand.OFF_HAND);}
@@ -319,14 +360,14 @@ public final class Military {
         UUID last=dead.getPersistentData().hasUUID("KCMilitaryLast")?dead.getPersistentData().getUUID("KCMilitaryLast"):null;
         for(String key:c.getAllKeys())try{UUID id=UUID.fromString(key);if(now-c.getLong(key)>MilitaryModule.CONTRIBUTION_TICKS.get()||now<c.getLong(key))continue;
             int permille=id.equals(finalSoldier)?1000:killer instanceof Player&&id.equals(last)?500:finalSoldier!=null||killer instanceof Player?100:0;
-            if(permille==0)continue;var data=WorkforceData.get(l);long xp=data.progress(id,Profession.SOLDIER.id()).xp()+(long)reward*permille;data.setProgress(id,Profession.SOLDIER.id(),level(xp),xp);if(l.getEntity(id) instanceof LivingEntity v)stats(l,v);
+            if(permille==0)continue;var data=WorkforceData.get(l);long xp=data.progress(id,Profession.SOLDIER.id()).xp()+(long)reward*permille;data.setProgress(id,Profession.SOLDIER.id(),level(xp),xp);if(l.getEntity(id) instanceof LivingEntity v&&isSoldier(v))stats(l,v);
         }catch(IllegalArgumentException ignored){}
         dead.getPersistentData().remove("KCMilitaryContributors");
     }
     public static SoldierZombie zombify(ServerLevel l,Villager v){
         var s=station(v);if(!military(s))return null;var z=MilitaryModule.ZOMBIE.get().create(l);if(z==null)return null;
         v.stopSleeping();z.setUUID(v.getUUID());z.moveTo(v.getX(),v.getY(),v.getZ(),v.getYRot(),v.getXRot());z.setVillagerData(v.getVillagerData());z.setCustomName(v.getCustomName());z.getPersistentData().merge(v.getPersistentData().copy());s.military.putBoolean("zombie",true);var snapshot=v.saveWithoutId(new CompoundTag());snapshot.remove("HandItems");snapshot.remove("ArmorItems");s.military.put("villager",snapshot);s.military.remove("target");
-        stats(l,z);z.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(v.getAttributeBaseValue(Attributes.ATTACK_DAMAGE));z.setHealth(z.getMaxHealth());bind(s,z);TRANSFERRING.add(v.getUUID());try{for(var slot:GEAR)v.setItemSlot(slot,ItemStack.EMPTY);v.discard();l.addFreshEntity(z);}finally{TRANSFERRING.remove(v.getUUID());}s.setChanged();return z;
+        stats(l,z);z.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(v.getAttributeBaseValue(Attributes.ATTACK_DAMAGE));z.setHealth(Math.max(1,Math.min(v.getHealth(),z.getMaxHealth())));bind(s,z);TRANSFERRING.add(v.getUUID());try{for(var slot:GEAR)v.setItemSlot(slot,ItemStack.EMPTY);v.discard();l.addFreshEntity(z);}finally{TRANSFERRING.remove(v.getUUID());}s.setChanged();return z;
     }
     public static void detachZombie(ServerLevel level,EmploymentData.Station station){
         if(!station.military.getBoolean("zombie"))return;
@@ -347,8 +388,8 @@ public final class Military {
         for(var slot:GEAR)z.setItemSlot(slot,ItemStack.EMPTY);
         z.discard();
         if(attached&&s.active&&v.getUUID().equals(s.worker)){stats(l,v);bind(s,v);}
-        else{v.getPersistentData().remove("KCSoldier");v.getAttribute(Attributes.MAX_HEALTH).setBaseValue(20);}
-        v.setHealth(v.getMaxHealth());l.addFreshEntity(v);return v;
+        else{v.getPersistentData().remove("KCSoldier");residentHealth(l,v);}
+        v.setHealth(Math.max(1,Math.min(v.getHealth(),v.getMaxHealth())));l.addFreshEntity(v);return v;
     }
     public static void death(ServerLevel l,LivingEntity v){
         var s=station(v);if(!military(s))return;boolean drops=l.getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT);
