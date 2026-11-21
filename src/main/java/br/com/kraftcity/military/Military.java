@@ -262,7 +262,11 @@ public final class Military {
         if(ranged&&(ammo(s)>=0||weapon.getItem() instanceof CrossbowItem&&CrossbowItem.isCharged(weapon))){ranged(l,s,v,t,weapon,distance);return;}
         long now=l.getGameTime();
         if(now<s.military.getLong("retreatUntil")){Vec3 away=v.position().subtract(t.position()).normalize().scale(3);area.move(v,area.nearest(v.position().add(away.x,0,away.z)),MilitaryArea.CHASE);return;}
-        if(distance>4){area.move(v,t.position(),MilitaryArea.CHASE);shield(v,true);return;}
+        if(distance>4){
+            if(mode(s)!=Mode.GUARD||!area.leaveGuardPost(s.pos,v,t.position()))area.move(v,t.position(),MilitaryArea.CHASE);
+            shield(v,true);
+            return;
+        }
         if(!v.hasLineOfSight(t)){area.move(v,t.position(),MilitaryArea.CHASE);shield(v,true);return;}
         v.getNavigation().stop();if(now<s.military.getLong("attackAt")){shield(v,true);return;}
         v.stopUsingItem();v.swing(InteractionHand.MAIN_HAND);

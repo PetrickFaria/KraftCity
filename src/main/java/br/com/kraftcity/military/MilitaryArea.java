@@ -2,6 +2,7 @@ package br.com.kraftcity.military;
 
 import br.com.kraftcity.employment.EmploymentData;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
@@ -31,6 +32,30 @@ final class MilitaryArea {
         return new Vec3(Math.max(bounds.minX,Math.min(bounds.maxX-.001,next.x))-origin.x,
             Math.max(bounds.minY,Math.min(bounds.maxY-.001,next.y))-origin.y,
             Math.max(bounds.minZ,Math.min(bounds.maxZ-.001,next.z))-origin.z);
+    }
+
+    boolean leaveGuardPost(BlockPos post,Villager soldier,Vec3 target){
+        var center=Vec3.atBottomCenterOf(post.above());
+        var position=soldier.position();
+        var offset=target.subtract(center);
+        if(Math.abs(position.y-center.y)>.1||Math.abs(position.x-center.x)>.8
+            ||Math.abs(position.z-center.z)>.8||offset.horizontalDistanceSqr()<1)return false;
+
+        // A long path can skip the descent node and point back through the post.
+        // Step toward an open landing before asking the navigator for that path.
+        var facing=Direction.getNearest(offset.x,0,offset.z);
+        var landing=post.relative(facing);
+        var floor=landing.below();
+        var landingPoint=Vec3.atBottomCenterOf(landing);
+        var step=landingPoint.add(0,1,0);
+        var level=soldier.level;
+        if(!contains(step)||!contains(landingPoint)||!level.hasChunkAt(landing)
+            ||!level.getBlockState(floor).isFaceSturdy(level,floor,Direction.UP)
+            ||!level.noCollision(soldier,soldier.getBoundingBox().move(step.subtract(position)))
+            ||!level.noCollision(soldier,soldier.getBoundingBox().move(landingPoint.subtract(position))))return false;
+        soldier.getNavigation().stop();
+        soldier.getMoveControl().setWantedPosition(step.x,step.y,step.z,CHASE);
+        return true;
     }
 
     boolean approach(Villager soldier,Vec3 destination,double speed){
