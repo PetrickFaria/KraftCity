@@ -22,7 +22,7 @@ Diante de colisão persistente, o Fazendeiro encerra mais cedo a rota travada e 
 
 ## Estoque e recuperação
 
-A colocação gera um UUID interno para o posto. A quebra anterior copiava esse UUID para o item mesmo quando o posto era genérico e vazio. Um Bloco Industrial sem dados particulares agora volta como item simples na Sobrevivência e sua pilha chega a 64. No Criativo, a quebra desse bloco vazio remove o registro e segue sem drop. Postos com inventário, equipamento ou configuração preservam os dados e a recuperação correspondente.
+A colocação gera um UUID interno para o posto. A quebra anterior copiava esse UUID para o item mesmo quando o posto era genérico e vazio. Um Bloco Industrial sem dados particulares agora volta como item simples na Sobrevivência e sua pilha chega a 64. No Criativo, a quebra desse bloco vazio remove o registro e segue sem drop. Postos com inventário, equipamento ou configuração preservam os dados e a recuperação correspondente. O item simples tem a mesma forma usada no Criativo e por comandos ou receitas externas que produzam o item padrão.
 
 ## Auditoria dos slots do Fazendeiro
 
@@ -52,3 +52,5 @@ O produto principal usa um sorteio inteiro uniforme por colheita. A pedra agora 
 | Netherita | 1–7 | 1/7 |
 
 A seleção do bloco, o veto do Forge, o desgaste e os subprodutos continuam no fluxo da colheita individual. O teste de conservação verifica as entregas das entidades físicas e a reserva para replantio. A cana mantém a base, inclusive no cenário com alturas 2/3/2 que termina em 2/1/2. Melancias e abóboras mantêm suas regras específicas e os caules compatíveis.
+
+Uma rodada adicional em um ambiente com Quark 3.4-418 e AutoRegLib 1.8.2-55 aprovou 85 GameTests, incluindo o veto do Forge, as seis colheitas seletivas com navegação e os dois cenários de cana adjacente.
