@@ -50,7 +50,7 @@ public abstract class ResidentSteveModelMixin {
         // VillagerModel-dependent layers must not receive a PlayerModel instance.
         List<RenderLayer> compatibleLayers = new ArrayList<>();
         for (RenderLayer layer : layers) {
-            if (layer instanceof VillagerSkinLayer) compatibleLayers.add(layer);
+            if (layer instanceof VillagerSkinLayer || layer instanceof br.com.kraftcity.military.client.SoldierArmorLayer) compatibleLayers.add(layer);
         }
         if(br.com.kraftcity.employment.client.WorkerPose.active(villager)
             ||!br.com.kraftcity.employment.client.WorkerPose.stowed(villager).isEmpty()){

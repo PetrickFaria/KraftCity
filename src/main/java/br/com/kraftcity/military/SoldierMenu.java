@@ -27,27 +27,27 @@ public final class SoldierMenu extends AbstractContainerMenu {
         super(MilitaryModule.MENU.get(),id);this.stationId=identity;this.pos=pos;this.via=via;this.player=inv.player;inventory=s==null?new SimpleContainer(32):s;equipment=s==null?new SimpleContainer(6):s.equipment;
         for(int i=0;i<27;i++){
             final boolean legacy=i>=STORAGE;
-            addSlot(new Slot(inventory,i,94+18*(i%9),i<9?164:34+18*((i-9)/9)){
+            addSlot(new Slot(inventory,i,42+18*(i%9),i<9?116:46+18*((i-9)/9)){
                 @Override public boolean isActive(){return legacy==legacyStorage;}
                 @Override public boolean mayPlace(ItemStack stack){return !legacy;}
             });
         }
-        for(int i=27;i<31;i++)addSlot(new Slot(inventory,i,94+18*(i-27),70){
+        for(int i=27;i<31;i++)addSlot(new Slot(inventory,i,42+18*(i-27),82){
             @Override public boolean isActive(){return legacyStorage;}
             @Override public boolean mayPlace(ItemStack stack){return false;}
         });
-        addSlot(new Slot(inventory,31,166,70){@Override public boolean isActive(){return legacyStorage;}@Override public boolean mayPlace(ItemStack x){return false;}});
+        addSlot(new Slot(inventory,31,114,82){@Override public boolean isActive(){return legacyStorage;}@Override public boolean mayPlace(ItemStack x){return false;}});
         for(int i=0;i<6;i++){
             final int gearIndex=i;
-            addSlot(new Slot(equipment,i,20+36*i,63){
+            addSlot(new Slot(equipment,i,24+36*i,48){
                 @Override public boolean isActive(){return !legacyStorage;}
                 @Override public int getMaxStackSize(){return 1;}
                 @Override public int getMaxStackSize(ItemStack stack){return 1;}
                 @Override public boolean mayPlace(ItemStack x){return validGear(gearIndex,x);}
             });
         }
-        for(int row=0;row<3;row++)for(int col=0;col<9;col++)addSlot(new Slot(inv,9+row*9+col,94+18*col,201+18*row));
-        for(int col=0;col<9;col++)addSlot(new Slot(inv,col,94+18*col,259));
+        for(int row=0;row<3;row++)for(int col=0;col<9;col++)addSlot(new Slot(inv,9+row*9+col,42+18*col,146+18*row));
+        for(int col=0;col<9;col++)addSlot(new Slot(inv,col,42+18*col,204));
     }
     public static boolean validGear(int i,ItemStack stack){
         if(stack.isEmpty())return false;

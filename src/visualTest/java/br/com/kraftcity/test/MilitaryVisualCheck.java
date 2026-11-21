@@ -21,7 +21,24 @@ import net.minecraft.world.level.block.*;
 import net.minecraft.world.phys.*;
 
 /** Real menus/packets, guard return, physical combat, vanilla cure and independent JVM restoration. */
+@net.minecraftforge.fml.common.Mod.EventBusSubscriber(modid="residenciasaldeoes",value=net.minecraftforge.api.distmarker.Dist.CLIENT)
 public final class MilitaryVisualCheck {
+    private static int transformedNotices,cureNotices,fallNotices,creeperNotices,incorrectDeathNotices;
+    @net.minecraftforge.eventbus.api.SubscribeEvent
+    public static void chat(net.minecraftforge.client.event.ClientChatReceivedEvent.System event){
+        if(!(event.getMessage().getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents text))return;
+        String rendered=event.getMessage().getString();
+        switch(text.getKey()){
+            case "message.kraftcity.soldier.zombified"->{if(rendered.contains("Soldado de validação"))transformedNotices++;}
+            case "message.kraftcity.soldier.cured"->{if(rendered.contains("Soldado de validação"))cureNotices++;}
+            case "message.kraftcity.soldier.died"->{
+                if(rendered.contains("Soldado de validação"))incorrectDeathNotices++;
+                if(rendered.contains("Validação de queda"))fallNotices++;
+                if(rendered.contains("Validação de Creeper"))creeperNotices++;
+            }
+            default->{}
+        }
+    }
     private static final BlockPos POST=new BlockPos(174,-57,40), HOME=POST.offset(-3,-1,0);
     private static volatile UUID worker,enemy;
     private static volatile boolean won,finished;
@@ -62,21 +79,29 @@ public final class MilitaryVisualCheck {
         if(t==25){check(mc.screen instanceof WorkScreen,"Military hiring screen");String id=worker.toString().substring(0,6);for(int i=0;i<100&&mc.screen.children().stream().noneMatch(x->x instanceof Button b&&b.getMessage().getString().contains(id));i++)click(mc,">");click(mc,id);click(mc,"Soldado");}
         if(t==30)capture(mc,"visual-military-hiring.png");
         if(t==35)click(mc,"Treinar");
-        if(t==60){check(mc.screen instanceof SoldierScreen&&mc.player.containerMenu instanceof SoldierMenu m&&m.slots.size()==74&&m.state!=null&&m.state.employed(),"Soldier menu not synchronized");mc.getSingleplayerServer().execute(()->{var p=player(mc);var s=station(p.getLevel());check(s.worker.equals(worker)&&s.getItem(31).isEmpty(),"Military contract/payment");p.getInventory().setItem(9,new ItemStack(Items.IRON_SWORD));p.getInventory().setItem(10,new ItemStack(Items.SHIELD));p.getInventory().setItem(11,new ItemStack(Items.IRON_CHESTPLATE));s.setItem(0,new ItemStack(Items.ARROW,16));WorkforceData.get(p.getLevel()).setProgress(worker,Profession.SOLDIER.id(),1,15000);});}
+        if(t==60){check(mc.screen instanceof SoldierScreen&&mc.player.containerMenu instanceof SoldierMenu m&&m.slots.size()==74&&m.state!=null&&m.state.employed(),"Soldier menu not synchronized");mc.getSingleplayerServer().execute(()->{var p=player(mc);var s=station(p.getLevel());check(s.worker.equals(worker)&&s.getItem(31).isEmpty(),"Military contract/payment");p.getInventory().setItem(9,new ItemStack(Items.IRON_SWORD));p.getInventory().setItem(10,new ItemStack(Items.SHIELD));p.getInventory().setItem(11,new ItemStack(Items.IRON_CHESTPLATE));p.getInventory().setItem(12,new ItemStack(Items.IRON_HELMET));p.getInventory().setItem(13,new ItemStack(Items.CHAINMAIL_LEGGINGS));p.getInventory().setItem(14,new ItemStack(Items.DIAMOND_BOOTS));s.setItem(0,new ItemStack(Items.ARROW,16));WorkforceData.get(p.getLevel()).setProgress(worker,Profession.SOLDIER.id(),1,15000);});}
         if(t==70)mc.gameMode.handleInventoryMouseClick(mc.player.containerMenu.containerId,
             SoldierMenu.PLAYER_START,0,net.minecraft.world.inventory.ClickType.PICKUP,mc.player);
         if(t==72)mc.gameMode.handleInventoryMouseClick(mc.player.containerMenu.containerId,
             SoldierMenu.GEAR_START,0,net.minecraft.world.inventory.ClickType.PICKUP,mc.player);
-        if(t==74)for(int i=1;i<3;i++)mc.gameMode.handleInventoryMouseClick(mc.player.containerMenu.containerId,
+        if(t==74)for(int i=1;i<6;i++)mc.gameMode.handleInventoryMouseClick(mc.player.containerMenu.containerId,
             SoldierMenu.PLAYER_START+i,0,net.minecraft.world.inventory.ClickType.QUICK_MOVE,mc.player);
+        if(t==78)verifyScreenFits(mc);
         if(t==80){
             var equipped=((SoldierMenu)mc.player.containerMenu).equipment;
             check(equipped.getItem(0).is(Items.IRON_SWORD)&&equipped.getItem(1).is(Items.SHIELD)
-                &&equipped.getItem(3).is(Items.IRON_CHESTPLATE),"Manual or shift equip did not synchronize through the game client");
-            check(mc.screen.children().stream().anyMatch(widget->widget instanceof Button button&&button.getMessage().getString().equals("Demitir")),
-                "Soldier dismissal button missing");
+                &&equipped.getItem(3).is(Items.IRON_CHESTPLATE)
+                &&equipped.getItem(2).is(Items.IRON_HELMET)&&equipped.getItem(4).is(Items.CHAINMAIL_LEGGINGS)
+                &&equipped.getItem(5).is(Items.DIAMOND_BOOTS),"Manual or shift equip did not synchronize through the game client");
             check(!((SoldierMenu)mc.player.containerMenu).getSlot(31).isActive(),"Permanent payment slot visible");
             capture(mc,"visual-military-soldier.png");
+        }
+        if(t==81){
+            click(mc,"›");
+            verifyScreenFits(mc);
+            check(mc.screen.children().stream().anyMatch(widget->widget instanceof Button button&&button.getMessage().getString().equals("Demitir")),
+                "Soldier dismissal button missing");
+            capture(mc,"visual-military-settings.png");
         }
         if(t==82){
             click(mc,"Limites");
@@ -92,9 +117,12 @@ public final class MilitaryVisualCheck {
         }
         if(t==85)click(mc,"Blacklist");
         if(t==110){var m=(SoldierMenu)mc.player.containerMenu;check(m.catalog.stream().anyMatch(e->e.id().equals("minecraft:creeper")&&!e.selected())&&m.catalog.stream().anyMatch(e->e.id().equals("minecraft:zombie")&&e.selected()),"Hostile checkboxes disagreed with defaults");click(mc,"Pacíficos");click(mc,"Origem:");}
+        if(t==116)((net.minecraft.client.gui.components.EditBox)mc.screen.children().stream()
+            .filter(net.minecraft.client.gui.components.EditBox.class::isInstance).findFirst().orElseThrow()).setValue("minecraft:cow");
         if(t==120)click(mc,"minecraft:cow");
         if(t==140){capture(mc,"visual-military-blacklist.png");mc.getSingleplayerServer().execute(()->{var s=station(player(mc).getLevel());check(Military.selected(s,EntityType.COW),"Cow selection packet failed");Military.select(s,EntityType.COW,false);});}
         if(t==145)click(mc,"Voltar ao soldado");
+        if(t==145)click(mc,"‹");
         if(t==146)click(mc,"Seguir");
         if(t==149)capture(mc,"visual-military-follow.png");
         if(t==150){click(mc,"Guarnecer");click(mc,"Noturno");}
@@ -131,6 +159,7 @@ public final class MilitaryVisualCheck {
             var chest=POST.west(2).south(2);
             level.setBlock(chest,Blocks.BARREL.defaultBlockState(),3);
         });
+        if(t==193)click(mc,"›");
         if(t==195)click(mc,"Vincular baú");
         if(t==199){
             var chest=POST.west(2).south(2);
@@ -157,14 +186,41 @@ public final class MilitaryVisualCheck {
                 check(chest.countItem(Items.ARROW)==16,"Integrated guard did not unload after battle");
                 check(v.distanceToSqr(Vec3.atBottomCenterOf(POST.above()))<.4,"Guard did not physically return");Military.select(s,EntityType.COW,false);s.military.putString("mode","FREE");System.out.println("MILITARY_INTEGRATED_DISCARD_AND_HEALTH_PASSED");System.out.println("MILITARY_GUARD_RETURN_PASSED");});
             if(elapsed==160)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var v=(Villager)l.getEntity(worker);check(Military.insideArea(station(l),v.position()),"Patrol left the military area");var s=station(l);s.military.putString("mode","FOLLOW");s.military.remove("orderedTarget");var cow=EntityType.COW.create(l);cow.setNoAi(true);cow.setPos(v.getX()+3,v.getY(),v.getZ());l.addFreshEntity(cow);enemy=cow.getUUID();Military.select(s,EntityType.COW,false);});
-            if(elapsed==180)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var s=station(l);check(!s.military.hasUUID("target"),"Follow attacked unprovoked");var cow=(LivingEntity)l.getEntity(enemy);cow.hurt(net.minecraft.world.damagesource.DamageSource.playerAttack(player(mc)),1);check(s.military.hasUUID("orderedTarget"),"Player hit did not authorize follow");Military.select(s,EntityType.COW,false);s.military.putString("mode","GUARD");cow.discard();var z=Military.zombify(l,(Villager)l.getEntity(worker));check(z!=null&&z.getUUID().equals(worker),"Zombie transformation");z.setNoAi(true);player(mc).teleportTo(l,z.getX()+.5,z.getY(),z.getZ()+4,180,15);System.out.println("MILITARY_FREE_FOLLOW_AND_TRANSFORM_PASSED");});
+            if(elapsed==180)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var s=station(l);check(!s.military.hasUUID("target"),"Follow attacked unprovoked");var cow=(LivingEntity)l.getEntity(enemy);cow.hurt(net.minecraft.world.damagesource.DamageSource.playerAttack(player(mc)),1);check(s.military.hasUUID("orderedTarget"),"Player hit did not authorize follow");Military.select(s,EntityType.COW,false);s.military.putString("mode","GUARD");cow.discard();var attacker=EntityType.ZOMBIE.create(l);
+                var living=(Villager)l.getEntity(worker);
+                attacker.setPos(living.position());
+                living.hurt(net.minecraft.world.damagesource.DamageSource.mobAttack(attacker),1000);
+                check(l.getEntity(worker) instanceof SoldierZombie,"Zombie transformation after lethal hit");
+                var z=(SoldierZombie)l.getEntity(worker);z.setNoAi(true);player(mc).teleportTo(l,z.getX()+.5,z.getY(),z.getZ()+4,180,15);System.out.println("MILITARY_FREE_FOLLOW_AND_TRANSFORM_PASSED");});
             if(elapsed==200)capture(mc,"visual-military-zombie.png");
             if(elapsed==205)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var z=(SoldierZombie)l.getEntity(worker);z.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.WEAKNESS,200));player(mc).setItemInHand(InteractionHand.MAIN_HAND,new ItemStack(Items.GOLDEN_APPLE,2));player(mc).setGameMode(net.minecraft.world.level.GameType.SURVIVAL);z.mobInteract(player(mc),InteractionHand.MAIN_HAND);player(mc).setGameMode(net.minecraft.world.level.GameType.CREATIVE);check(z.isConverting()&&player(mc).getMainHandItem().getCount()==1,"Vanilla weakness/apple cure");var tag=z.saveWithoutId(new net.minecraft.nbt.CompoundTag());tag.putInt("ConversionTime",1);z.readAdditionalSaveData(tag);z.setNoAi(false);});
             if(elapsed==225)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var s=station(l);check(l.getEntity(worker) instanceof Villager&&s.worker.equals(worker)&&!s.military.getBoolean("zombie"),"Military cure recovery");s.military.putBoolean("visual_passed",true);s.military.putLong("visual_xp",WorkforceData.get(l).progress(worker,Profession.SOLDIER.id()).xp());s.military.putInt("visual_wear",s.equipment.getItem(0).getDamageValue());s.setChanged();if(!Boolean.getBoolean("kraftcity.militaryVisualOnly")&&!Boolean.getBoolean("kraftcity.commerceVisualOnly"))WorkerConversionVisualCheck.prepare(l);finished=true;System.out.println("MILITARY_VANILLA_CURE_PASSED");});
+            if(elapsed==240){
+                check(transformedNotices==1&&cureNotices==1&&incorrectDeathNotices==0,"Expected conversion and cure without definitive death");
+                System.out.println("MILITARY_TRANSFORMATION_CHAT_PASSED");
+            }
             if(elapsed>=245)verifyRanged(mc,elapsed-245);
         }
         check(t<1500,"Military visual combat/return timed out");
     }
+    private static void verifyScreenFits(Minecraft mc){
+        var screen=(SoldierScreen)mc.screen;
+        int oldWidth=screen.width,oldHeight=screen.height;
+        for(int scale:new int[]{1,2,3,0}){
+            int effective=1;
+            while((scale==0||effective<scale)&&960/(effective+1)>=320&&720/(effective+1)>=240)effective++;
+            screen.resize(mc,960/effective,720/effective);
+            var left=screen.getGuiLeft();
+            var top=screen.getGuiTop();
+            check(left>=0&&top>=0&&left+screen.getXSize()<=screen.width&&top+screen.getYSize()<=screen.height,
+                "Military GUI overflows "+scale);
+            for(var slot:screen.getMenu().slots)if(slot.isActive())
+                check(top+slot.y+16<=screen.height&&left+slot.x+16<=screen.width,"Military slot overflows "+scale);
+        }
+        screen.resize(mc,oldWidth,oldHeight);
+        System.out.println("MILITARY_GUI_SCALE_MATRIX_PASSED");
+    }
+
     private static void verifyRanged(Minecraft mc,int tick){
         var server=mc.getSingleplayerServer();
         if(tick==0){
@@ -225,10 +281,39 @@ public final class MilitaryVisualCheck {
                 station.equipment.setItem(0,savedWeapon);
                 station.setItem(0,savedAmmo);
                 Military.clearTask((Villager)level.getEntity(worker),station);
+                verifyDeathNotices(level,player);
                 System.out.println("MILITARY_RANGED_GRAPHICS_AND_AMMO_PASSED");
             });
         }
-        if(tick==150)mc.stop();
+        if(tick==150){
+            check(fallNotices==1&&creeperNotices==1,"Expected a single definitive notice for fall and Creeper");
+            System.out.println("MILITARY_DEATH_CHAT_PASSED");
+            mc.stop();
+        }
+    }
+
+    private static void verifyDeathNotices(ServerLevel level,ServerPlayer player){
+        var data=ResidenceData.get(level);
+        for(int i=0;i<2;i++){
+            var resident=EntityType.VILLAGER.create(level);
+            resident.setAge(0);resident.setNoAi(true);
+            resident.setPos(Vec3.atBottomCenterOf(HOME.south().above()));
+            level.addFreshEntity(resident);
+            check(data.link(level,HOME,resident).equals("ok"),"Notice fixture home");
+            data.renameResident(resident.getUUID(),i==0?"Validação de queda":"Validação de Creeper");
+            var post=POST.north(13+2*i);
+            level.setBlock(post,WorkModule.MILITARY.get().defaultBlockState(),3);
+            var station=((WorkBlockEntity)level.getBlockEntity(post)).station();
+            station.setItem(31,new ItemStack(Items.EMERALD,15));
+            var employer=net.minecraftforge.common.util.FakePlayerFactory.get(level,new com.mojang.authlib.GameProfile(UUID.randomUUID(),"DeathNotice"));
+            employer.setPos(Vec3.atBottomCenterOf(post.above()));
+            resident.setPos(employer.position());
+            check(Employment.hire(employer,station,resident.getUUID(),Profession.SOLDIER).equals("ok"),"Notice fixture hire");
+            var source=i==0?net.minecraft.world.damagesource.DamageSource.FALL
+                :net.minecraft.world.damagesource.DamageSource.explosion(EntityType.CREEPER.create(level));
+            resident.hurt(source,1000);
+            check(!resident.isAlive()&&station.worker==null,"Definitive death retained employee");
+        }
     }
 
     private static boolean watchAim(Minecraft mc,Item weapon){

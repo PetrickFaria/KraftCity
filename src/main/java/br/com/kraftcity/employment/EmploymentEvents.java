@@ -35,7 +35,7 @@ public final class EmploymentEvents {
         if(event.getParentA() instanceof Villager first&&Employment.active(first)
             ||event.getParentB() instanceof Villager second&&Employment.active(second))event.setCanceled(true);
     }
-    @SubscribeEvent public void died(LivingDeathEvent event){if(event.getEntity() instanceof Villager v&&v.level instanceof ServerLevel l&&!WorkerConversion.mayInfect(v,event.getSource()))Employment.release(l,v.getUUID());}
+    @SubscribeEvent public void died(LivingDeathEvent event){if(event.getEntity() instanceof Villager v&&v.level instanceof ServerLevel l&&!WorkerConversion.mayInfect(v,event.getSource())&&!br.com.kraftcity.military.Military.isSoldier(v))Employment.release(l,v.getUUID());}
     @SubscribeEvent(priority=EventPriority.HIGHEST)
     public void denyDuplicateInfectedIdentity(EntityJoinLevelEvent event){
         if(event.getLevel() instanceof ServerLevel level&&event.getEntity() instanceof Villager villager

@@ -46,9 +46,11 @@ public final class Employment {
     }
 
     static void flee(ServerLevel level,Villager v){
-        if(v.tickCount%5!=0||v.isNoAi()||!active(v)||br.com.kraftcity.military.Military.isSoldier(v))return;
+        if(v.tickCount%5!=0||v.isNoAi()||br.com.kraftcity.military.Military.isSoldier(v))return;
+        boolean worker=active(v);
+        if(!worker&&ResidenceData.get(level).owner(v.getUUID())==null)return;
         var zombie=level.getEntitiesOfClass(net.minecraft.world.entity.monster.Zombie.class,
-            v.getBoundingBox().inflate(8),z->z.isAlive()&&!br.com.kraftcity.military.Military.isSoldier(z)
+            v.getBoundingBox().inflate(8),z->z.isAlive()&&(worker||z instanceof br.com.kraftcity.military.SoldierZombie)
                 &&(z.getTarget()==v||v.hasLineOfSight(z))).stream()
             .min(Comparator.comparingDouble(v::distanceToSqr)).orElse(null);
         if(zombie==null){
@@ -72,6 +74,14 @@ public final class Employment {
         }
         if(starting)ESCAPE_BOUNDS.remove(v);
         var bounds=escapeBounds(level,v,nightShelter);
+        if(bounds==null&&zombie instanceof br.com.kraftcity.military.SoldierZombie){
+            var home=ResidenceData.get(level).owner(v.getUUID());
+            if(home!=null&&home.dimension.equals(level.dimension())){
+                int r=home.size/2;
+                var residential=new net.minecraft.world.phys.AABB(home.pos.offset(-r,1,-r),home.pos.offset(r+1,home.size+1,r+1));
+                if(residential.contains(v.position().add(0,.125,0)))bounds=residential;
+            }
+        }
         if(bounds!=null){
             ESCAPE_BOUNDS.put(v,bounds);
             HOMEWARD_ESCAPE.remove(v);

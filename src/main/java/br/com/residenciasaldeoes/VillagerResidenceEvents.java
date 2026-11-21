@@ -1909,6 +1909,7 @@ public class VillagerResidenceEvents {
     }
     @SubscribeEvent public void onDeath(LivingDeathEvent event){
         if(!(event.getEntity() instanceof Villager villager)||!(villager.level instanceof ServerLevel level))return;
+        if(br.com.kraftcity.military.Military.isSoldier(villager))return;
         var source=event.getSource();
         if(br.com.kraftcity.employment.WorkerConversion.mayInfect(villager,source)){
             br.com.kraftcity.employment.WorkerConversion.deferDeath(villager,level,()->finishVillagerDeath(level,villager,source));

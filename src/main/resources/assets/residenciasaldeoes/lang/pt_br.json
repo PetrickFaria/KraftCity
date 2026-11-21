@@ -1,4 +1,7 @@
 {
+  "message.kraftcity.soldier.died": "[KraftCity] O Soldado %s morreu.",
+  "message.kraftcity.soldier.zombified": "[KraftCity] O Soldado %s foi transformado em zumbi.",
+  "message.kraftcity.soldier.cured": "[KraftCity] O Soldado %s foi curado.",
   "gui.kraftcity.dismiss": "Demitir",
   "block.residenciasaldeoes.ancora_residencial": "Bloco Residêncial",
   "item.residenciasaldeoes.ancora_residencial": "Bloco Residêncial",

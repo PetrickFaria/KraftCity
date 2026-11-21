@@ -230,6 +230,61 @@ public final class MilitaryGameTests {
         h.succeed();
     }
 
+    @GameTest(template="empty",timeoutTicks=200,batch="military_resident_escape")
+    public static void residents_walk_away_from_transformed_soldier_and_accept_the_cure(GameTestHelper h){
+        var f=fixture(h);
+        var difficulty=f.l.getDifficulty();
+        f.l.getServer().setDifficulty(net.minecraft.world.Difficulty.NORMAL,true);
+        for(var at:BlockPos.betweenClosed(f.home.offset(-5,0,-5),f.home.offset(5,0,5)))
+            if(!at.equals(f.home))f.l.setBlock(at,Blocks.STONE.defaultBlockState(),3);
+        var villagers=new ArrayList<Villager>();
+        for(int i=0;i<3;i++){
+            var resident=EntityType.VILLAGER.create(f.l);
+            resident.setAge(0);
+            resident.setNoAi(true);
+            resident.setInvulnerable(true);
+            resident.setPos(Vec3.atBottomCenterOf(f.home.offset(i-1,1,-1)));
+            f.l.addFreshEntity(resident);
+            check(ResidenceData.get(f.l).link(f.l,f.home,resident).equals("ok"),"Escape residence");
+            villagers.add(resident);
+            if(i==0)continue;
+            var profession=i==1?Profession.FARMER:Profession.BAKER;
+            var post=f.home.offset(2+i,1,3);
+            f.l.setBlock(post,WorkModule.generic(profession.sector).defaultBlockState(),3);
+            var station=((WorkBlockEntity)f.l.getBlockEntity(post)).station();
+            station.setItem(31,new ItemStack(Items.EMERALD,32));
+            f.player.setPos(Vec3.atBottomCenterOf(post.south()));
+            check(Employment.hire(f.player,station,resident.getUUID(),profession).equals("ok"),"Escape worker hire "+profession);
+        }
+        f.v.setPos(Vec3.atBottomCenterOf(f.home.offset(0,1,1)));
+        villagers.forEach(v->v.setNoAi(false));
+        var initial=new double[3];
+        var escaped=new boolean[3];
+        h.startSequence().thenExecuteAfter(8,()->{
+            check(villagers.stream().noneMatch(Employment::fleeing),"Healthy soldier triggered escape");
+            var z=Military.zombify(f.l,f.v);
+            check(z!=null&&f.s.worker.equals(z.getUUID()),"Transformation lost assignment");
+            z.setNoAi(true);
+            for(int i=0;i<3;i++)initial[i]=villagers.get(i).distanceToSqr(z);
+        }).thenExecuteFor(45,()->{
+            var z=f.l.getEntity(f.v.getUUID());
+            for(int i=0;i<3;i++){
+                var resident=villagers.get(i);
+                escaped[i]|=Employment.fleeing(resident)&&resident.distanceToSqr(z)>initial[i]+1;
+                check(Math.abs(resident.getX()-f.home.getX()-.5)<5.6
+                    &&Math.abs(resident.getZ()-f.home.getZ()-.5)<5.6,"Escape left the residence");
+            }
+        }).thenExecute(()->{
+            for(int i=0;i<3;i++)check(escaped[i],"Resident did not physically flee: "+i);
+            var cured=Military.cure(f.l,(SoldierZombie)f.l.getEntity(f.v.getUUID()));
+            check(cured!=null&&cured.getUUID().equals(f.s.worker),"Cure lost professional identity");
+            cured.setNoAi(true);
+        }).thenExecuteAfter(55,()->{
+            check(villagers.stream().noneMatch(Employment::fleeing),"Escape persisted after cure");
+            f.l.getServer().setDifficulty(difficulty,true);
+        }).thenSucceed();
+    }
+
     @GameTest(template="empty",batch="military_inventory")
     public static void military_boundary_is_inclusive_and_stops_boundary_movement(GameTestHelper h){
         var f=fixture(h);

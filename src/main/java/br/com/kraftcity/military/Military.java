@@ -367,7 +367,7 @@ public final class Military {
     public static SoldierZombie zombify(ServerLevel l,Villager v){
         var s=station(v);if(!military(s))return null;var z=MilitaryModule.ZOMBIE.get().create(l);if(z==null)return null;
         v.stopSleeping();z.setUUID(v.getUUID());z.moveTo(v.getX(),v.getY(),v.getZ(),v.getYRot(),v.getXRot());z.setVillagerData(v.getVillagerData());z.setCustomName(v.getCustomName());z.getPersistentData().merge(v.getPersistentData().copy());s.military.putBoolean("zombie",true);var snapshot=v.saveWithoutId(new CompoundTag());snapshot.remove("HandItems");snapshot.remove("ArmorItems");s.military.put("villager",snapshot);s.military.remove("target");
-        stats(l,z);z.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(v.getAttributeBaseValue(Attributes.ATTACK_DAMAGE));z.setHealth(Math.max(1,Math.min(v.getHealth(),z.getMaxHealth())));bind(s,z);TRANSFERRING.add(v.getUUID());try{for(var slot:GEAR)v.setItemSlot(slot,ItemStack.EMPTY);v.discard();l.addFreshEntity(z);}finally{TRANSFERRING.remove(v.getUUID());}s.setChanged();return z;
+        stats(l,z);z.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(v.getAttributeBaseValue(Attributes.ATTACK_DAMAGE));z.setHealth(Math.max(1,Math.min(v.getHealth(),z.getMaxHealth())));bind(s,z);TRANSFERRING.add(v.getUUID());try{for(var slot:GEAR)v.setItemSlot(slot,ItemStack.EMPTY);v.discard();l.addFreshEntity(z);}finally{TRANSFERRING.remove(v.getUUID());}s.setChanged();if(l.getEntity(z.getUUID())==z)notice(l,s,z,"zombified");return z;
     }
     public static void detachZombie(ServerLevel level,EmploymentData.Station station){
         if(!station.military.getBoolean("zombie"))return;
@@ -389,12 +389,33 @@ public final class Military {
         z.discard();
         if(attached&&s.active&&v.getUUID().equals(s.worker)){stats(l,v);bind(s,v);}
         else{v.getPersistentData().remove("KCSoldier");residentHealth(l,v);}
-        v.setHealth(Math.max(1,Math.min(v.getHealth(),v.getMaxHealth())));l.addFreshEntity(v);return v;
+        v.setHealth(Math.max(1,Math.min(v.getHealth(),v.getMaxHealth())));if(l.addFreshEntity(v))notice(l,s,v,"cured");return v;
     }
     public static void death(ServerLevel l,LivingEntity v){
         var s=station(v);if(!military(s))return;boolean drops=l.getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT);
         for(int i=0;i<6;i++){var stack=s.equipment.removeItemNoUpdate(i);if(drops&&!stack.isEmpty()&&!EnchantmentHelper.hasVanishingCurse(stack))v.spawnAtLocation(stack);}
         if(v instanceof Mob mob)for(var slot:GEAR)mob.setItemSlot(slot,ItemStack.EMPTY);
+        var message=noticeMessage(l,v,"died");
         s.military.remove("zombie");s.military.remove("villager");s.setChanged();Employment.release(l,v.getUUID());ResidenceData.get(l).unlink(l,v.getUUID());
+        sendNotice(l,s,v,message);
+    }
+
+    private static net.minecraft.network.chat.Component noticeMessage(ServerLevel level,LivingEntity soldier,String event){
+        var residence=ResidenceData.get(level);
+        String name=residence.owner(soldier.getUUID())!=null?residence.residentName(soldier.getUUID()):soldier.getDisplayName().getString();
+        return net.minecraft.network.chat.Component.translatable("message.kraftcity.soldier."+event,name);
+    }
+
+    private static void notice(ServerLevel level,EmploymentData.Station station,LivingEntity soldier,String event){
+        sendNotice(level,station,soldier,noticeMessage(level,soldier,event));
+    }
+
+    private static void sendNotice(ServerLevel level,EmploymentData.Station station,LivingEntity soldier,
+                                   net.minecraft.network.chat.Component message){
+        UUID owner=station!=null&&station.military.hasUUID("player")?station.military.getUUID("player"):null;
+        for(var player:level.getServer().getPlayerList().getPlayers()){
+            if(player.getUUID().equals(owner)||player.level==level&&player.distanceToSqr(soldier)<=64*64)
+                player.sendSystemMessage(message);
+        }
     }
 }

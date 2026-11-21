@@ -40,14 +40,9 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
         if(!stowed.isEmpty()&&!worker.isSleeping())renderBack(pose,buffers,light,worker,getParentModel().root().getChild("body"),3.5F);
         boolean building=BuilderClient.working(worker);
         if(!building&&!WorkerPose.active(worker))return;
-        float action=WorkerPose.action(worker,age);
-        float cycle=building?Mth.sin(age*.55F)*.8F:WorkerPose.walking(stride,amount)*(1-action);
         var right=root.getChild("right");
         var left=root.getChild("left");
-        right.xRot=building?-.9F+cycle:cycle-1.1F*action;
-        left.xRot=building?-.9F-cycle:-cycle;
-        right.yRot=left.yRot=0;
-        WorkerPose.aim(worker,right,left);
+        poseArms(worker,right,left,stride,amount,age,building);
         var skin=VillagerSkinTextures.get(worker.getUUID());
         var texture=skin==null?getTextureLocation(worker):skin;
         var villagerType=net.minecraft.core.Registry.VILLAGER_TYPE.getKey(worker.getVillagerData().getType());
@@ -58,6 +53,15 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
             renderTool(pose,buffers,light,worker,right);
             if(WorkerPose.soldier(worker))renderShield(pose,buffers,light,worker,left);
         }
+    }
+
+    public static void poseArms(Villager worker,ModelPart right,ModelPart left,float stride,float amount,float age,boolean building){
+        float action=WorkerPose.action(worker,age);
+        float cycle=building?Mth.sin(age*.55F)*.8F:WorkerPose.walking(stride,amount)*(1-action);
+        right.xRot=building?-.9F+cycle:cycle-1.1F*action;
+        left.xRot=building?-.9F-cycle:-cycle;
+        right.yRot=left.yRot=0;
+        WorkerPose.aim(worker,right,left);
     }
 
     public static void renderBack(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,ModelPart body,float rearPixels){

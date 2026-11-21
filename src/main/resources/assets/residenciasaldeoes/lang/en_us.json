@@ -1,4 +1,7 @@
 {
+  "message.kraftcity.soldier.died": "[KraftCity] Soldier %s died.",
+  "message.kraftcity.soldier.zombified": "[KraftCity] Soldier %s was turned into a zombie.",
+  "message.kraftcity.soldier.cured": "[KraftCity] Soldier %s was cured.",
   "gui.kraftcity.dismiss": "Dismiss",
   "itemGroup.kraftcity": "KraftCity",
   "block.residenciasaldeoes.industrial": "Bloco Industrial",

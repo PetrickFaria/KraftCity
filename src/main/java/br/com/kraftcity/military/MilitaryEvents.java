@@ -48,11 +48,14 @@ public final class MilitaryEvents {
     @SubscribeEvent(priority=EventPriority.HIGHEST) public void dying(LivingDeathEvent e){
         if(!(e.getEntity().level instanceof ServerLevel l))return;
         if(e.getEntity() instanceof Villager v&&Military.isSoldier(v)&&e.getSource().getEntity() instanceof Zombie){
-            if(Military.zombify(l,v)!=null)e.setCanceled(true);return;
+            if(Military.zombify(l,v)!=null)e.setCanceled(true);
         }
-        if(Military.isSoldier(e.getEntity()))Military.death(l,e.getEntity());
     }
-    @SubscribeEvent(priority=EventPriority.LOWEST) public void died(LivingDeathEvent e){if(e.getEntity().level instanceof ServerLevel l)Military.award(l,e.getEntity(),e.getSource().getEntity()!=null?e.getSource().getEntity():e.getEntity().getKillCredit());}
+    @SubscribeEvent(priority=EventPriority.LOWEST) public void died(LivingDeathEvent e){
+        if(!(e.getEntity().level instanceof ServerLevel l))return;
+        if(Military.isSoldier(e.getEntity()))Military.death(l,e.getEntity());
+        Military.award(l,e.getEntity(),e.getSource().getEntity()!=null?e.getSource().getEntity():e.getEntity().getKillCredit());
+    }
     @SubscribeEvent(priority=EventPriority.LOWEST) public void damage(LivingDamageEvent e){
         if(e.getAmount()<=0||!(e.getEntity().level instanceof ServerLevel l))return;var source=e.getSource().getEntity();
         if(source instanceof Villager v&&Military.isSoldier(v)){
