@@ -92,8 +92,11 @@ public final class ToolVisualCheck extends Screen {
     }
 
     private static void compare(Minecraft mc,String source,String variant,boolean preserveBrown){
-        TextureAtlasSprite a=mc.getTextureAtlas(InventoryMenu.BLOCK_ATLAS).apply(new ResourceLocation("minecraft","item/"+source));
-        TextureAtlasSprite b=mc.getTextureAtlas(InventoryMenu.BLOCK_ATLAS).apply(new ResourceLocation(KraftCity.MOD_ID,"item/"+variant));
+        var atlas=mc.getTextureAtlas(InventoryMenu.BLOCK_ATLAS);
+        TextureAtlasSprite a=atlas.apply(new ResourceLocation("minecraft","item/"+source));
+        TextureAtlasSprite b=atlas.apply(new ResourceLocation(KraftCity.MOD_ID,"item/"+variant));
+        TextureAtlasSprite mask=source.startsWith("iron_")
+            ?atlas.apply(new ResourceLocation("minecraft","item/diamond_"+source.substring("iron_".length()))):a;
         check(a.getWidth()==b.getWidth()&&a.getHeight()==b.getHeight(),"Sprite dimensions "+variant);
         boolean changed=false;
         for(int y=0;y<a.getHeight();y++)for(int x=0;x<a.getWidth();x++){
@@ -101,8 +104,10 @@ public final class ToolVisualCheck extends Screen {
             check((original>>>24)==(pixel>>>24),"Sprite silhouette "+variant+" at "+x+","+y);
             if((original>>>24)==0)continue;
             int red=original&255,green=(original>>>8)&255,blue=(original>>>16)&255;
-            if((preserveBrown&&red>green&&green>blue)||(source.equals("iron_hoe")&&red==24&&green==24&&blue==24))
-                check(original==pixel,"Handle color "+variant);
+            int region=mask.getPixelRGBA(0,x,y);
+            int regionRed=region&255,regionGreen=(region>>>8)&255,regionBlue=(region>>>16)&255;
+            if(preserveBrown&&regionRed>regionGreen&&regionGreen>regionBlue)
+                check(original==pixel,"Handle color "+variant+" at "+x+","+y);
             if(!preserveBrown&&!(red>green&&green>blue))check(original==pixel,"Rod line or hook "+variant);
             if(source.equals("shears")&&red==66&&green==66&&blue==66)check(original==pixel,"Shears outline "+variant);
             changed|=original!=pixel;
