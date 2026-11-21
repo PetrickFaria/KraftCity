@@ -130,7 +130,8 @@ public final class DiscardChests {
     public static IItemHandler handler(BlockEntity be,Villager worker,Direction side){
         if(be instanceof EnderChestBlockEntity chest&&be.getBlockState().is(Blocks.ENDER_CHEST)){
             var station=worker.level instanceof ServerLevel level?EmploymentData.get(level).assigned(worker.getUUID()):null;
-            return station!=null&&station.profession==br.com.kraftcity.employment.Profession.FARMER?EnderDiscard.inventory(chest):null;
+            return station!=null&&station.profession==br.com.kraftcity.employment.Profession.FARMER
+                &&DiscardBinding.permitsEnder((ServerLevel)worker.level,station,chest)?EnderDiscard.inventory(chest):null;
         }
         if(be instanceof WorkerDiscardAccess linked)return linked.discardInventory(worker,side);
         var exposed=be.getCapability(ForgeCapabilities.ITEM_HANDLER,side).orElse(null);

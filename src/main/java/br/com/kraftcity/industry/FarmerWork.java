@@ -144,7 +144,7 @@ public final class FarmerWork {
         Item produce=state.is(Blocks.WHEAT)?Items.WHEAT:state.is(Blocks.BEETROOTS)?Items.BEETROOT:
             state.is(Blocks.CARROTS)||state.is(Blocks.POTATOES)?seed:Items.AIR;
         drops.removeIf(x->x.isEmpty()||produce!=Items.AIR&&x.is(produce));
-        if(produce!=Items.AIR)drops.add(new ItemStack(produce,1+l.random.nextInt(IndustrialTools.tier(tool)+1)));
+        if(produce!=Items.AIR)drops.add(new ItemStack(produce,IndustrialTools.farmerYield(tool,l.random)));
         boolean replant=fromDrop||input>=0;
         if(!IndustrialWork.exchange(s,input,1,drops,false)){
             IndustrialWork.alert(l,s,"space","Inventário cheio; colheita preservada no terreno.");return;

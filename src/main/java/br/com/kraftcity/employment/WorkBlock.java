@@ -67,6 +67,16 @@ public final class WorkBlock extends BaseEntityBlock {
             }
         }
     }
+    @Override public void playerWillDestroy(Level level,BlockPos pos,BlockState state,Player player){
+        super.playerWillDestroy(level,pos,state,player);
+        if(player.isCreative()&&level instanceof ServerLevel server&&level.getBlockEntity(pos) instanceof WorkBlockEntity be){
+            var station=be.station();
+            if(station!=null&&Employment.pristineIndustrial(station)){
+                station.active=false;
+                EmploymentData.get(server).remove(station.id);
+            }
+        }
+    }
     @Override public void onRemove(BlockState state,Level level,BlockPos pos,BlockState next,boolean moving){
         if(state.getBlock()!=next.getBlock()&&level instanceof ServerLevel server
                 &&!(Employment.CONVERTING.get()&&next.getBlock() instanceof WorkBlock)

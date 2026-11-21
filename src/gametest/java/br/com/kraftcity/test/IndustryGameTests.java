@@ -66,10 +66,42 @@ public final class IndustryGameTests {
         var p=crop(f,Blocks.WHEAT.defaultBlockState());step(f,1);
         check(f.s.getItem(27).is(Items.IRON_HOE)&&f.s.getItem(28).is(Items.BONE_MEAL)&&f.s.getItem(30).is(Items.WATER_BUCKET),"input migration");
         check(f.s.getItem(28).getCount()==7,"bone meal not consumed exactly once");check(Irrigation.hydrates(f.l,p.below()),"hydration missing");
-        level(f,5,100);check(IndustrialRules.selectSize(f.l,f.s,13),"large irrigation fixture");check(Irrigation.hydrates(f.l,f.p.offset(4,0,4))&&!Irrigation.hydrates(f.l,f.p.offset(5,0,0)),"vanilla four-block water range");
+        level(f,5,100);
+        for(int size:new int[]{5,13,7,11,9,5}){
+            int edge=size/2;
+            check(IndustrialRules.selectSize(f.l,f.s,size),"irrigation size "+size);
+            check(Irrigation.hydrates(f.l,f.p.offset(edge,0,edge))
+                &&Irrigation.hydrates(f.l,f.p.offset(-edge,2,-edge))
+                &&!Irrigation.hydrates(f.l,f.p.offset(edge+1,0,0))
+                &&!Irrigation.hydrates(f.l,f.p.offset(0,3,0)),"incorrect irrigation boundary for "+size);
+        }
         check(f.l.getFluidState(f.p).isEmpty(),"created water source");
         f.s.setItem(30,ItemStack.EMPTY);check(!Irrigation.hydrates(f.l,p.below()),"ghost irrigation");h.succeed();
     }
+    @GameTest(template="empty",timeoutTicks=60,batch="farmer_yield_subproducts")
+    public static void wooden_hoe_yield_keeps_potato_subproducts_and_replanting(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var potatoes=(CropBlock)Blocks.POTATOES;
+        var mature=potatoes.getStateForAge(potatoes.getMaxAge());
+        var target=crop(f,mature);
+        var neighbor=target.south();
+        var immature=potatoes.getStateForAge(2);
+        f.l.setBlockAndUpdate(neighbor.below(),Blocks.FARMLAND.defaultBlockState());
+        f.l.setBlockAndUpdate(neighbor,immature);
+        f.s.setItem(30,new ItemStack(Items.WATER_BUCKET));
+        int trials=0;
+        for(int i=0;i<800&&count(f,Items.POISONOUS_POTATO)==0;i++){
+            f.s.setItem(27,new ItemStack(Items.WOODEN_HOE));
+            f.l.setBlockAndUpdate(target,mature);
+            step(f,4);
+            check(f.l.getBlockState(target)==potatoes.getStateForAge(0),"a potato was not reserved for replanting");
+            check(f.l.getBlockState(neighbor)==immature,"harvesting potatoes changed the adjacent crop");
+            check(count(f,Items.POTATO)==++trials,"wooden hoe did not credit exactly one product");
+        }
+        check(count(f,Items.POISONOUS_POTATO)==1,"vanilla poisonous-potato subproduct was not retained");
+        h.succeed();
+    }
+
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void farmer_never_tills_without_seed_and_preserves_full_inventory_harvest(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);f.s.setItem(27,new ItemStack(Items.IRON_HOE));BlockPos p=f.p.east().above();f.l.setBlock(p.below(),Blocks.DIRT.defaultBlockState(),3);step(f,30);
@@ -270,6 +302,28 @@ public final class IndustryGameTests {
         MinecraftForge.EVENT_BUS.register(listener);try{step(f,2);check(f.l.getBlockState(p).getValue(CropBlock.AGE)==7&&f.s.getItem(27).getDamageValue()==0,"protection bypass");long at=f.s.industry.getCompound("alerts").getLong("protection");step(f,1);check(f.s.industry.getCompound("alerts").getLong("protection")==at,"alert spam");}finally{MinecraftForge.EVENT_BUS.unregister(listener);}h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    public static void farmer_hoe_yield_uses_each_integer_in_its_material_range(GameTestHelper h){
+        var hoes=List.of(Items.WOODEN_HOE,Items.STONE_HOE,Items.IRON_HOE,Items.GOLDEN_HOE,
+            IndustrialTools.HOE.get(),Items.DIAMOND_HOE,Items.NETHERITE_HOE);
+        for(int tier=0;tier<hoes.size();tier++){
+            var tool=new ItemStack(hoes.get(tier));
+            int maximum=tier+1;
+            int draws=maximum*4000;
+            int[] frequencies=new int[maximum+1];
+            var random=net.minecraft.util.RandomSource.create(91+tier);
+            for(int i=0;i<draws;i++){
+                int amount=IndustrialTools.farmerYield(tool,random);
+                check(amount>=1&&amount<=maximum,"out-of-range yield from "+tool);
+                frequencies[amount]++;
+            }
+            for(int amount=1;amount<=maximum;amount++){
+                check(Math.abs(frequencies[amount]-4000)<300,"skewed yield from "+tool+" for "+amount);
+            }
+        }
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void custom_tool_recipes_tiers_and_variants_are_registered(GameTestHelper h){
         check(IndustrialTools.tier(new ItemStack(IndustrialTools.HOE.get()))==3,"emerald tier");
         for(String id:List.of("emerald_hoe","emerald_axe","emerald_sword","wood_shears","gold_shears","emerald_shears","diamond_shears","netherite_shears","iron_fishing_rod","gold_fishing_rod","emerald_fishing_rod","diamond_fishing_rod","netherite_fishing_rod"))
@@ -383,7 +437,7 @@ public final class IndustryGameTests {
         check(f.l.getBlockState(center).is(Blocks.WHEAT)&&f.l.getBlockState(center).getValue(CropBlock.AGE)==0,"iron hoe did not replant wheat");
         check(f.l.getBlockState(near)==carrots,"manual adjacent crop damaged");
         step(f,3);
-        check(count(f,Items.WHEAT)>=1&&count(f,Items.WHEAT)<=2,"incorrect iron hoe yield");
+        check(count(f,Items.WHEAT)>=1&&count(f,Items.WHEAT)<=3,"incorrect iron hoe yield");
         check(f.l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,new net.minecraft.world.phys.AABB(center).inflate(1)).isEmpty(),"duplicate world drops");
         h.succeed();
     }

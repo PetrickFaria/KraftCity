@@ -86,6 +86,20 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         addRenderableWidget(new Button(leftPos+246,topPos+FARM_AREA_Y,51,17,
             Component.literal("Limites"),b->option(0,1)));
         if(state==null)return;
+        addRenderableWidget(new Button(leftPos+237,topPos+78,65,18,
+            Component.literal(state.discardLinked()?"Vinculado":"Vincular Baú"),b->{
+                if(!state.discardLinked()){
+                    option(0,5);
+                    minecraft.player.closeContainer();
+                    return;
+                }
+                minecraft.setScreen(new net.minecraft.client.gui.screens.ConfirmScreen(confirmed->{
+                    minecraft.setScreen(this);
+                    if(confirmed)option(0,6);
+                },Component.literal("Desvincular o Baú de Descarte?"),
+                    Component.literal("Confirme para remover a associação deste Fazendeiro."),
+                    Component.literal("Desvincular"),Component.literal("Cancelar")));
+            }));
         if(state.employed()){
             addRenderableWidget(new Button(leftPos+243,topPos+4,54,16,Component.translatable("gui.kraftcity.dismiss"),
                 b->WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Dismiss(menu.containerId,menu.stationId,state.epoch()))));

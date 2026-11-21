@@ -172,8 +172,20 @@ public final class Employment {
         net.minecraft.world.level.block.Block.popResource(level,station.pos,block);
     }
 
+    static boolean pristineIndustrial(EmploymentData.Station station){
+        return station.sector==Profession.Sector.INDUSTRIAL&&station.profession==null&&station.worker==null
+            &&station.isEmpty()&&station.equipment.isEmpty()&&station.industry.isEmpty()
+            &&station.commerce.isEmpty()&&station.military.isEmpty();
+    }
+
     public static void makePortable(ServerLevel level,EmploymentData.Station s){
         if(!s.active)return;
+        if(pristineIndustrial(s)){
+            s.active=false;
+            EmploymentData.get(level).remove(s.id);
+            net.minecraft.world.level.block.Block.popResource(level,s.pos,new ItemStack(WorkModule.INDUSTRIAL.get()));
+            return;
+        }
         if(s.worker!=null)release(level,s.worker);
         s.active=false;s.setChanged();
         var block=s.profession!=null?WorkModule.PROFESSIONAL.get(s.profession).get():WorkModule.generic(s.sector);

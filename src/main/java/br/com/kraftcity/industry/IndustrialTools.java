@@ -44,6 +44,19 @@ public final class IndustrialTools {
         if(item instanceof TieredItem t){Tier a=t.getTier();if(a==Tiers.NETHERITE)return 5;if(a==Tiers.DIAMOND)return 4;if(a==EMERALD)return 3;if(a==Tiers.GOLD)return 2;if(a==Tiers.IRON)return 1;}
         return 0; // Stone is conservative wood yield; no fictional stone rule.
     }
+    public static int farmerYield(ItemStack tool,net.minecraft.util.RandomSource random){
+        int maximum=1;
+        if(tool.getItem() instanceof HoeItem hoe){
+            Tier tier=hoe.getTier();
+            if(tier==Tiers.STONE)maximum=2;
+            else if(tier==Tiers.IRON)maximum=3;
+            else if(tier==Tiers.GOLD)maximum=4;
+            else if(tier==EMERALD)maximum=5;
+            else if(tier==Tiers.DIAMOND)maximum=6;
+            else if(tier==Tiers.NETHERITE)maximum=7;
+        }
+        return 1+random.nextInt(maximum);
+    }
     public static void register(IEventBus bus){ITEMS.register(bus);}
     private IndustrialTools(){}
 }

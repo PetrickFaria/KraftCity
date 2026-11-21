@@ -219,6 +219,34 @@ public final class EmploymentGameTests {
         check(!((BlockItem)duplicate.getItem()).place(secondContext).consumesAction(),"Cloned token duplicated a live inventory");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="employment")
+    public static void generic_industrial_survival_drop_stacks_and_creative_removes_without_drop(GameTestHelper h){
+        var f=fixture(h,Profession.Sector.INDUSTRIAL);
+        var block=WorkModule.INDUSTRIAL.get();
+        f.station.clearContent();
+        var bounds=new AABB(f.pos).inflate(1);
+        f.player.gameMode.changeGameModeForPlayer(net.minecraft.world.level.GameType.SURVIVAL);
+        check(f.player.gameMode.destroyBlock(f.pos),"survival break failed");
+        var dropped=f.level.getEntitiesOfClass(ItemEntity.class,bounds);
+        check(dropped.size()==1,"survival did not drop exactly one generic block");
+        var stack=dropped.get(0).getItem();
+        var plain=new ItemStack(block,63);
+        check(ItemStack.isSameItemSameTags(stack,plain)&&stack.getMaxStackSize()==64,
+            "survival made a tagged or unstackable generic block");
+        var chest=new net.minecraft.world.SimpleContainer(1);
+        chest.setItem(0,plain);
+        check(chest.addItem(stack.copy()).isEmpty()&&chest.getItem(0).getCount()==64,"generic stacks did not merge");
+        check(EmploymentData.get(f.level).station(f.station.id)==null,"survival left an unused station identity");
+        dropped.get(0).discard();
+        f.level.setBlockAndUpdate(f.pos,block.defaultBlockState());
+        var creative=((WorkBlockEntity)f.level.getBlockEntity(f.pos)).station();
+        f.player.gameMode.changeGameModeForPlayer(net.minecraft.world.level.GameType.CREATIVE);
+        check(f.player.gameMode.destroyBlock(f.pos),"creative break failed");
+        check(f.level.getEntitiesOfClass(ItemEntity.class,bounds).isEmpty(),"creative dropped a pristine post");
+        check(EmploymentData.get(f.level).station(creative.id)==null,"creative left an unused identity");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="employment")
     public static void reopened_block_and_worker_menus_share_exact_inventory_and_currency_filter(GameTestHelper h){
         var f=fixture(h,Profession.Sector.INDUSTRIAL);
         check(attempt(f,Profession.FARMER).equals("ok"),"Menu fixture hire failed");

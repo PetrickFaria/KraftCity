@@ -145,7 +145,7 @@ public final class EmploymentVisualCheck {
             var screen=screen(mc);
             var menu=(WorkMenu)mc.player.containerMenu;
             var dismiss=button(screen,"Demitir");
-            check(dismiss!=null&&dismiss.active&&button(screen,"Vincular baú")==null,"Dismissal or automatic discard control missing");
+            check(dismiss!=null&&dismiss.active&&button(screen,"Vincular Baú")!=null,"Dismissal or discard binding control missing");
             check(dismiss.x>=screen.width/2&&dismiss.y<screen.height/2,"Dismiss button is not in the upper right");
             capture(mc,"visual-worker-dismiss.png");
             dismiss.onPress();

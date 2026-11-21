@@ -44,7 +44,7 @@ public final class FarmerVisualCheck {
     private static final BlockPos FORGE_CHEST=POST.offset(4,1,-4);
     private static final BlockPos FORGE_ALIAS=FORGE_CHEST.north(2);
     private static final BlockPos COMPANION_CHEST=POST.offset(-6,1,-5);
-    private static final BlockPos ENDER_ALIAS=POST.offset(-7,1,-6);
+    private static final BlockPos ENDER_ALIAS=POST.offset(-6,1,-4);
     private static net.minecraftforge.items.ItemStackHandler forgeStorage;
     private static final BlockPos CARROTS=POST.offset(-2,1,-1);
     private static final BlockPos POTATOES=POST.offset(2,1,0);
@@ -53,6 +53,7 @@ public final class FarmerVisualCheck {
     private static volatile String progressDetail="",serverFailure;
     private static UUID worker,visitor,pursuer,closingDrop;
     private static double escapeStart;
+    private static net.minecraft.world.phys.Vec3 barrelDeparture;
     private static long sleepObserved;
     private static final List<UUID> companions=new ArrayList<>();
     private static boolean canePlanted,sawLooseCane,sawJump,seenPhysicalDeposit,visitorLeft;
@@ -117,17 +118,13 @@ public final class FarmerVisualCheck {
         stage=1;
     }
 
-    private static void bindEnder(ServerPlayer player,BlockPos chest) {
+    private static void bindDiscard(ServerPlayer player,EmploymentData.Station station,BlockPos chest) {
         var hand=net.minecraft.world.InteractionHand.MAIN_HAND;
-        var held=player.getMainHandItem().copy();
-        boolean crouched=player.isShiftKeyDown();
-        player.setShiftKeyDown(true);
-        player.setItemInHand(hand,new ItemStack(Items.ENDER_EYE));
+        br.com.kraftcity.logistics.DiscardBinding.begin(player,station);
         var event=net.minecraftforge.common.ForgeHooks.onRightClickBlock(player,hand,chest,
             new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(chest),Direction.UP,chest,false));
-        player.setItemInHand(hand,held);
-        player.setShiftKeyDown(crouched);
-        check(event.isCanceled(),"explicit Ender consent did not register");
+        check(event.isCanceled()&&br.com.kraftcity.logistics.DiscardBinding.linked(player.getLevel(),station),
+            "explicit discard binding did not register at "+chest);
     }
 
     private static void progress(ServerPlayer p){
@@ -238,28 +235,44 @@ public final class FarmerVisualCheck {
                     forgeStorage.setStackInSlot(0,new ItemStack(Items.CARROT,62));
                     job.setItem(0,new ItemStack(Items.CARROT,15));
                     job.setItem(1,new ItemStack(Items.STICK,2));
+                    bindDiscard(p,job,FORGE_CHEST);
                 }else{
                     l.setBlock(COMPANION_CHEST,Blocks.ENDER_CHEST.defaultBlockState(),3);
                     var offered=new int[27];offered[0]=3;
                     job.setItem(0,new ItemStack(Items.COBBLESTONE,3));
                     check(!br.com.kraftcity.logistics.DiscardChests.accepts(l,job,companion,COMPANION_CHEST,offered),
                         "personal Ender chest accepted items before consent");
-                    bindEnder(p,COMPANION_CHEST);
+                    bindDiscard(p,job,COMPANION_CHEST);
                     l.setBlock(ENDER_ALIAS,Blocks.ENDER_CHEST.defaultBlockState(),3);
-                    bindEnder(p,ENDER_ALIAS);
+                    bindDiscard(p,s,ENDER_ALIAS);
+                    var mainOffer=new int[27];
+                    int sampleSlot=EmploymentData.COMMON-1;
+                    s.setItem(sampleSlot,new ItemStack(Items.COBBLESTONE,3));
+                    mainOffer[sampleSlot]=3;
                     var ender=p.getEnderChestInventory();
                     for(int slot=1;slot<ender.getContainerSize();slot++)ender.setItem(slot,new ItemStack(Items.DEEPSLATE,64));
                     ender.setItem(0,new ItemStack(Items.COBBLESTONE,62));
                     check(br.com.kraftcity.logistics.DiscardChests.accepts(l,job,companion,COMPANION_CHEST,offered)
-                        &&br.com.kraftcity.logistics.DiscardChests.accepts(l,job,companion,ENDER_ALIAS,offered),
+                        &&br.com.kraftcity.logistics.DiscardChests.accepts(l,s,v,ENDER_ALIAS,mainOffer),
                         "authorized Ender chests did not share the owner's inventory");
+                    br.com.kraftcity.logistics.DiscardBinding.unlink(p,s);
+                    check(!br.com.kraftcity.logistics.DiscardChests.accepts(l,s,v,ENDER_ALIAS,mainOffer),
+                        "an unlinked farmer retained access to the personal inventory");
+                    s.setItem(sampleSlot,ItemStack.EMPTY);
                 }
                 var head=BED.south(i==0?-2:2);
                 var state=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
                 l.setBlock(head.west(),state.setValue(BedBlock.PART,BedPart.FOOT),3);
                 l.setBlock(head,state.setValue(BedBlock.PART,BedPart.HEAD),3);
             }
-            s.industry.putLong("discard",CHEST.asLong());
+            var far=POST.east(8).above();
+            l.setBlock(far,Blocks.BARREL.defaultBlockState(),3);
+            br.com.kraftcity.logistics.DiscardBinding.begin(p,s);
+            net.minecraftforge.common.ForgeHooks.onRightClickBlock(p,net.minecraft.world.InteractionHand.MAIN_HAND,far,
+                new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(far),Direction.UP,far,false));
+            check(!br.com.kraftcity.logistics.DiscardBinding.linked(l,s),"accepted a barrel six blocks outside the work area");
+            l.removeBlock(far,false);
+            bindDiscard(p,s,CHEST);
             var foot=BED.west();
             var bed=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
             l.setBlock(foot,bed.setValue(BedBlock.PART,BedPart.FOOT),3);
@@ -334,6 +347,10 @@ public final class FarmerVisualCheck {
             s.industry.putUUID("visual_farmer_companion_1",companions.get(1));
             check(v.getSleepingPos().filter(BED::equals).isPresent(),"farmer slept outside its own bed");
             check(seenPhysicalDeposit&&deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding: "+progressDetail+" at designated barrel="+seenPhysicalDeposit);
+            check(barrelDeparture!=null&&v.distanceToSqr(barrelDeparture)>9
+                &&!s.industry.contains("farmer_discard_pos")&&!s.industry.contains("farmer_discard_until"),
+                "farmer did not spontaneously leave the obstructed barrel and release discard navigation");
+            System.out.println("FARMER_BLOCKED_BARREL_DEPARTURE_PASSED");
             check(barrel.countItem(Items.CARROT)==5&&s.countItem(Items.CARROT)==10,"main carrot reserve: barrel="+barrel.countItem(Items.CARROT)+" stock="+s.countItem(Items.CARROT));
             s.industry.putBoolean("visual_farmer_night",true);
             s.industry.putInt("visual_saved_harvest_cursor",s.industry.getInt("zigzag_harvest"));
@@ -381,6 +398,7 @@ public final class FarmerVisualCheck {
     public static void depositProbe(WorkActionEvent event){
         if((stage!=3&&stage!=9)||!event.action.equals("deposit")||!event.position.equals(CHEST)||!event.worker.getUUID().equals(worker))return;
         seenPhysicalDeposit=event.worker.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(CHEST))<=3.5;
+        if(seenPhysicalDeposit)barrelDeparture=event.worker.position();
     }
 
     static boolean tick(Minecraft mc){
@@ -485,6 +503,11 @@ public final class FarmerVisualCheck {
         check(s.industry.getInt("zigzag_harvest")==s.industry.getInt("visual_saved_harvest_cursor")
             &&s.industry.getInt("zigzag_plant")==s.industry.getInt("visual_saved_plant_cursor"),"saved zigzag cursors changed");
         check(((BarrelBlockEntity)l.getBlockEntity(CHEST)).countItem(Items.COBBLESTONE)==6,"saved discard changed");
+        check(br.com.kraftcity.logistics.DiscardBinding.linked(l,s),"barrel binding was lost after restart");
+        for(int i=0;i<2;i++){
+            var job=EmploymentData.get(l).assigned(s.industry.getUUID("visual_farmer_companion_"+i));
+            check(br.com.kraftcity.logistics.DiscardBinding.linked(l,job),"companion discard binding lost after restart");
+        }
         for(var at:ROW)check(l.getBlockState(at).is(Blocks.WHEAT)&&l.getBlockState(at.below()).is(Blocks.FARMLAND),
             "saved crop or soil changed at "+at);
         System.out.println("FARMER_SAME_WORLD_RESTART_PASSED");

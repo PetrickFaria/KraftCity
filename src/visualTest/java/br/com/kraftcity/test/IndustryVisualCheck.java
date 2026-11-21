@@ -20,6 +20,8 @@ import net.minecraft.world.level.block.*;
 /** Six production scenes use the same public server jobs and synchronized menus as real play. */
 public final class IndustryVisualCheck {
     private static boolean farmerSceneDone,blueBoundsCleared;
+    private static int bindingDelay;
+    private static volatile boolean chestSelected;
     private static final Map<Profession,UUID> ids=new EnumMap<>(Profession.class);
     private static void check(boolean value,String message){if(!value)throw new IllegalStateException(message);}
     // Keep the demo workstations away from the generated GameTest grid.
@@ -46,7 +48,7 @@ public final class IndustryVisualCheck {
         l.setBlock(pos,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);var s=station(l,i);s.setItem(31,new ItemStack(Items.EMERALD,10));check(Employment.hire(p,s,v.getUUID(),profession).equals("ok"),"Industry visual hire");ids.put(profession,s.id);
         var target=pos.east();
         switch(profession){
-            case FARMER->{s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,10));s.setItem(27,new ItemStack(IndustrialTools.HOE.get()));s.setItem(30,new ItemStack(Items.WATER_BUCKET));l.setBlock(target,Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(target.above(),Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);s.industry.putInt("cursor",67);}
+            case FARMER->{l.setBlock(pos.south().east(),Blocks.CHEST.defaultBlockState(),3);s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,10));s.setItem(27,new ItemStack(IndustrialTools.HOE.get()));s.setItem(30,new ItemStack(Items.WATER_BUCKET));l.setBlock(target,Blocks.FARMLAND.defaultBlockState(),3);l.setBlock(target.above(),Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);s.industry.putInt("cursor",67);}
             case BUTCHER->{s.setItem(27,new ItemStack(IndustrialTools.AXE.get()));var old=animal(l,s,EntityType.COW);old.getPersistentData().putLong("KCIndustryBorn",-1000000);animal(l,s,EntityType.COW);animal(l,s,EntityType.COW);}
             case SHEPHERD->{s.setItem(27,new ItemStack(IndustrialTools.SHEARS.get(3).get()));animal(l,s,EntityType.SHEEP);}
             case FISHERMAN->{s.setItem(27,new ItemStack(IndustrialTools.RODS.get(3).get()));var water=pos.offset(0,-2,0);for(BlockPos at:BlockPos.betweenClosed(water.offset(-1,-1,-1),water.offset(1,1,1)))l.setBlock(at,Blocks.WATER.defaultBlockState(),3);s.industry.putLong("water",water.asLong());s.industry.putInt("fish_elapsed",IndustrialRules.fishingTicks(EmploymentConfig.FISH_TICKS.get(),1));}
@@ -83,9 +85,65 @@ public final class IndustryVisualCheck {
     private static void toggle(Minecraft mc){
         var screen=(WorkScreen)mc.screen;var b=screen.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.Button).map(c->(net.minecraft.client.gui.components.Button)c).filter(c->c.getMessage().getString().equals("Limites")).findFirst().orElseThrow();b.onPress();
     }
+    private static void press(Minecraft mc,String label){
+        var button=mc.screen.children().stream().filter(net.minecraft.client.gui.components.Button.class::isInstance)
+            .map(net.minecraft.client.gui.components.Button.class::cast)
+            .filter(b->b.getMessage().getString().equals(label)).findFirst().orElseThrow();
+        button.onPress();
+    }
+
+    private static boolean bindingFlow(Minecraft mc,int phase){
+        var level=mc.getSingleplayerServer().overworld();
+        var playerId=mc.player.getUUID();
+        var target=post(0).south().east();
+        if(phase==6){
+            if(!(mc.screen instanceof WorkScreen)
+                ||!(mc.player.containerMenu instanceof WorkMenu menu)||menu.snapshot==null)return false;
+            press(mc,"Vincular Baú");
+        }
+        if(phase==11){
+            if(mc.screen!=null)return false;
+            mc.gameMode.useItemOn(mc.player,net.minecraft.world.InteractionHand.MAIN_HAND,
+                new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(target),
+                    net.minecraft.core.Direction.UP,target,false));
+        }
+        if(phase==22){
+            if(!chestSelected){
+                level.getServer().execute(()->{
+                    var s=station(level,0);
+                    if(!chestSelected&&br.com.kraftcity.logistics.DiscardBinding.linked(level,s)){
+                        chestSelected=true;
+                        WorkBlock.open(level.getServer().getPlayerList().getPlayer(playerId),s);
+                    }
+                });
+                return false;
+            }
+            if(!(mc.screen instanceof WorkScreen)
+                ||!(mc.player.containerMenu instanceof WorkMenu menu)||menu.snapshot==null)return false;
+            check(menu.snapshot.discardLinked(),"Bound chest was missing from the menu");
+            press(mc,"Vinculado");
+            check(mc.screen instanceof net.minecraft.client.gui.screens.ConfirmScreen,"No unlink confirmation");
+            press(mc,"Cancelar");
+            check(menu.snapshot.discardLinked(),"Cancel changed the link");
+        }
+        if(phase==25){
+            press(mc,"Vinculado");
+            press(mc,"Desvincular");
+        }
+        if(phase==32){
+            if(((WorkMenu)mc.player.containerMenu).snapshot.discardLinked())return false;
+            System.out.println("FARMER_DISCARD_BINDING_GUI_PASSED");
+        }
+        return true;
+    }
+
     public static void tick(Minecraft mc,int ticks){
-        int elapsed=ticks-1120;if(elapsed<0)return;int i=elapsed/70,phase=elapsed%70;
+        int elapsed=ticks-1120-bindingDelay;if(elapsed<0)return;int i=elapsed/70,phase=elapsed%70;
         if(i<6){
+            if(i==0&&!bindingFlow(mc,phase)){
+                check(++bindingDelay<160,"Discard binding UI timed out during phase "+phase);
+                return;
+            }
             if(phase==0)mc.getSingleplayerServer().execute(()->setup(mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()),i));
             if(phase==45){check(mc.screen instanceof WorkScreen,"Industry menu missing");check(mc.player.containerMenu instanceof WorkMenu m&&m.slots.size()==(i==0?67:68)&&m.snapshot!=null,"Industry menu not synchronized");}
             if(i==0&&phase==35){

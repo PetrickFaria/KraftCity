@@ -103,12 +103,12 @@ public final class FarmerLogistics {
             route=new Route(route.target,route.endpoint,remaining(v),now,route.retries);
             ROUTES.put(v,route);
         }
-        if(same&&route.endpoint.equals(v.getNavigation().getTargetPos())&&!v.getNavigation().isDone()&&now-route.progress<45&&permitted.test(v.getNavigation().getPath()))return 0;
+        if(same&&route.endpoint.equals(v.getNavigation().getTargetPos())&&!v.getNavigation().isDone()&&now-route.progress<(v.horizontalCollision?12:45)&&permitted.test(v.getNavigation().getPath()))return 0;
         int retries=same?route.retries+1:0;
         BlockPos avoid=same&&accuracy>0?route.endpoint:null;
         v.getNavigation().stop();
-        var path=retries<=2?workPath(l,v,pos,accuracy,avoid):null;
-        if(path==null&&avoid!=null&&retries<=2)path=workPath(l,v,pos,accuracy,null);
+        var path=retries<=2?workPath(l,v,pos,accuracy,avoid,permitted):null;
+        if(path==null&&avoid!=null&&retries<=2)path=workPath(l,v,pos,accuracy,null,permitted);
         if(path!=null&&path.canReach()&&permitted.test(path)&&v.getNavigation().moveTo(path,.8)){
             ROUTES.put(v,new Route(pos.immutable(),path.getTarget(),remaining(v),now,retries));
             return 0;
@@ -166,7 +166,7 @@ public final class FarmerLogistics {
             &&level.getBlockState(pos.below()).isFaceSturdy(level,pos.below(),Direction.UP);
     }
 
-    private static Path workPath(ServerLevel l,Villager v,BlockPos target,int accuracy,BlockPos avoid){
+    private static Path workPath(ServerLevel l,Villager v,BlockPos target,int accuracy,BlockPos avoid,java.util.function.Predicate<Path> permitted){
         if(accuracy==0){
             var exact=v.getNavigation().createPath(target,0);
             return exact!=null&&target.equals(exact.getTarget())?exact:null;
@@ -183,7 +183,7 @@ public final class FarmerLogistics {
         for(var at:options){
             if(at.equals(avoid))continue;
             var path=v.getNavigation().createPath(at,0);
-            if(path!=null&&path.canReach()&&at.equals(path.getTarget()))return path;
+            if(path!=null&&path.canReach()&&at.equals(path.getTarget())&&permitted.test(path))return path;
         }
         return null;
     }
@@ -473,7 +473,7 @@ public final class FarmerLogistics {
 
     private static int approachDiscard(ServerLevel level,Villager worker,BlockPos pos,EmploymentData.Station station,int[] offers){
         var be=DiscardChests.capability(level,pos);
-        if(be==null)return approach(level,worker,pos,1.65,1);
+        if(be==null)return approach(level,worker,pos,1.65,1,path->safeDiscardPath(level,worker,path));
         var current=DiscardChests.accessibleHandler(be,worker);
         if(current!=null&&(station==null||DiscardChests.accepts(current,station,offers))
             &&worker.distanceToSqr(Vec3.atCenterOf(pos))<=2.72&&visible(level,worker,Vec3.atCenterOf(pos),pos))return 1;
@@ -498,7 +498,7 @@ public final class FarmerLogistics {
         }
         access.sort(Comparator.comparingDouble(at->worker.distanceToSqr(Vec3.atBottomCenterOf(at))));
         for(var feet:access){
-            int travel=approachCell(level,worker,feet,false);
+            int travel=approach(level,worker,feet,.68,0,path->safeDiscardPath(level,worker,path));
             if(travel==0)return 0;
             var handler=DiscardChests.accessibleHandler(be,worker);
             if(travel==1&&handler!=null&&(station==null||DiscardChests.accepts(handler,station,offers))
@@ -507,9 +507,25 @@ public final class FarmerLogistics {
         return -1;
     }
 
+    private static boolean safeDiscardPath(ServerLevel level,Villager worker,Path path){
+        // Farmland's walking surface is one sixteenth below the normal path node height.
+        BlockPos previous=new BlockPos(worker.position().add(0,.125,0));
+        for(int i=path.getNextNodeIndex();i<path.getNodeCount();i++){
+            var next=path.getNode(i).asBlockPos();
+            if(!level.hasChunkAt(next))return false;
+            if(next.getY()!=previous.getY()&&(farmlandAt(level,previous)||farmlandAt(level,next)))return false;
+            previous=next;
+        }
+        return true;
+    }
+
+    private static boolean farmlandAt(ServerLevel level,BlockPos feet){
+        return level.getBlockState(feet.below()).is(net.minecraft.world.level.block.Blocks.FARMLAND);
+    }
+
     static void depositDirect(ServerLevel level,EmploymentData.Station station,Villager worker){
         var items=offers(station);
-        for(var pos:DiscardChests.destinations(level,station,IndustrialWork.area(level,station))){
+        for(var pos:br.com.kraftcity.logistics.DiscardBinding.destinations(level,station,IndustrialWork.area(level,station))){
             if(!DiscardChests.hasOffers(items))break;
             DiscardChests.deposit(level,station,worker,pos,items,"deposit");
         }
@@ -601,7 +617,7 @@ public final class FarmerLogistics {
     private static boolean seekDiscard(ServerLevel level,EmploymentData.Station station,Villager worker,Set<Long> tried){
         var items=offers(station);
         if(!DiscardChests.hasOffers(items))return false;
-        var destinations=new ArrayList<>(DiscardChests.destinations(level,station,IndustrialWork.area(level,station)));
+        var destinations=new ArrayList<>(br.com.kraftcity.logistics.DiscardBinding.destinations(level,station,IndustrialWork.area(level,station)));
         if(station.industry.contains("farmer_discard_pos")){
             var previous=BlockPos.of(station.industry.getLong("farmer_discard_pos"));
             if(destinations.remove(previous))destinations.add(0,previous);
