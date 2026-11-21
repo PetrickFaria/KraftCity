@@ -917,6 +917,33 @@ public final class IndustryGameTests {
         }).thenSucceed();
     }
 
+    @GameTest(template="empty",timeoutTicks=550,batch="farmer_blocked_home_recovery")
+    public static void stranded_farmer_uses_safe_home_recovery_only_after_timeout(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        var homes=ResidenceData.get(f.l);
+        var home=homes.owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var bed=placeBed(f.l,home.east(2).above());
+        var feet=f.p.above();
+        for(var dir:Direction.Plane.HORIZONTAL){
+            f.l.setBlockAndUpdate(feet.relative(dir),Blocks.STONE.defaultBlockState());
+            f.l.setBlockAndUpdate(feet.relative(dir).above(),Blocks.STONE.defaultBlockState());
+        }
+        f.l.setBlockAndUpdate(feet.above(2),Blocks.STONE.defaultBlockState());
+        var start=Vec3.atBottomCenterOf(feet);
+        f.v.setPos(start.x,start.y,start.z);
+        f.v.setNoAi(false);
+        f.s.setItem(EmploymentData.TOOL,new ItemStack(Items.IRON_HOE));
+        f.l.setDayTime(13000);
+        h.startSequence().thenExecuteFor(285,()->{
+            check(f.v.position().distanceToSqr(start)<4,"Worker recovered before the residential timeout");
+        }).thenWaitUntil(()->{
+            check(f.v.getSleepingPos().filter(bed::equals).isPresent(),"Waiting for safe residential recovery from closed cage");
+        }).thenExecute(()->check(EmploymentData.get(f.l).assigned(f.v.getUUID())==f.s
+            &&f.s.getItem(EmploymentData.TOOL).is(Items.IRON_HOE)&&homes.owner(f.v.getUUID()).pos.equals(home),
+            "Emergency recovery changed profession, home or tools")).thenSucceed();
+    }
+
     @GameTest(template="empty",timeoutTicks=850,batch="farmer_long_home_return")
     public static void farmer_discards_and_walks_twenty_blocks_home(GameTestHelper h){verifyLongHomeReturn(h,20,32);}
 

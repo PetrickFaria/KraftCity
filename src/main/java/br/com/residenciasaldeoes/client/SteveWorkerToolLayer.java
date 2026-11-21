@@ -13,6 +13,8 @@ public final class SteveWorkerToolLayer extends RenderLayer<Villager,SteveVillag
     @Override
     public void render(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,float stride,float amount,
                        float partial,float age,float yaw,float pitch){
-        BuilderArmsLayer.renderTool(pose,buffers,light,worker,getParentModel().rightArm);
+        if(br.com.kraftcity.employment.client.WorkerPose.active(worker))
+            BuilderArmsLayer.renderTool(pose,buffers,light,worker,getParentModel().rightArm);
+        else BuilderArmsLayer.renderBack(pose,buffers,light,worker,getParentModel().body);
     }
 }

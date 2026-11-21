@@ -1216,9 +1216,13 @@ public final class ResidenceGameTests {
             if(resident)check(ResidenceData.get(h.getLevel()).link(h.getLevel(),h.absolutePos(new BlockPos(12,2,8)),target).equals("ok"),"Resident death fixture failed to link");
             var source=cause==0?net.minecraft.world.damagesource.DamageSource.GENERIC:
                     cause==1?net.minecraft.world.damagesource.DamageSource.playerAttack(fake):net.minecraft.world.damagesource.DamageSource.mobAttack(creature);
-            target.hurt(source,1000F);
-            var spawned=h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
-                    new net.minecraft.world.phys.AABB(h.absolutePos(pos)).inflate(2),item->item.getItem().is(ResidenciasDosAldeoes.EMERALD_FRAGMENT.get()));
+            var area=new net.minecraft.world.phys.AABB(h.absolutePos(pos)).inflate(2);
+            var previous=new java.util.HashSet<java.util.UUID>();
+            h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,area)
+                .forEach(item->previous.add(item.getUUID()));
+            check(target.hurt(source,1000F),"Configured death source did not damage the villager");
+            var spawned=h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,area,
+                item->!previous.contains(item.getUUID())&&item.getItem().is(ResidenciasDosAldeoes.EMERALD_FRAGMENT.get()));
             check(spawned.size()==1&&spawned.get(0).getItem().getCount()>=1&&spawned.get(0).getItem().getCount()<=2,
                     "Invalid actual death drops: resident="+resident+" cause="+cause);
         }

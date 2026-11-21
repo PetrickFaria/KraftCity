@@ -154,8 +154,8 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         blit(pose,x,topPos+XP_Y,0,64,XP_WIDTH,5);
         int progress=farmerXpWidth();
         if(progress>0){
-            fill(pose,x,topPos+XP_Y+1,x+progress,topPos+XP_Y+5,0xFF007FAD);
-            fill(pose,x,topPos+XP_Y+1,x+progress,topPos+XP_Y+3,0xFF35D6F3);
+            RenderSystem.setShaderTexture(0,WorkerTextures.experience());
+            blit(pose,x,topPos+XP_Y,0,69,progress,5);
         }
     }
     @Override protected void renderLabels(PoseStack pose,int mx,int my){

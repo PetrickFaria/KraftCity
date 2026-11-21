@@ -63,6 +63,38 @@ public final class EmploymentVisualCheck {
             check((int)bar.invoke(screen)==expectedWidth,"Farmer XP texture width");
         }catch(ReflectiveOperationException e){throw new IllegalStateException(e);}
     }
+    private static void checkWorkerTextures(Minecraft mc){
+        var icons=br.com.kraftcity.employment.client.WorkerTextures.ICONS;
+        var generated=br.com.kraftcity.employment.client.WorkerTextures.experience();
+        check(!generated.equals(icons),"Cyan XP texture failed to load");
+        var tinted=((net.minecraft.client.renderer.texture.DynamicTexture)mc.getTextureManager().getTexture(generated)).getPixels();
+        try(var input=mc.getResourceManager().open(icons);
+            var original=com.mojang.blaze3d.platform.NativeImage.read(input)){
+            check(tinted.getWidth()==original.getWidth()&&tinted.getHeight()==original.getHeight(),"XP atlas geometry changed");
+            int altered=0;
+            for(int y=0;y<original.getHeight();y++)for(int x=0;x<original.getWidth();x++){
+                int before=original.getPixelRGBA(x,y),after=tinted.getPixelRGBA(x,y);
+                if(before==after)continue;
+                check(x<182&&y>=69&&y<74&&before>>>24==after>>>24,"XP frame, background or alpha was modified");
+                int brightness=(before>>>8)&255;
+                check((after&255)==0&&((after>>>16)&255)==brightness,"XP source shading was modified");
+                altered++;
+            }
+            check(altered>0,"The profession XP fill retained the old color");
+        }catch(java.io.IOException ex){throw new IllegalStateException(ex);}
+        var skin=new net.minecraft.resources.ResourceLocation("textures/entity/villager/villager.png");
+        var arms=br.com.kraftcity.employment.client.WorkerTextures.arms(skin,br.com.kraftcity.employment.client.WorkerTextures.DEFAULT_ROBE);
+        var pixels=((net.minecraft.client.renderer.texture.DynamicTexture)mc.getTextureManager().getTexture(arms)).getPixels();
+        for(int y=22;y<38;y++)for(int x=44;x<60;x++)
+            check(pixels.getPixelRGBA(x,y)>>>24==255,"An arm UV pixel is translucent");
+        try(var input=mc.getResourceManager().open(br.com.kraftcity.employment.client.WorkerTextures.DEFAULT_ROBE);
+            var robe=com.mojang.blaze3d.platform.NativeImage.read(input)){
+            check(pixels.getPixelRGBA(44,30)==robe.getPixelRGBA(24,29),"Default sleeve did not use the brown robe");
+        }catch(java.io.IOException ex){throw new IllegalStateException(ex);}
+        check(pixels.getPixelRGBA(44,30)!=pixels.getPixelRGBA(44,35),"Sleeve and hand did not use distinct texels");
+        System.out.println("PROFESSIONAL_XP_SHADING_AND_OPAQUE_SLEEVES_PASSED");
+    }
+
     private static void capture(Minecraft mc,String name){Screenshot.grab(new File("../build"),name,mc.getMainRenderTarget(),message->{});}
     public static void tick(Minecraft mc,int ticks){
         var server=mc.getSingleplayerServer();UUID playerId=mc.player.getUUID();
@@ -131,6 +163,7 @@ public final class EmploymentVisualCheck {
             System.out.println("EMPLOYMENT_INVENTORY_SHARED_PASSED");
         });
         if(ticks==887){
+            checkWorkerTextures(mc);
             checkFarmerHeader(screen(mc),"… (Fazendeiro) - Lv. 4",174);
             capture(mc,"visual-farmer-long-name.png");
             server.execute(()->br.com.kraftcity.industry.IndustrialRules.progress(server.overworld(),station(server.overworld(),POST)));

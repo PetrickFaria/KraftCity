@@ -52,7 +52,8 @@ public abstract class ResidentSteveModelMixin {
         for (RenderLayer layer : layers) {
             if (layer instanceof VillagerSkinLayer) compatibleLayers.add(layer);
         }
-        if(br.com.kraftcity.employment.client.WorkerPose.active(villager)){
+        if(br.com.kraftcity.employment.client.WorkerPose.active(villager)
+            ||!br.com.kraftcity.employment.client.WorkerPose.stowed(villager).isEmpty()){
             if(kraftcity$steveTool==null)kraftcity$steveTool=new br.com.residenciasaldeoes.client.SteveWorkerToolLayer(
                 (net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this);
             compatibleLayers.add(kraftcity$steveTool);

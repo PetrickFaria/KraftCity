@@ -24,6 +24,7 @@
     "ResidentialDoorWeatherMixin",
     "WorkerAcquirePoiMixin",
     "IndustrialNavigationMixin",
+    "ResidentSleepRecoveryMixin",
     "IndustrialIrrigationMixin",
     "DiscardChestLidMixin",
     "DiscardEnderLidMixin",

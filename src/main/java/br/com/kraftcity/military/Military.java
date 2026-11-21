@@ -80,10 +80,10 @@ public final class Military {
         if(!Employment.valid(l,v.getUUID())||!l.hasChunkAt(s.pos)&&mode(s)!=Mode.FOLLOW)return;bind(s,v);stats(l,v);
         if(!onDuty(l,s)){if(!s.military.getBoolean("resting"))v.getNavigation().stop();s.military.putBoolean("resting",true);s.military.remove("target");v.stopUsingItem();
             if(!br.com.residenciasaldeoes.VillagerResidenceEvents.ownsWorkerRest(v))sleep(l,s,v);
-            heal(l,s,v);return;
+            heal(l,v);return;
         }
         s.military.remove("resting");
-        if(v.isSleeping()){v.stopSleeping();v.getNavigation().stop();}heal(l,s,v);
+        if(v.isSleeping()){v.stopSleeping();v.getNavigation().stop();}heal(l,v);
         var t=target(l,s,v);
         if(t!=null){s.military.putUUID("target",t.getUUID());combat(l,s,v,t);s.setChanged();return;}
         s.military.remove("target");v.stopUsingItem();
@@ -99,7 +99,11 @@ public final class Military {
         else if(v.tickCount%80==0||v.getNavigation().isDone()){int dx=v.getRandom().nextInt(21)-10,dz=v.getRandom().nextInt(21)-10;var p=s.pos.offset(dx,0,dz);if(dx*dx+dz*dz<=225&&l.hasChunkAt(p))v.getNavigation().moveTo(p.getX()+.5,p.getY()+1,p.getZ()+.5,.65);}
         s.setChanged();
     }
-    private static void heal(ServerLevel l,EmploymentData.Station s,Villager v){int interval=Math.max(1,MilitaryModule.HEAL_TICKS.get()/(v.isSleeping()?2:1));if(v.tickCount%interval==0&&v.getHealth()<v.getMaxHealth())v.heal(1);}
+    private static void heal(ServerLevel level,Villager villager){
+        if(villager.isSleeping()&&br.com.residenciasaldeoes.VillagerResidenceEvents.usesResidentialSleepHealing(level,villager))return;
+        int interval=Math.max(1,MilitaryModule.HEAL_TICKS.get()/(villager.isSleeping()?2:1));
+        if(villager.tickCount%interval==0&&villager.getHealth()<villager.getMaxHealth())villager.heal(1);
+    }
     private static void sleep(ServerLevel l,EmploymentData.Station s,Villager v){
         if(v.isSleeping())return;var data=ResidenceData.get(l);var home=data.owner(v.getUUID());if(home==null||!l.hasChunkAt(home.pos))return;
         BlockPos bed=data.bedClaim(v.getUUID())==null?null:data.bedClaim(v.getUUID()).bed();

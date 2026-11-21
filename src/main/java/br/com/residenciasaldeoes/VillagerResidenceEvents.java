@@ -30,6 +30,7 @@ import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingDropsEvent;
 import net.minecraftforge.event.CommandEvent;
@@ -61,6 +62,11 @@ public class VillagerResidenceEvents {
     private static final String RETURN_TARGET_X="residenciasaldeoes_home_return_target_x";
     private static final String RETURN_TARGET_Y="residenciasaldeoes_home_return_target_y";
     private static final String RETURN_TARGET_Z="residenciasaldeoes_home_return_target_z";
+    private record ReturnProgress(String home,Vec3 position,long movedAt,Set<BlockPos> visited) {}
+    private static final Map<Villager,ReturnProgress> RETURN_PROGRESS=new java.util.WeakHashMap<>();
+    private record SleepProgress(BlockPos bed,int ticks) {}
+    private static final Map<Villager,SleepProgress> SLEEP_PROGRESS=new java.util.WeakHashMap<>();
+
     private static final long RETURN_TIMEOUT_TICKS=300L;
     private static final long THREAT_RETURN_TIMEOUT_TICKS=150L;
     private static final long RETURN_RETRY_TICKS=20L;
@@ -1072,7 +1078,7 @@ public class VillagerResidenceEvents {
         if(!(villager.level instanceof ServerLevel level)||villager.isNoAi()||villager.isTrading()
             ||villager.isPassenger()||br.com.kraftcity.employment.Employment.fleeing(villager))return false;
         long phase=Math.floorMod(level.getDayTime(),DAY_LENGTH);
-        if(phase<NIGHT_START||phase>=NIGHT_END)return false;
+        if((phase<NIGHT_START||phase>=NIGHT_END)&&!level.isThundering())return false;
         var station=br.com.kraftcity.employment.EmploymentData.get(level).assigned(villager.getUUID());
         if(station==null||br.com.kraftcity.military.Military.military(station)
             &&br.com.kraftcity.military.Military.onDuty(level,station))return false;
@@ -1081,8 +1087,56 @@ public class VillagerResidenceEvents {
             &&level.getBlockEntity(home.pos) instanceof ResidentialAnchorBlockEntity;
     }
 
+    static void healDuringSleep(ServerLevel level,Villager villager){
+        var bed=villager.getHealth()<villager.getMaxHealth()?residentialSleepingBed(level,villager):null;
+        if(bed==null){
+            resetSleepProgress(villager);
+            return;
+        }
+        var previous=SLEEP_PROGRESS.get(villager);
+        int ticks=previous!=null&&previous.bed.equals(bed)?previous.ticks+1:1;
+        if(ticks==600){
+            villager.heal(1);
+            resetSleepProgress(villager);
+        }else SLEEP_PROGRESS.put(villager,new SleepProgress(bed,ticks));
+    }
+
+    public static boolean usesResidentialSleepHealing(ServerLevel level,Villager villager){
+        return residentialSleepingBed(level,villager)!=null;
+    }
+
+    private static BlockPos residentialSleepingBed(ServerLevel level,Villager villager){
+        if(!villager.isAlive()||!villager.isSleeping())return null;
+        var bed=villager.getSleepingPos().orElse(null);
+        if(bed==null)return null;
+        var home=ResidenceData.get(level).owner(villager.getUUID());
+        if(home==null||!home.dimension.equals(level.dimension())||!level.hasChunkAt(home.pos)
+            ||!(level.getBlockEntity(home.pos) instanceof ResidentialAnchorBlockEntity)
+            ||!bedInsideHome(level,bed,home))return null;
+        var head=level.getBlockState(bed);
+        if(!head.getValue(BedBlock.OCCUPIED))return null;
+        var foot=bed.relative(head.getValue(BedBlock.FACING).getOpposite());
+        if(!level.hasChunkAt(foot))return null;
+        var end=level.getBlockState(foot);
+        return end.is(head.getBlock())&&end.getValue(BedBlock.PART)==net.minecraft.world.level.block.state.properties.BedPart.FOOT
+            &&end.getValue(BedBlock.FACING)==head.getValue(BedBlock.FACING)?bed:null;
+    }
+
+    public static void resetSleepProgress(Villager villager){
+        SLEEP_PROGRESS.remove(villager);
+    }
+
+    @SubscribeEvent
+    public void clearSleepProgress(net.minecraftforge.event.entity.EntityLeaveLevelEvent event){
+        if(!event.getLevel().isClientSide&&event.getEntity() instanceof Villager villager){
+            resetSleepProgress(villager);
+            RETURN_PROGRESS.remove(villager);
+        }
+    }
+
     @SubscribeEvent public void onVillagerTick(LivingEvent.LivingTickEvent event){
         if(!(event.getEntity() instanceof Villager villager)||!(villager.level instanceof ServerLevel level))return;
+        healDuringSleep(level,villager);
         boolean workerRest=ownsWorkerRest(villager);
         if(br.com.kraftcity.employment.Employment.fleeing(villager)
             ||br.com.kraftcity.military.Military.isSoldier(villager)&&!workerRest)return;
@@ -1154,6 +1208,7 @@ public class VillagerResidenceEvents {
 
         if(!night&&!weather&&!forced){
             clearHomeReturn(entityData);
+            RETURN_PROGRESS.remove(villager);
             clearNightWander(villager,true);
             entityData.remove(NIGHT_DOOR_BED_RETURN);
             if(!employed&&villager.tickCount%10==0)data.releaseBed(villager.getUUID());
@@ -1169,6 +1224,7 @@ public class VillagerResidenceEvents {
         }
 
         if(inside){
+            RETURN_PROGRESS.remove(villager);
             if(workerRest&&entityData.getBoolean(RETURN_ACTIVE)){
                 villager.getNavigation().stop();
                 villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
@@ -1306,10 +1362,28 @@ public class VillagerResidenceEvents {
         }
 
         long returnTimeout=hasNearbyPerceivedThreat(villager)?THREAT_RETURN_TIMEOUT_TICKS:RETURN_TIMEOUT_TICKS;
-        if(!returningFromNightDoor&&elapsed>=returnTimeout&&!workerRest&&target!=null&&isSafeDestination(level,villager,target,home)){
-            villager.getNavigation().stop();villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-            villager.teleportTo(target.getX()+0.5D,target.getY(),target.getZ()+0.5D);
-            clearHomeReturn(tag);return;
+        if(workerRest){
+            elapsed=workerReturnIdle(villager,tag.getString(RETURN_HOME),now);
+            if(elapsed>=RETURN_RETRY_TICKS*2&&now-tag.getLong(RETURN_LAST_ATTEMPT)>=RETURN_RETRY_TICKS){
+                villager.getNavigation().stop();
+                villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                villager.getBrain().eraseMemory(MemoryModuleType.PATH);
+            }
+        }
+        if(!returningFromNightDoor&&elapsed>=returnTimeout&&villager.isAlive()
+            &&(!workerRest||villager.distanceToSqr(Vec3.atCenterOf(home.pos))<=101*101)){
+            BlockPos recovery=target;
+            if(workerRest&&(recovery==null||!isSafeDestination(level,villager,recovery,home)))
+                recovery=findSafeSpot(level,villager,home.pos,home.size);
+            if(recovery!=null&&isSafeDestination(level,villager,recovery,home)){
+                villager.getNavigation().stop();
+                villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                villager.getBrain().eraseMemory(MemoryModuleType.PATH);
+                villager.teleportTo(recovery.getX()+0.5D,recovery.getY(),recovery.getZ()+0.5D);
+                RETURN_PROGRESS.remove(villager);
+                clearHomeReturn(tag);
+                return;
+            }
         }
 
         long last=tag.getLong(RETURN_LAST_ATTEMPT);Path path=villager.getNavigation().getPath();
@@ -1335,6 +1409,21 @@ public class VillagerResidenceEvents {
             else villager.getNavigation().moveTo(target.getX()+0.5D,target.getY(),target.getZ()+0.5D,speed);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,new WalkTarget(target,(float)speed,0));
         }
+    }
+
+    private static long workerReturnIdle(Villager villager,String home,long now){
+        var previous=RETURN_PROGRESS.get(villager);
+        if(previous==null||!home.equals(previous.home)||now<previous.movedAt){
+            var visited=new HashSet<BlockPos>();
+            visited.add(villager.blockPosition());
+            RETURN_PROGRESS.put(villager,new ReturnProgress(home,villager.position(),now,visited));
+            return 0;
+        }
+        if(villager.position().distanceToSqr(previous.position)>=4&&previous.visited.add(villager.blockPosition())){
+            RETURN_PROGRESS.put(villager,new ReturnProgress(home,villager.position(),now,previous.visited));
+            return 0;
+        }
+        return now-previous.movedAt;
     }
 
     /** Uses the villager's existing nearest-hostile perception, then filters to close, visible undead threats. */

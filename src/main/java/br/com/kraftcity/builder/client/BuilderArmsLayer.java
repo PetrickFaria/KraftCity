@@ -1,6 +1,7 @@
 package br.com.kraftcity.builder.client;
 
 import br.com.kraftcity.employment.client.WorkerPose;
+import br.com.kraftcity.employment.client.WorkerTextures;
 import br.com.residenciasaldeoes.client.VillagerSkinTextures;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Vector3f;
@@ -19,7 +20,7 @@ import net.minecraft.world.item.HoeItem;
 
 public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<Villager>> {
     private final ModelPart root;
-    private static boolean reportedHoe;
+    private static boolean reportedHoe,reportedBack;
 
     public BuilderArmsLayer(RenderLayerParent<Villager,VillagerModel<Villager>> parent){
         super(parent);
@@ -32,8 +33,11 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
 
     @Override
     public void render(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,float stride,float amount,float partial,float age,float yaw,float pitch){
+        if(worker.isInvisible())return;
+        var stowed=WorkerPose.stowed(worker);
+        if(!stowed.isEmpty()&&!worker.isSleeping())renderBack(pose,buffers,light,worker,getParentModel().root().getChild("body"));
         boolean building=BuilderClient.working(worker);
-        if(!building&&!WorkerPose.active(worker)||worker.isInvisible())return;
+        if(!building&&!WorkerPose.active(worker))return;
         float action=WorkerPose.action(worker,age);
         float cycle=building?Mth.sin(age*.55F)*.8F:WorkerPose.walking(stride,amount)*(1-action);
         var right=root.getChild("right");
@@ -42,8 +46,28 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
         left.xRot=building?-.9F-cycle:-cycle;
         var skin=VillagerSkinTextures.get(worker.getUUID());
         var texture=skin==null?getTextureLocation(worker):skin;
-        root.render(pose,buffers.getBuffer(RenderType.entityTranslucent(texture)),light,OverlayTexture.NO_OVERLAY,1,1,1,1);
+        var villagerType=net.minecraft.core.Registry.VILLAGER_TYPE.getKey(worker.getVillagerData().getType());
+        var robe=new net.minecraft.resources.ResourceLocation(villagerType.getNamespace(),
+            "textures/entity/villager/type/"+villagerType.getPath()+".png");
+        root.render(pose,buffers.getBuffer(RenderType.entityTranslucent(WorkerTextures.arms(texture,robe))),light,OverlayTexture.NO_OVERLAY,1,1,1,1);
         if(WorkerPose.active(worker))renderTool(pose,buffers,light,worker,right);
+    }
+
+    public static void renderBack(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,ModelPart body){
+        var item=WorkerPose.stowed(worker);
+        if(item.isEmpty()||worker.isSleeping()||worker.isInvisible())return;
+        pose.pushPose();
+        body.translateAndRotate(pose);
+        pose.translate(0,.43,.27);
+        pose.mulPose(Vector3f.YP.rotationDegrees(180));
+        pose.mulPose(Vector3f.ZP.rotationDegrees(32));
+        Minecraft.getInstance().getEntityRenderDispatcher().getItemInHandRenderer().renderItem(worker,item,
+            ItemTransforms.TransformType.THIRD_PERSON_RIGHT_HAND,false,pose,buffers,light);
+        pose.popPose();
+        if(Boolean.getBoolean("residencias.visualCheck")&&!reportedBack){
+            reportedBack=true;
+            System.out.println("WORKER_STOWED_TOOL_RENDERED");
+        }
     }
 
     public static void renderTool(PoseStack pose,MultiBufferSource buffers,int light,Villager worker,ModelPart arm){
@@ -55,10 +79,9 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
         pose.mulPose(Vector3f.XP.rotationDegrees(-90));
         pose.mulPose(Vector3f.YP.rotationDegrees(180));
         if(item.getItem() instanceof HoeItem&&item.hasTag()&&item.getTag().getBoolean("KCFarmerDisplay")){
-            pose.scale(2,2,2);
             if(Boolean.getBoolean("residencias.visualCheck")&&!reportedHoe){
                 reportedHoe=true;
-                System.out.println("FARMER_HELD_HOE_RENDERED_AT_DOUBLE_SCALE");
+                System.out.println("FARMER_HELD_HOE_RENDERED_AT_NORMAL_SCALE");
             }
         }
         Minecraft.getInstance().getEntityRenderDispatcher().getItemInHandRenderer().renderItem(worker,item,

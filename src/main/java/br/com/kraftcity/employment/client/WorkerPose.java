@@ -7,21 +7,32 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.item.ItemStack;
 
 public final class WorkerPose {
-    private record Activity(boolean farmer,long expires) {}
+    private record Activity(boolean farmer,boolean working,ItemStack stowed,long expires) {}
     private static final Map<Villager,Activity> ACTIVE=new WeakHashMap<>();
 
-    public static void receive(int id,UUID identity,boolean farmer){
+    public static void receive(int id,UUID identity,boolean farmer,boolean working,ItemStack stowed){
         var level=Minecraft.getInstance().level;
         if(level!=null&&level.getEntity(id) instanceof Villager worker&&identity.equals(worker.getUUID()))
-            ACTIVE.put(worker,new Activity(farmer,level.getGameTime()+18));
+            ACTIVE.put(worker,new Activity(farmer,working,stowed,level.getGameTime()+18));
     }
 
     public static boolean active(Entity entity){
         if(!(entity instanceof Villager worker)||worker.isSleeping()||worker.isPassenger())return false;
+        var state=current(worker);
+        return state!=null&&state.working;
+    }
+
+    private static Activity current(Villager worker){
         var state=ACTIVE.get(worker);
-        return state!=null&&state.expires>=worker.level.getGameTime();
+        return state!=null&&state.expires>=worker.level.getGameTime()?state:null;
+    }
+
+    public static ItemStack stowed(Villager worker){
+        var state=current(worker);
+        return state!=null&&!state.working?state.stowed:ItemStack.EMPTY;
     }
 
     public static float action(Villager worker,float age){

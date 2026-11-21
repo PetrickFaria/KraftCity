@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.item.*;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
@@ -48,18 +49,33 @@ public final class EmploymentEvents {
         if(server.getTickCount()%10==0)for(var s:EmploymentData.get(server.overworld()).stations()){
             if(!s.active||s.worker==null||s.profession==null)continue;
             var level=server.getLevel(s.dimension);
-            if(level==null||!(level.getEntity(s.worker) instanceof Villager worker)||worker.isSleeping()
-                ||Employment.fleeing(worker)||worker.getTarget()!=null||worker.isUsingItem())continue;
+            if(level==null||!(level.getEntity(s.worker) instanceof Villager worker))continue;
+            boolean interrupted=worker.isSleeping()||Employment.fleeing(worker)||worker.getTarget()!=null||worker.isUsingItem();
             boolean working=s.sector==Profession.Sector.MILITARY
                 ?br.com.kraftcity.military.Military.onDuty(level,s)
                 :br.com.kraftcity.industry.IndustrialWork.day(level)&&!level.isThundering()
                     ||s.profession==Profession.FARMER&&br.com.kraftcity.industry.FarmerLogistics.ending(worker);
-            if(working)WorkNetwork.CHANNEL.send(net.minecraftforge.network.PacketDistributor.TRACKING_ENTITY.with(()->worker),
-                new WorkNetwork.Activity(worker.getId(),worker.getUUID(),s.profession==Profession.FARMER));
+            ItemStack stowed=worker.isSleeping()||!interrupted&&!working?restingTool(s,worker):ItemStack.EMPTY;
+            WorkNetwork.CHANNEL.send(net.minecraftforge.network.PacketDistributor.TRACKING_ENTITY.with(()->worker),
+                new WorkNetwork.Activity(worker.getId(),worker.getUUID(),s.profession==Profession.FARMER,working&&!interrupted,stowed));
         }
         if(server.getTickCount()%20!=0)return;
         for(var s:EmploymentData.get(server.overworld()).stations())Employment.reconcile(server.overworld(),s);
     }
+    private static ItemStack restingTool(EmploymentData.Station station,Villager worker){
+        ItemStack stack=switch(station.sector){
+            case INDUSTRIAL->station.getItem(EmploymentData.TOOL);
+            case MILITARY->station.equipment.getItem(0);
+            default->worker.getMainHandItem();
+        };
+        var item=stack.getItem();
+        if(stack.isEmpty()||!(item instanceof TieredItem||item instanceof ShearsItem||item instanceof FishingRodItem
+            ||item instanceof ProjectileWeaponItem||item instanceof TridentItem))return ItemStack.EMPTY;
+        var view=stack.copy();
+        view.setCount(1);
+        return view;
+    }
+
     @SubscribeEvent(priority=EventPriority.HIGH) public void interact(PlayerInteractEvent.EntityInteract event){
         if(!(event.getEntity() instanceof ServerPlayer player)||!(event.getTarget() instanceof Villager v)||event.getHand()!=InteractionHand.MAIN_HAND)return;
         var data=player.getPersistentData();if(data.getBoolean("residenciasaldeoes_register")||data.getBoolean("residenciasaldeoes_unlink"))return;

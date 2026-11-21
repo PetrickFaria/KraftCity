@@ -20,7 +20,10 @@ public abstract class FarmerHoeLayerMixin {
         at=@At("HEAD"),cancellable=true)
     private void kraftcity$useActiveWorkerArm(PoseStack pose,MultiBufferSource buffers,int light,LivingEntity entity,
                                            float limb,float speed,float partial,float age,float yaw,float pitch,CallbackInfo ci){
-        if(br.com.kraftcity.employment.client.WorkerPose.active(entity))ci.cancel();
+        if(br.com.kraftcity.employment.client.WorkerPose.active(entity)
+            ||entity instanceof Villager worker&&(!br.com.kraftcity.employment.client.WorkerPose.stowed(worker).isEmpty()
+                ||worker.isSleeping()&&worker.getMainHandItem().hasTag()&&worker.getMainHandItem().getTag().getBoolean("KCFarmerDisplay")))
+            ci.cancel();
     }
 
     @Inject(method="render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/entity/LivingEntity;FFFFFF)V",
@@ -32,10 +35,9 @@ public abstract class FarmerHoeLayerMixin {
             pose.translate(.05,0,-.12);
             pose.mulPose(Vector3f.ZP.rotationDegrees(-12));
             pose.mulPose(Vector3f.XP.rotationDegrees(30*(float)Math.sin(Math.PI*entity.getAttackAnim(partial))));
-            pose.scale(2,2,2);
             if(Boolean.getBoolean("residencias.visualCheck")&&!kraftcity$visualHoeSeen){
                 kraftcity$visualHoeSeen=true;
-                System.out.println("FARMER_HELD_HOE_RENDERED_AT_DOUBLE_SCALE");
+                System.out.println("FARMER_HELD_HOE_RENDERED_AT_NORMAL_SCALE");
             }
         }
     }
