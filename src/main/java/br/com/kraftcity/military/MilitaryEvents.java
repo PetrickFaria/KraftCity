@@ -23,6 +23,13 @@ public final class MilitaryEvents {
         if(s!=null&&(!s.dimension.equals(l.dimension())||!s.active))Employment.release(l,z.getUUID());
         if(s!=null&&s.active&&z.getUUID().equals(s.worker)&&s.dimension.equals(l.dimension())){Military.stats(l,z);Military.bind(s,z);}else for(var slot:Military.GEAR)z.setItemSlot(slot,net.minecraft.world.item.ItemStack.EMPTY);
     }
+    @SubscribeEvent(priority=EventPriority.LOWEST)
+    public void bowProjectile(net.minecraftforge.event.entity.EntityJoinLevelEvent event){
+        if(!event.loadedFromDisk()&&event.getLevel() instanceof ServerLevel level
+            &&event.getEntity() instanceof net.minecraft.world.entity.projectile.AbstractArrow arrow
+            &&arrow.getOwner() instanceof Villager soldier&&!MilitaryBow.admit(level,soldier,arrow))event.setCanceled(true);
+    }
+
     @SubscribeEvent public void removed(net.minecraftforge.event.entity.EntityLeaveLevelEvent e){
         if(!(e.getLevel() instanceof ServerLevel l)||!(e.getEntity() instanceof SoldierZombie z)||z.getRemovalReason()==null||!z.getRemovalReason().shouldDestroy())return;
         var s=Military.station(z);

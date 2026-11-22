@@ -208,13 +208,17 @@ public final class Military {
         for(var candidate:l.getEntitiesOfClass(Mob.class,search,mob->mob!=v&&selected(s,mob.getType()))){
             int nextRank=priority(l,s,v,candidate,area);
             if(nextRank==Integer.MAX_VALUE)continue;
-            boolean visible=v.hasLineOfSight(candidate);
-            if(!visible&&(mode!=Mode.FREE||nextRank>2))continue;
+            boolean territorial=mode==Mode.FREE&&nextRank<=2;
+            boolean visible=!territorial&&v.hasLineOfSight(candidate);
+            if(!territorial&&!visible)continue;
             double nextDistance=v.distanceToSqr(candidate);
             if(ranged&&candidate.getUUID().equals(previous))nextDistance=Math.max(0,nextDistance-2);
-            boolean nearbyDuel=ranged&&nextDistance<=36&&distance<=36;
-            if((nearbyDuel?nextDistance<distance:nextRank<rank||nextRank==rank&&nextDistance<distance)
-                &&canEngage(s,v,candidate,area,nextDistance,visible)){
+            boolean local=ranged&&nextDistance<=100;
+            boolean previousLocal=ranged&&distance<=100;
+            boolean better=local||previousLocal
+                ?local&&(!previousLocal||nextDistance<distance)
+                :nextRank<rank||nextRank==rank&&nextDistance<distance;
+            if(better&&(territorial||canEngage(s,v,candidate,area,nextDistance,true))){
                 best=candidate;rank=nextRank;distance=nextDistance;
             }
         }
@@ -247,6 +251,7 @@ public final class Military {
 
     public static void clearTask(Villager soldier,EmploymentData.Station station){
         MilitaryLoot.finish(soldier);
+        MilitaryCombatMovement.clear(soldier);
         MilitaryArea.clearRoutes(soldier);
         soldier.getNavigation().stop();
         soldier.stopUsingItem();
@@ -347,10 +352,11 @@ public final class Military {
         boolean ranged=rangedWeapon(weapon);
         faceThreat(v,t,ranged||distance<=4);
         if(ranged&&(ammo(s)>=0||weapon.getItem() instanceof CrossbowItem&&CrossbowItem.isCharged(weapon))){ranged(l,s,v,t,weapon,distance);return;}
+        MilitaryCombatMovement.clear(v);
         long now=l.getGameTime();
         if(now<s.military.getLong("retreatUntil")){Vec3 away=v.position().subtract(t.position()).normalize().scale(3);area.move(v,area.nearest(v.position().add(away.x,0,away.z)),MilitaryArea.CHASE);return;}
         if(distance>4){
-            if(mode(s)!=Mode.GUARD||!area.leaveGuardPost(s.pos,v,t.position()))area.move(v,t.position(),MilitaryArea.CHASE);
+            if(mode(s)!=Mode.GUARD||!area.leaveGuardPost(s.pos,v,t.position()))area.approach(v,t.position(),MilitaryArea.CHASE);
             shield(v,true);
             return;
         }
@@ -380,17 +386,18 @@ public final class Military {
     private static void ranged(ServerLevel l,EmploymentData.Station s,Villager v,LivingEntity t,ItemStack weapon,double distance){
         var area=new MilitaryArea(s);
         boolean retreating=retreat(l,s,v,area);
+        MilitaryCombatMovement.aim(v,t);
         if(!retreating){
             MilitaryLoot.finish(v);
-            if(distance>36)area.move(v,t.position(),MilitaryArea.CHASE);
+            if(distance>36)area.approach(v,t.position(),MilitaryArea.CHASE);
             else v.getNavigation().stop();
         }
         if(!v.hasLineOfSight(t)){
             s.military.remove("drawAt");v.stopUsingItem();
-            if(!retreating)area.move(v,t.position(),MilitaryArea.CHASE);
+            if(!retreating)area.approach(v,t.position(),MilitaryArea.CHASE);
             return;
         }
-        if(weapon.getItem() instanceof BowItem&&l.getGameTime()<s.military.getLong("bowReadyAt")-20){
+        if(weapon.getItem() instanceof BowItem&&l.getGameTime()<MilitaryBow.readyAt(s,v)-20){
             s.military.remove("drawAt");v.stopUsingItem();return;
         }
         var line=v.getEyePosition();
@@ -405,7 +412,7 @@ public final class Military {
         if(!s.military.contains("drawAt")){s.military.putLong("drawAt",l.getGameTime());v.stopUsingItem();v.startUsingItem(InteractionHand.MAIN_HAND);return;}
         int quick=EnchantmentHelper.getItemEnchantmentLevel(Enchantments.QUICK_CHARGE,weapon);int load=weapon.getItem() instanceof CrossbowItem?Math.max(5,25-5*quick):20;
         if(l.getGameTime()-s.military.getLong("drawAt")<load
-            ||weapon.getItem() instanceof BowItem&&l.getGameTime()<s.military.getLong("bowReadyAt"))return;
+            ||weapon.getItem() instanceof BowItem&&l.getGameTime()<MilitaryBow.readyAt(s,v))return;
         int slot=ammo(s);if(slot<0)return;var ammunition=s.getItem(slot);boolean infinity=weapon.getItem() instanceof BowItem&&EnchantmentHelper.getItemEnchantmentLevel(Enchantments.INFINITY_ARROWS,weapon)>0&&ammunition.is(Items.ARROW);
         int shots=weapon.getItem() instanceof CrossbowItem&&EnchantmentHelper.getItemEnchantmentLevel(Enchantments.MULTISHOT,weapon)>0?3:1;
         int fired=0;
@@ -415,10 +422,11 @@ public final class Military {
             if(EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FLAMING_ARROWS,weapon)>0)arrow.setSecondsOnFire(100);
             arrow.pickup=net.minecraft.world.entity.projectile.AbstractArrow.Pickup.DISALLOWED;
             double dx=t.getX()-v.getX(),dz=t.getZ()-v.getZ(),dy=t.getY(.5)-arrow.getY()+Math.sqrt(dx*dx+dz*dz)*.2;arrow.shoot(dx,dy,dz,weapon.getItem() instanceof CrossbowItem?3.15F:1.6F,1F);
-            if(shots>1)arrow.setDeltaMovement(arrow.getDeltaMovement().yRot((float)Math.toRadians((i-1)*10)));arrow.getPersistentData().putUUID("KCSoldierShot",v.getUUID());if(l.addFreshEntity(arrow))fired++;
+            if(shots>1)arrow.setDeltaMovement(arrow.getDeltaMovement().yRot((float)Math.toRadians((i-1)*10)));arrow.getPersistentData().putUUID("KCSoldierShot",v.getUUID());
+            if(weapon.getItem() instanceof BowItem)arrow.getPersistentData().putBoolean("KCSoldierBow",true);
+            if(l.addFreshEntity(arrow))fired++;
         }
         if(fired==0){s.military.remove("drawAt");v.stopUsingItem();return;}
-        if(weapon.getItem() instanceof BowItem)s.military.putLong("bowReadyAt",l.getGameTime()+100);
         if(!infinity)ammunition.shrink(1);weapon.hurtAndBreak(fired,v,e->e.broadcastBreakEvent(EquipmentSlot.MAINHAND));s.military.remove("drawAt");v.stopUsingItem();s.setChanged();
     }
     private static boolean retreat(ServerLevel level,EmploymentData.Station station,Villager soldier,MilitaryArea area){

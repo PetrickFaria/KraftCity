@@ -11,6 +11,8 @@
     "ResidentSteveModelMixin",
     "RenderTypeOpacityMixin",
     "ModelPartOpacityMixin",
+    "SoldierModelPartAccessor",
+    "SoldierArmorLayerInvoker",
     "BuilderVillagerArmsMixin",
     "BuilderSteveArmsMixin",
     "FarmerHoeLayerMixin"
@@ -35,6 +37,8 @@
     "WorkerGatePathMixin",
     "MilitaryEquipmentMixin",
     "SoldierBoundaryMixin",
+    "SoldierMoveControlMixin",
+    "SoldierBodyControlMixin",
     "WorkerConversionMixin",
     "MilitaryCureMixin"
   ]

@@ -459,9 +459,11 @@ public final class MilitaryGameTests {
     @GameTest(template="empty",batch="military_inventory")
     public static void patrol_collects_partially_and_never_uses_other_slots(GameTestHelper h){
         var f=fixture(h);
+        f.l.getEntitiesOfClass(Monster.class,Military.areaBounds(f.p)).forEach(Entity::discard);
         for(int i=0;i<9;i++)f.s.setItem(i,new ItemStack(Items.STONE,64));
         f.s.setItem(0,new ItemStack(Items.BREAD,63));
         var item=new net.minecraft.world.entity.item.ItemEntity(f.l,f.v.getX()+.5,f.v.getY(),f.v.getZ(),new ItemStack(Items.BREAD,5));
+        item.setDeltaMovement(Vec3.ZERO);
         f.l.addFreshEntity(item);
         Military.tick(f.l,f.s,f.v);
         check(f.s.getItem(0).getCount()==64&&item.isAlive()&&item.getItem().getCount()==4&&f.s.getItem(9).isEmpty(),
@@ -506,6 +508,7 @@ public final class MilitaryGameTests {
         f.s.equipment.setItem(0,new ItemStack(Items.DIAMOND_SWORD));
         f.v.setNoAi(false);
         var item=new net.minecraft.world.entity.item.ItemEntity(f.l,f.v.getX()+4,f.v.getY(),f.v.getZ(),new ItemStack(Items.BREAD,3));
+        item.setDeltaMovement(Vec3.ZERO);
         f.l.addFreshEntity(item);
         h.startSequence().thenWaitUntil(()->check(!item.isAlive()&&f.s.getItem(0).getCount()==3,
             "Patrol did not physically reach the item under thunder, soldier="+f.v.position()+" alive="+f.v.isAlive()
@@ -827,6 +830,90 @@ public final class MilitaryGameTests {
                 "Head missed new lower target with "+weapon);
         }
         target.discard();
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=160,batch="military_projectile_gateway")
+    public static void projectile_insertion_enforces_bow_tick_for_all_shot_callers(GameTestHelper h){
+        var f=fixture(h,20);
+        f.s.equipment.setItem(0,new ItemStack(Items.BOW));
+        Military.bind(f.s,f.v);
+        long first=f.l.getGameTime();
+        var original=new Arrow(f.l,f.v);
+        check(f.l.addFreshEntity(original)&&original.getPersistentData().getLong("KCSoldierBowTick")==first,
+            "First projectile did not record its server tick");
+        check(!f.l.addFreshEntity(new Arrow(f.l,f.v)),"Second producer bypassed the same-tick gate");
+        var other=mob(f,EntityType.VILLAGER,3);
+        other.setAge(0);
+        check("ok".equals(ResidenceData.get(f.l).link(f.l,f.home,other)),"Second archer residence");
+        var post=f.p.east(3);
+        f.l.setBlock(post,WorkModule.MILITARY.get().defaultBlockState(),3);
+        var secondStation=((WorkBlockEntity)f.l.getBlockEntity(post)).station();
+        secondStation.setItem(31,new ItemStack(Items.EMERALD,30));
+        check("ok".equals(Employment.hire(f.player,secondStation,other.getUUID(),Profession.SOLDIER)),"Second archer hire");
+        secondStation.equipment.setItem(0,new ItemStack(Items.BOW));
+        Military.bind(secondStation,other);
+        var simultaneous=new Arrow(f.l,other);
+        check(f.l.addFreshEntity(simultaneous)&&simultaneous.getPersistentData().getLong("KCSoldierBowTick")==first
+            &&!f.l.addFreshEntity(new Arrow(f.l,other)),"Cooldown was shared across archers or bypassed on the second post");
+        var bolt=new Arrow(f.l,f.v);
+        bolt.setShotFromCrossbow(true);
+        check(f.l.addFreshEntity(bolt),"Crossbow inherited the bow cooldown");
+        Military.clearTask(f.v,f.s);
+        h.runAfterDelay(99,()->check(!f.l.addFreshEntity(new Arrow(f.l,f.v)),"Arrow entered before 100 ticks"));
+        h.runAfterDelay(100,()->{
+            var next=new Arrow(f.l,f.v);
+            check(f.l.addFreshEntity(next)&&next.getPersistentData().getLong("KCSoldierBowTick")-first>=100,
+                "Second projectile timestamp violated the server interval");
+            System.out.println("KRAFTCITY_BOW_SERVER_TICKS "+first+" "+next.getPersistentData().getLong("KCSoldierBowTick"));
+            h.succeed();
+        });
+    }
+
+    @GameTest(template="empty",batch="military_hidden_detection")
+    public static void patrol_detects_a_territorial_threat_before_sight_or_route(GameTestHelper h){
+        var f=fixture(h,20);
+        clearTestHostiles(f);
+        var home=f.p.east(30);
+        f.l.setBlock(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);
+        ((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)f.l.getBlockEntity(home)).setSize(11);
+        var zombie=mob(f,EntityType.ZOMBIE,39);
+        for(var pos:BlockPos.betweenClosed(f.p.offset(4,0,-5),f.p.offset(6,5,5)))
+            f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
+        check(!f.v.hasLineOfSight(zombie)&&Military.target(f.l,f.s,f.v)==zombie,"Unseen territorial mob skipped");
+        f.s.equipment.setItem(0,new ItemStack(Items.BOW));
+        f.s.setItem(0,new ItemStack(Items.ARROW,8));
+        Military.bind(f.s,f.v);
+        f.s.military.putLong("drawAt",f.l.getGameTime()-30);
+        Military.combat(f.l,f.s,f.v,zombie);
+        check(f.s.getItem(0).getCount()==8,"The detected enemy was shot through a wall");
+        zombie.setPos(f.p.getX()+42,f.p.getY()+1,f.p.getZ()+.5);
+        check(Military.target(f.l,f.s,f.v)!=zombie,"Territorial detection exceeded the five-block border");
+        zombie.discard();
+        h.succeed();
+    }
+
+    @GameTest(template="empty",batch="military_reverse_input")
+    public static void ranged_retreat_converts_navigation_to_reverse_input_without_turning_away(GameTestHelper h){
+        var f=fixture(h,20);
+        clearTestHostiles(f);
+        for(var pos:BlockPos.betweenClosed(f.p.offset(-7,0,-7),f.p.offset(7,0,7)))
+            if(!pos.equals(f.p))f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
+        f.v.setYRot(-90);
+        f.v.setYBodyRot(-90);
+        f.v.setYHeadRot(-90);
+        f.v.setOnGround(true);
+        f.s.equipment.setItem(0,new ItemStack(Items.BOW));
+        f.s.setItem(0,new ItemStack(Items.ARROW,8));
+        Military.bind(f.s,f.v);
+        var enemy=mob(f,EntityType.ZOMBIE,3);
+        enemy.setTarget(f.v);
+        Military.combat(f.l,f.s,f.v,enemy);
+        check(f.v.getNavigation().getPath()!=null,"No retreat was planned");
+        f.v.getMoveControl().setWantedPosition(f.v.getX()-3,f.v.getY(),f.v.getZ(),.75);
+        f.v.getMoveControl().tick();
+        check(f.v.zza<0&&Math.abs(net.minecraft.util.Mth.wrapDegrees(f.v.getYRot()+90))<1,
+            "The path navigator turned the archer away instead of applying reverse input");
         h.succeed();
     }
 }

@@ -3,6 +3,7 @@ package br.com.kraftcity.military.client;
 import br.com.kraftcity.builder.client.BuilderArmsLayer;
 import br.com.kraftcity.employment.client.WorkerPose;
 import br.com.residenciasaldeoes.client.ResidentAppearanceModels;
+import br.com.residenciasaldeoes.mixin.SoldierArmorLayerInvoker;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Vector3f;
 import net.minecraft.client.model.geom.ModelPart;
@@ -17,11 +18,11 @@ import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.item.ItemStack;
 
 public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<Villager>> {
     private final HumanoidModel<Villager> poseModel;
     private final HumanoidArmorLayer<Villager,HumanoidModel<Villager>,HumanoidModel<Villager>> armor;
+    private final HumanoidModel<Villager> innerArmor,outerArmor;
     private boolean steve;
 
     public SoldierArmorLayer(RenderLayerParent<Villager,VillagerModel<Villager>> parent,EntityModelSet models){
@@ -33,8 +34,9 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
                 return parent.getTextureLocation(villager);
             }
         };
-        armor=new HumanoidArmorLayer<>(adapter,new HumanoidModel<>(models.bakeLayer(ModelLayers.PLAYER_INNER_ARMOR)),
-            new HumanoidModel<>(models.bakeLayer(ModelLayers.PLAYER_OUTER_ARMOR))){
+        innerArmor=new HumanoidModel<>(models.bakeLayer(ModelLayers.PLAYER_INNER_ARMOR));
+        outerArmor=new HumanoidModel<>(models.bakeLayer(ModelLayers.PLAYER_OUTER_ARMOR));
+        armor=new HumanoidArmorLayer<>(adapter,innerArmor,outerArmor){
             @Override protected void setPartVisibility(HumanoidModel<Villager> model,EquipmentSlot slot){
                 super.setPartVisibility(model,slot);
                 if(slot==EquipmentSlot.HEAD&&!steve){
@@ -62,6 +64,8 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
         // The villager's leg runs from local Y=0 to 12. Armor deformation extends both ends.
         leg.yScale*=12F/(12F+2F*padding);
         offsetAlongPartY(leg,padding*leg.yScale);
+        // Seat the foot-facing shell slightly inside the visible sole rather than on its edge.
+        leg.y-=padding*.5F;
     }
 
     private static void offsetAlongPartY(ModelPart part,float distance){
@@ -89,10 +93,33 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
             poseModel.body.zScale=1.3F;
             poseModel.rightLeg.copyFrom(root.getChild("right_leg"));
             poseModel.leftLeg.copyFrom(root.getChild("left_leg"));
+            if(!soldier.getItemBySlot(EquipmentSlot.LEGS).isEmpty()||!soldier.getItemBySlot(EquipmentSlot.FEET).isEmpty()){
+                FreshVillagerParts.alignLegY(root,"right_leg",poseModel.rightLeg);
+                FreshVillagerParts.alignLegY(root,"left_leg",poseModel.leftLeg);
+            }
             poseModel.rightArm.loadPose(poseModel.rightArm.getInitialPose());
             poseModel.leftArm.loadPose(poseModel.leftArm.getInitialPose());
             BuilderArmsLayer.poseArms(soldier,poseModel.rightArm,poseModel.leftArm,stride,amount,age,false);
         }
-        armor.render(pose,buffers,light,soldier,stride,amount,partial,age,yaw,pitch);
+        var head=steve||soldier.getItemBySlot(EquipmentSlot.HEAD).isEmpty()?null:FreshVillagerParts.head(getParentModel().root());
+        if(head==null){
+            armor.render(pose,buffers,light,soldier,stride,amount,partial,age,yaw,pitch);
+            return;
+        }
+
+        var pieces=(SoldierArmorLayerInvoker)armor;
+        pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.CHEST,light,outerArmor);
+        pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.LEGS,light,innerArmor);
+        pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.FEET,light,outerArmor);
+        pose.pushPose();
+        try{
+            head.transform(pose,true);
+            poseModel.head.setPos(0,0,0);
+            poseModel.head.setRotation(0,0,0);
+            poseModel.head.xScale=poseModel.head.yScale=poseModel.head.zScale=1F;
+            pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.HEAD,light,outerArmor);
+        }finally{
+            pose.popPose();
+        }
     }
 }
