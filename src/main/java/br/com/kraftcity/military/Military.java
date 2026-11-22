@@ -110,18 +110,32 @@ public final class Military {
 
     private static boolean protectedArea(ServerLevel level,LivingEntity target,MilitaryArea area){
         for(var home:ResidenceData.get(level).homes()){
-            if(!home.dimension.equals(level.dimension())||!level.hasChunkAt(home.pos)
-                ||!(level.getBlockEntity(home.pos) instanceof br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity))continue;
+            if(!home.dimension.equals(level.dimension())||level.hasChunkAt(home.pos)
+                &&!(level.getBlockEntity(home.pos) instanceof br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity))continue;
             int radius=home.size/2;
             var bounds=new AABB(home.pos.offset(-radius,1,-radius),home.pos.offset(radius+1,home.size+1,radius+1));
-            if((area==null||area.intersects(bounds))&&distanceTo(bounds,target.position())<=100)return true;
+            if((area==null||area.intersects(bounds))&&distanceTo(bounds,target.position())<=25)return true;
         }
         for(var post:EmploymentData.get(level).stations()){
             if(!post.active||post.worker==null||post.sector==Profession.Sector.MILITARY||!post.dimension.equals(level.dimension())
-                ||!level.hasChunkAt(post.pos)||!(level.getBlockEntity(post.pos) instanceof WorkBlockEntity be)||!post.id.equals(be.identity()))continue;
+                ||level.hasChunkAt(post.pos)&&(!(level.getBlockEntity(post.pos) instanceof WorkBlockEntity be)||!post.id.equals(be.identity())))continue;
             var bounds=post.sector==Profession.Sector.INDUSTRIAL
                 ?br.com.kraftcity.industry.IndustrialWork.area(level,post):new AABB(post.pos);
-            if((area==null||area.intersects(bounds))&&distanceTo(bounds,target.position())<=100)return true;
+            if((area==null||area.intersects(bounds))&&distanceTo(bounds,target.position())<=25)return true;
+            var work=WorkforceData.get(level).worker(post.worker).flatMap(br.com.kraftcity.workforce.WorkerRecord::area);
+            if(work.isPresent()&&work.get().dimension().equals(level.dimension())){
+                var region=new AABB(work.get().min(),work.get().max().offset(1,1,1));
+                if((area==null||area.intersects(region))&&distanceTo(region,target.position())<=25)return true;
+            }
+        }
+        var construction=br.com.kraftcity.builder.BuilderData.get(level);
+        for(var job:construction.jobs.values()){
+            if(job.cancelled||!job.dimension.equals(level.dimension()))continue;
+            var paper=construction.papers.get(job.paper);
+            var blueprint=paper==null?null:construction.library.get(paper.schema);
+            if(blueprint==null||job.done.cardinality()>=blueprint.cells.size())continue;
+            var bounds=new AABB(job.origin,job.origin.offset(blueprint.transformedSize(job.rotation)));
+            if((area==null||area.intersects(bounds))&&distanceTo(bounds,target.position())<=25)return true;
         }
         return false;
     }
@@ -150,8 +164,6 @@ public final class Military {
         if(!(candidate instanceof Mob)||!candidate.isAlive()||candidate.isInvulnerable()||!area.contains(candidate.position())||ally(level,soldier,candidate))
             return Integer.MAX_VALUE;
         if(!selected(station,candidate.getType()))return Integer.MAX_VALUE;
-        if(candidate instanceof Spider spider&&spider.getTarget()==null&&spider.getLightLevelDependentMagicValue()>=.5F
-            &&!struck(soldier,candidate))return Integer.MAX_VALUE;
         if(mode(station)==Mode.FOLLOW){
             var player=linkedPlayer(level,station);
             if(player!=null&&area.contains(player.position())){
@@ -171,10 +183,11 @@ public final class Military {
             if(struck(resident,candidate))return 0;
             nearResident=true;
         }
-        if(struck(soldier,candidate))return 1;
-        if(nearResident)return 2;
-        if(protectedArea(level,candidate,area))return 3;
-        return soldier.distanceToSqr(candidate)<=100?4:Integer.MAX_VALUE;
+        if(nearResident)return 1;
+        if(protectedArea(level,candidate,area))return 2;
+        if(struck(soldier,candidate))return 3;
+        int localRange=Math.min(10,MilitaryModule.DETECTION.get());
+        return soldier.distanceToSqr(candidate)<=localRange*localRange?4:Integer.MAX_VALUE;
     }
 
     public static boolean authorized(ServerLevel l,EmploymentData.Station s,Villager v,LivingEntity target){
@@ -190,12 +203,18 @@ public final class Military {
         boolean ranged=rangedWeapon(s.equipment.getItem(0));
         UUID previous=s.military.hasUUID("target")?s.military.getUUID("target"):null;
         double distance=Double.POSITIVE_INFINITY;
-        for(var candidate:l.getEntitiesOfClass(Mob.class,v.getBoundingBox().inflate(Math.min(32,MilitaryModule.DETECTION.get())),mob->mob!=v&&v.hasLineOfSight(mob))){
+        var mode=mode(s);
+        var search=mode==Mode.FREE?area.bounds():v.getBoundingBox().inflate(Math.min(32,MilitaryModule.DETECTION.get()));
+        for(var candidate:l.getEntitiesOfClass(Mob.class,search,mob->mob!=v&&selected(s,mob.getType()))){
             int nextRank=priority(l,s,v,candidate,area);
+            if(nextRank==Integer.MAX_VALUE)continue;
+            boolean visible=v.hasLineOfSight(candidate);
+            if(!visible&&(mode!=Mode.FREE||nextRank>2))continue;
             double nextDistance=v.distanceToSqr(candidate);
             if(ranged&&candidate.getUUID().equals(previous))nextDistance=Math.max(0,nextDistance-2);
-            if(nextRank!=Integer.MAX_VALUE&&(ranged?nextDistance<distance:nextRank<rank||nextRank==rank&&nextDistance<distance)
-                &&(nextRank<=1||canEngage(s,v,candidate,area,nextDistance))){
+            boolean nearbyDuel=ranged&&nextDistance<=36&&distance<=36;
+            if((nearbyDuel?nextDistance<distance:nextRank<rank||nextRank==rank&&nextDistance<distance)
+                &&canEngage(s,v,candidate,area,nextDistance,visible)){
                 best=candidate;rank=nextRank;distance=nextDistance;
             }
         }
@@ -203,11 +222,11 @@ public final class Military {
     }
 
     private static boolean canEngage(EmploymentData.Station station,Villager soldier,LivingEntity target,
-                                     MilitaryArea area,double distance){
-        if(distance<=4)return true;
+                                     MilitaryArea area,double distance,boolean visible){
+        if(visible&&distance<=4)return true;
         var weapon=station.equipment.getItem(0);
         boolean ranged=weapon.getItem() instanceof BowItem||weapon.getItem() instanceof CrossbowItem;
-        if(ranged&&distance<=36&&(ammo(station)>=0||CrossbowItem.isCharged(weapon)))return true;
+        if(visible&&ranged&&distance<=36&&(ammo(station)>=0||CrossbowItem.isCharged(weapon)))return true;
         return area.canReach(soldier,target.position());
     }
 
@@ -228,6 +247,7 @@ public final class Military {
 
     public static void clearTask(Villager soldier,EmploymentData.Station station){
         MilitaryLoot.finish(soldier);
+        MilitaryArea.clearRoutes(soldier);
         soldier.getNavigation().stop();
         soldier.stopUsingItem();
         station.military.remove("target");
@@ -258,7 +278,7 @@ public final class Military {
         }
         LivingEntity threat=s.military.hasUUID("target")&&l.getEntity(s.military.getUUID("target")) instanceof LivingEntity current
             &&priority(l,s,v,current,area)!=Integer.MAX_VALUE?current:null;
-        if(v.tickCount%5==0||threat==null&&s.military.hasUUID("target"))threat=target(l,s,v);
+        if(v.tickCount%10==0||threat==null&&s.military.hasUUID("target"))threat=target(l,s,v);
         if(threat!=null){
             if(!s.military.hasUUID("target")||!s.military.getUUID("target").equals(threat.getUUID()))clearTask(v,s);
             s.military.putUUID("target",threat.getUUID());
@@ -273,15 +293,19 @@ public final class Military {
         if(MilitaryDiscard.tick(l,s,v,area,mode(s)==Mode.FOLLOW?linkedPlayer(l,s):null))return;
         if(mode(s)==Mode.FOLLOW){
             var owner=linkedPlayer(l,s);
-            if(owner!=null&&v.distanceToSqr(owner)>49){
-                if(!area.approach(v,owner.position(),MilitaryArea.WALK))navigation.stop();
-                return;
+            if(owner!=null){
+                boolean inside=area.contains(owner.position());
+                var destination=inside?owner.position():area.nearest(owner.position());
+                if(v.position().distanceToSqr(destination)>(inside?49:1)){
+                    if(!area.approach(v,destination,MilitaryArea.WALK)&&v.tickCount%10==0)navigation.stop();
+                    return;
+                }
             }
             navigation.stop();
             MilitaryLoot.collect(l,s,v,area,false);
         }else if(mode(s)==Mode.GUARD){
             var point=Vec3.atBottomCenterOf(s.pos.above());
-            if(v.distanceToSqr(point)>.25)area.move(v,point,MilitaryArea.WALK);
+            if(v.distanceToSqr(point)>.25)area.approach(v,point,MilitaryArea.WALK);
             else if(v.distanceToSqr(point)>.0025){
                 navigation.stop();
                 v.getMoveControl().setWantedPosition(point.x,point.y,point.z,MilitaryArea.WALK);
@@ -319,8 +343,9 @@ public final class Military {
     public static void combat(ServerLevel l,EmploymentData.Station s,Villager v,LivingEntity t){
         var area=new MilitaryArea(s);
         if(!area.contains(v.position())||!area.contains(t.position()))return;
-        v.getLookControl().setLookAt(t,30,30);double distance=v.distanceToSqr(t);ItemStack weapon=s.equipment.getItem(0);
-        boolean ranged=weapon.getItem() instanceof BowItem||weapon.getItem() instanceof CrossbowItem;
+        double distance=v.distanceToSqr(t);ItemStack weapon=s.equipment.getItem(0);
+        boolean ranged=rangedWeapon(weapon);
+        faceThreat(v,t,ranged||distance<=4);
         if(ranged&&(ammo(s)>=0||weapon.getItem() instanceof CrossbowItem&&CrossbowItem.isCharged(weapon))){ranged(l,s,v,t,weapon,distance);return;}
         long now=l.getGameTime();
         if(now<s.military.getLong("retreatUntil")){Vec3 away=v.position().subtract(t.position()).normalize().scale(3);area.move(v,area.nearest(v.position().add(away.x,0,away.z)),MilitaryArea.CHASE);return;}
@@ -335,14 +360,24 @@ public final class Military {
         if(v.doHurtTarget(t)){if(weapon.getItem() instanceof SwordItem||weapon.canPerformAction(net.minecraftforge.common.ToolActions.SWORD_SWEEP))weapon.hurtAndBreak(1,v,e->e.broadcastBreakEvent(EquipmentSlot.MAINHAND));s.setChanged();}
         s.military.putLong("attackAt",now+20);s.military.putLong("retreatUntil",now+10);
     }
+    private static void faceThreat(Villager soldier,LivingEntity threat,boolean turnBody){
+        var offset=threat.getEyePosition().subtract(soldier.getEyePosition());
+        float yaw=(float)Math.toDegrees(Math.atan2(offset.z,offset.x))-90F;
+        float pitch=(float)-Math.toDegrees(Math.atan2(offset.y,Math.sqrt(offset.horizontalDistanceSqr())));
+        var look=soldier.getLookControl();
+        look.setLookAt(threat,30,25);
+        soldier.setYHeadRot(net.minecraft.util.Mth.approachDegrees(soldier.getYHeadRot(),yaw,30));
+        soldier.setXRot(net.minecraft.util.Mth.approachDegrees(soldier.getXRot(),pitch,25));
+        if(turnBody){
+            float facing=net.minecraft.util.Mth.approachDegrees(soldier.getYRot(),yaw,30);
+            soldier.setYRot(facing);
+            soldier.setYBodyRot(facing);
+        }
+    }
+
     private static void shield(Villager v,boolean enabled){if(enabled&&v.getOffhandItem().canPerformAction(net.minecraftforge.common.ToolActions.SHIELD_BLOCK)&&!v.isUsingItem())v.startUsingItem(InteractionHand.OFF_HAND);}
     private static int ammo(EmploymentData.Station s){for(int i=0;i<31;i++)if(s.getItem(i).getItem() instanceof ArrowItem)return i;return -1;}
     private static void ranged(ServerLevel l,EmploymentData.Station s,Villager v,LivingEntity t,ItemStack weapon,double distance){
-        var offset=t.position().subtract(v.position());
-        float desiredYaw=(float)(Math.toDegrees(Math.atan2(offset.z,offset.x))-90);
-        float yaw=net.minecraft.util.Mth.approachDegrees(v.getYRot(),desiredYaw,30);
-        v.setYRot(yaw);
-        v.setYBodyRot(yaw);
         var area=new MilitaryArea(s);
         boolean retreating=retreat(l,s,v,area);
         if(!retreating){

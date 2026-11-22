@@ -77,7 +77,7 @@ public final class MilitaryGameTests {
         Military.select(f.s,EntityType.CREEPER,false);creeper.discard();
         var cow=mob(f,EntityType.COW,2);check(!Military.authorized(f.l,f.s,f.v,cow),"Cow before selection");Military.select(f.s,EntityType.COW,true);check(Military.authorized(f.l,f.s,f.v,cow),"Selected peaceful cow");Military.select(f.s,EntityType.COW,false);check(!Military.authorized(f.l,f.s,f.v,cow),"Cow disabled");check(MilitaryNetwork.category(EntityType.WOLF,null)==1&&MilitaryNetwork.category(EntityType.COW,null)==0&&MilitaryNetwork.category(EntityType.ZOMBIE,null)==2,"Categories");h.succeed();}
     @GameTest(template="empty",timeoutTicks=40,batch="military") public static void follow_defends_player_locally_without_needing_blacklist(GameTestHelper h){var f=fixture(h);mode(f,Military.Mode.FOLLOW);f.l.addNewPlayer(f.player);var z=mob(f,EntityType.ZOMBIE,2);check(Military.authorized(f.l,f.s,f.v,z),"Natural hostile near player");Military.select(f.s,EntityType.ZOMBIE,false);check(!Military.authorized(f.l,f.s,f.v,z),"Deselection ignored");Military.select(f.s,EntityType.ZOMBIE,true);z.setPos(f.p.getX()+14.5,f.p.getY()+1,f.p.getZ()+.5);check(!Military.authorized(f.l,f.s,f.v,z),"Hostile outside player proximity");f.player.setLastHurtByMob(z);check(Military.authorized(f.l,f.s,f.v,z),"Direct attack on owner lost priority");h.succeed();}
-    @GameTest(template="empty",timeoutTicks=40,batch="military") public static void free_and_guard_require_protected_city_or_self_defense(GameTestHelper h){var f=fixture(h);var z=mob(f,EntityType.ZOMBIE,2);for(var m:List.of(Military.Mode.FREE,Military.Mode.GUARD)){mode(f,m);check(Military.authorized(f.l,f.s,f.v,z),"City target "+m);}z.setPos(f.p.getX()+35,f.p.getY(),f.p.getZ()+35);check(!Military.authorized(f.l,f.s,f.v,z),"Nearby soldier alone authorizes nothing");f.v.setLastHurtByMob(z);check(Military.authorized(f.l,f.s,f.v,z),"Self-defense inside new bounds");z.setPos(f.p.getX()+101.5,f.p.getY()+1,f.p.getZ()+.5);check(!Military.authorized(f.l,f.s,f.v,z),"Chase exceeded area");h.succeed();}
+    @GameTest(template="empty",timeoutTicks=40,batch="military") public static void free_and_guard_require_protected_city_or_self_defense(GameTestHelper h){var f=fixture(h);var z=mob(f,EntityType.ZOMBIE,2);for(var m:List.of(Military.Mode.FREE,Military.Mode.GUARD)){mode(f,m);check(Military.authorized(f.l,f.s,f.v,z),"City target "+m);}z.setPos(f.p.getX()+35,f.p.getY(),f.p.getZ()+35);check(!Military.authorized(f.l,f.s,f.v,z),"Nearby soldier alone authorizes nothing");f.v.setLastHurtByMob(z);check(Military.authorized(f.l,f.s,f.v,z),"Self-defense inside new bounds");z.setPos(f.p.getX()+51.5,f.p.getY()+1,f.p.getZ()+.5);check(!Military.authorized(f.l,f.s,f.v,z),"Chase exceeded area");h.succeed();}
     @GameTest(template="empty",timeoutTicks=40,batch="military_guard_idle") public static void guard_faces_post_and_legacy_keep_maps_to_guard(GameTestHelper h){var f=fixture(h);clearTestHostiles(f);for(var type:net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES)Military.select(f.s,type,false);f.s.military.putString("mode","KEEP");check(Military.mode(f.s)==Military.Mode.GUARD,"Keep migration");f.l.setBlock(f.p,f.l.getBlockState(f.p).setValue(WorkBlock.FACING,Direction.EAST),3);Military.tick(f.l,f.s,f.v);check(f.v.getNavigation().isDone()&&f.v.getYRot()==Direction.EAST.toYRot(),"Guard stationary/front");h.succeed();}
     @GameTest(template="empty",timeoutTicks=40,batch="military") public static void follow_damage_event_creates_order_only_after_actual_player_hit(GameTestHelper h){var f=fixture(h);mode(f,Military.Mode.FOLLOW);f.l.addNewPlayer(f.player);var z=mob(f,EntityType.COW,2);check(!Military.authorized(f.l,f.s,f.v,z),"Pre-hit follow");z.hurt(DamageSource.playerAttack(f.player),1);check(!Military.authorized(f.l,f.s,f.v,z),"Unselected mob became eligible");Military.select(f.s,EntityType.COW,true);check(Military.authorized(f.l,f.s,f.v,z),"Selected target was not eligible");h.succeed();}
     @GameTest(template="empty",timeoutTicks=40,batch="military") public static void melee_weapon_break_then_punch_and_new_sword(GameTestHelper h){var f=fixture(h);var cow=mob(f,EntityType.COW,1);Military.select(f.s,EntityType.COW,true);var sword=new ItemStack(Items.WOODEN_SWORD);sword.setDamageValue(sword.getMaxDamage()-1);f.s.equipment.setItem(0,sword);Military.bind(f.s,f.v);f.s.military.putLong("attackAt",0);Military.combat(f.l,f.s,f.v,cow);check(sword.isEmpty(),"Sword did not break");check(cow.getHealth()<cow.getMaxHealth(),"Sword hit failed");f.s.military.putLong("attackAt",0);f.s.military.putLong("retreatUntil",0);cow.invulnerableTime=0;Military.bind(f.s,f.v);Military.combat(f.l,f.s,f.v,cow);check(f.v.getMainHandItem().isEmpty(),"No punch fallback");f.s.equipment.setItem(0,new ItemStack(Items.IRON_SWORD));Military.bind(f.s,f.v);check(f.v.getMainHandItem().is(Items.IRON_SWORD),"Replacement weapon");h.succeed();}
@@ -411,9 +411,12 @@ public final class MilitaryGameTests {
     @GameTest(template="empty",batch="military_inventory")
     public static void military_boundary_is_inclusive_and_stops_boundary_movement(GameTestHelper h){
         var f=fixture(h);
-        var edge=Vec3.atBottomCenterOf(f.p.offset(100,15,100));
+        var edge=Vec3.atBottomCenterOf(f.p.offset(50,15,50));
         check(Military.insideArea(f.s,edge)&&!Military.insideArea(f.s,edge.add(1,0,0))
             &&!Military.insideArea(f.s,edge.add(0,1,0))&&!Military.insideArea(f.s,edge.add(0,0,1)),"Military area bounds");
+        var lower=Vec3.atBottomCenterOf(f.p.offset(-50,-15,-50));
+        check(Military.insideArea(f.s,lower)&&!Military.insideArea(f.s,lower.add(-1,0,0))
+            &&!Military.insideArea(f.s,lower.add(0,-1,0))&&!Military.insideArea(f.s,lower.add(0,0,-1)),"Negative military area bounds");
         f.v.setPos(edge);
         f.v.move(MoverType.SELF,new Vec3(1,1,1));
         check(Military.insideArea(f.s,f.v.position()),"Movement escaped military area");
@@ -545,7 +548,7 @@ public final class MilitaryGameTests {
                 var target=f.l.getEntity(f.s.military.getUUID("visual_test_threat"));
                 check(target==null||!target.isAlive(),"Follow did not defend player against an additional enemy");
             })
-            .thenExecute(()->f.player.setPos(Vec3.atBottomCenterOf(f.p.east(101).above())))
+            .thenExecute(()->f.player.setPos(Vec3.atBottomCenterOf(f.p.east(51).above())))
             .thenExecuteFor(20,()->check(Military.insideArea(f.s,f.v.position()),"Follow left area for player"))
             .thenExecute(()->{
                 f.l.setWeatherParameters(10000,0,false,false);
@@ -725,5 +728,101 @@ public final class MilitaryGameTests {
         loot.setDeltaMovement(Vec3.ZERO);
         level.addFreshEntity(loot);
         return loot;
+    }
+
+    @GameTest(template="empty",batch="military_blacklist_brightness")
+    public static void selected_registry_mobs_follow_the_same_attack_permission_in_daylight(GameTestHelper h){
+        var f=fixture(h,20);
+        clearTestHostiles(f);
+        var selected=List.of(EntityType.ZOMBIE,EntityType.SKELETON,EntityType.PILLAGER,
+            EntityType.SPIDER,EntityType.ENDERMAN,EntityType.CREEPER,EntityType.WOLF,EntityType.COW);
+        for(var type:selected){
+            var candidate=mob(f,type,2);
+            Military.select(f.s,type,true);
+            check(Military.selected(f.s,type)&&Military.authorized(f.l,f.s,f.v,candidate),
+                "Selected registry mob denied "+type.getDescriptionId());
+            Military.select(f.s,type,false);
+            check(!Military.authorized(f.l,f.s,f.v,candidate),"Excluded registry mob acquired "+type.getDescriptionId());
+            candidate.discard();
+        }
+        check(!Military.selected(f.s,EntityType.CREEPER),"Unselected Creeper stayed authorized");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",batch="military_remote_defense")
+    public static void patrol_acquires_loaded_threats_far_from_the_soldier(GameTestHelper h){
+        var f=fixture(h,20);
+        clearTestHostiles(f);
+        for(var point:BlockPos.betweenClosed(f.p.offset(-20,0,-4),f.p.offset(53,0,4)))
+            if(!point.equals(f.p))f.l.setBlock(point,Blocks.STONE.defaultBlockState(),3);
+        var resident=mob(f,EntityType.VILLAGER,35);
+        check("ok".equals(ResidenceData.get(f.l).link(f.l,f.home,resident)),"Remote resident");
+        var zombie=mob(f,EntityType.ZOMBIE,44);
+        for(int distance:new int[]{5,20,35,45,50}){
+            f.v.setPos(Vec3.atBottomCenterOf(f.p.east(44-distance).above()));
+            f.v.setOnGround(true);
+            check(Military.target(f.l,f.s,f.v)==zombie,"Missing reachable remote enemy at "+distance);
+        }
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.above()));
+        zombie.setPos(Vec3.atBottomCenterOf(f.p.east(45).above()));
+        check(Military.authorized(f.l,f.s,f.v,zombie),"Resident radius must include ten blocks");
+        zombie.setPos(Vec3.atBottomCenterOf(f.p.east(46).above()));
+        check(!Military.authorized(f.l,f.s,f.v,zombie),"Resident radius included eleven blocks");
+        resident.discard();
+        var home=f.p.east(30);
+        f.l.setBlock(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);
+        ((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)f.l.getBlockEntity(home)).setSize(11);
+        for(int distance:new int[]{4,5,6}){
+            zombie.setPos(f.p.getX()+36+distance,f.p.getY()+1,f.p.getZ()+.5);
+            check(Military.authorized(f.l,f.s,f.v,zombie)==(distance<=5),"Protection from the physical edge at "+distance);
+        }
+        zombie.discard();
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=1200,batch="military_distant_modes")
+    public static void distant_follow_and_guard_use_physical_paths_after_switching(GameTestHelper h){
+        var f=fixture(h,20);
+        clearTestHostiles(f);
+        for(var point:BlockPos.betweenClosed(f.p.offset(-2,0,-5),f.p.offset(50,0,5)))
+            if(!point.equals(f.p))f.l.setBlock(point,Blocks.STONE.defaultBlockState(),3);
+        for(var point:BlockPos.betweenClosed(f.p.offset(20,1,-2),f.p.offset(20,3,2)))
+            f.l.setBlock(point,Blocks.STONE.defaultBlockState(),3);
+        f.player.setPos(Vec3.atBottomCenterOf(f.p.east(48).above()));
+        f.l.addNewPlayer(f.player);
+        f.v.setNoAi(false);
+        mode(f,Military.Mode.FOLLOW);
+        Military.clearTask(f.v,f.s);
+        h.startSequence().thenWaitUntil(()->check(f.v.getX()>f.p.getX()+8,"Distant follow never started"))
+            .thenWaitUntil(()->check(f.v.distanceToSqr(f.player)<=49,"Follow stalled before the seven-block radius"))
+            .thenExecute(()->{
+                mode(f,Military.Mode.FREE);Military.clearTask(f.v,f.s);
+                mode(f,Military.Mode.GUARD);Military.clearTask(f.v,f.s);
+            }).thenWaitUntil(()->check(f.v.position().distanceToSqr(Vec3.atBottomCenterOf(f.p.above()))<1e-8,
+                "Distant guard never returned: "+f.v.position()+" / "+f.v.getNavigation().getTargetPos()))
+            .thenExecute(()->{f.l.removePlayerImmediately(f.player,Entity.RemovalReason.DISCARDED);f.v.discard();})
+            .thenSucceed();
+    }
+
+    @GameTest(template="empty",batch="military_combat_look")
+    public static void head_tracks_elevated_and_lower_targets_with_each_weapon(GameTestHelper h){
+        var f=fixture(h,20);
+        var target=mob(f,EntityType.ZOMBIE,5);
+        var aim=target.position();
+        f.s.setItem(0,new ItemStack(Items.ARROW,16));
+        for(var weapon:List.of(Items.IRON_SWORD,Items.BOW,Items.CROSSBOW)){
+            f.s.equipment.setItem(0,new ItemStack(weapon));
+            Military.bind(f.s,f.v);
+            target.setPos(aim.add(0,3,0));
+            for(int tick=0;tick<7;tick++)Military.combat(f.l,f.s,f.v,target);
+            check(Math.abs(net.minecraft.util.Mth.wrapDegrees(f.v.getYHeadRot()+90))<1&&f.v.getXRot()<-12,
+                "Head missed elevated target with "+weapon);
+            target.setPos(f.v.getX(),f.v.getY()-3,f.v.getZ()+5);
+            for(int tick=0;tick<7;tick++)Military.combat(f.l,f.s,f.v,target);
+            check(Math.abs(net.minecraft.util.Mth.wrapDegrees(f.v.getYHeadRot()))<1&&f.v.getXRot()>20,
+                "Head missed new lower target with "+weapon);
+        }
+        target.discard();
+        h.succeed();
     }
 }

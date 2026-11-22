@@ -1,5 +1,6 @@
 package br.com.kraftcity.employment.client;
 
+import br.com.kraftcity.employment.Profession;
 import java.util.Map;
 import java.util.UUID;
 import java.util.WeakHashMap;
@@ -14,17 +15,17 @@ import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.client.model.geom.ModelPart;
 
 public final class WorkerPose {
-    private record Activity(boolean farmer,boolean soldier,boolean working,ItemStack stowed,long expires) {}
+    private record Activity(Profession profession,boolean working,ItemStack stowed,long expires) {}
     private static final Map<Villager,Activity> ACTIVE=new WeakHashMap<>();
 
     public static void receive(int id,UUID identity,boolean farmer,boolean working,ItemStack stowed){
-        receive(id,identity,farmer,false,working,stowed);
+        receive(id,identity,farmer?Profession.FARMER:null,working,stowed);
     }
 
-    public static void receive(int id,UUID identity,boolean farmer,boolean soldier,boolean working,ItemStack stowed){
+    public static void receive(int id,UUID identity,Profession profession,boolean working,ItemStack stowed){
         var level=Minecraft.getInstance().level;
         if(level!=null&&level.getEntity(id) instanceof Villager worker&&identity.equals(worker.getUUID()))
-            ACTIVE.put(worker,new Activity(farmer,soldier,working,stowed,level.getGameTime()+18));
+            ACTIVE.put(worker,new Activity(profession,working,stowed,level.getGameTime()+18));
     }
 
     public static boolean active(Entity entity){
@@ -45,12 +46,17 @@ public final class WorkerPose {
 
     public static float action(Villager worker,float age){
         var activity=ACTIVE.get(worker);
-        return activity==null||!activity.farmer&&!activity.soldier?0:Mth.sin(Mth.PI*Mth.clamp(worker.getAttackAnim(age-worker.tickCount),0,1));
+        return activity==null||activity.profession!=Profession.FARMER&&activity.profession!=Profession.SOLDIER?0:Mth.sin(Mth.PI*Mth.clamp(worker.getAttackAnim(age-worker.tickCount),0,1));
     }
 
     public static boolean soldier(Villager worker){
         var state=current(worker);
-        return state!=null&&state.soldier;
+        return state!=null&&state.profession==Profession.SOLDIER;
+    }
+
+    public static Profession profession(Villager worker){
+        var state=current(worker);
+        return state==null?null:state.profession;
     }
 
     public static void aim(Villager worker,ModelPart right,ModelPart left){

@@ -11,7 +11,7 @@ import net.minecraftforge.network.*;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class WorkNetwork {
-    public static final SimpleChannel CHANNEL=NetworkRegistry.newSimpleChannel(new ResourceLocation("residenciasaldeoes","employment"),()->"12","12"::equals,"12"::equals);
+    public static final SimpleChannel CHANNEL=NetworkRegistry.newSimpleChannel(new ResourceLocation("residenciasaldeoes","employment"),()->"13","13"::equals,"13"::equals);
     public record Candidate(UUID id,String name,int cost){}
     public record Hire(int menu,UUID station,UUID worker,int profession){
         void encode(FriendlyByteBuf b){b.writeVarInt(menu);b.writeUUID(station);b.writeUUID(worker);b.writeInt(profession);}
@@ -47,11 +47,11 @@ public final class WorkNetwork {
         static Snapshot decode(FriendlyByteBuf b){int menu=b.readVarInt();UUID id=b.readUUID();int count=b.readVarInt();if(count<0||count>65536)throw new IllegalArgumentException("Candidate snapshot too large");var list=new ArrayList<Candidate>();for(int i=0;i<count;i++)list.add(new Candidate(b.readUUID(),b.readUtf(128),b.readInt()));return new Snapshot(menu,id,List.copyOf(list),b.readInt(),b.readUtf(128),b.readBoolean(),b.readLong(),b.readInt(),b.readLong(),b.readInt(),b.readBoolean(),b.readBoolean(),b.readInt(),b.readInt(),b.readLong(),b.readUtf(256),b.readUtf(256),b.readBoolean());}
         void handle(Supplier<NetworkEvent.Context> ctx){DistExecutor.unsafeRunWhenOn(Dist.CLIENT,()->()->br.com.kraftcity.employment.client.WorkScreen.receive(this));ctx.get().setPacketHandled(true);}
     }
-    public record Activity(int entity,UUID worker,boolean farmer,boolean soldier,boolean working,net.minecraft.world.item.ItemStack stowed){
-        void encode(FriendlyByteBuf b){b.writeVarInt(entity);b.writeUUID(worker);b.writeBoolean(farmer);b.writeBoolean(soldier);b.writeBoolean(working);b.writeItem(stowed);}
-        static Activity decode(FriendlyByteBuf b){return new Activity(b.readVarInt(),b.readUUID(),b.readBoolean(),b.readBoolean(),b.readBoolean(),b.readItem());}
+    public record Activity(int entity,UUID worker,Profession profession,boolean working,net.minecraft.world.item.ItemStack stowed){
+        void encode(FriendlyByteBuf b){b.writeVarInt(entity);b.writeUUID(worker);b.writeEnum(profession);b.writeBoolean(working);b.writeItem(stowed);}
+        static Activity decode(FriendlyByteBuf b){return new Activity(b.readVarInt(),b.readUUID(),b.readEnum(Profession.class),b.readBoolean(),b.readItem());}
         void handle(Supplier<NetworkEvent.Context> c){
-            DistExecutor.unsafeRunWhenOn(Dist.CLIENT,()->()->br.com.kraftcity.employment.client.WorkerPose.receive(entity,worker,farmer,soldier,working,stowed));
+            DistExecutor.unsafeRunWhenOn(Dist.CLIENT,()->()->br.com.kraftcity.employment.client.WorkerPose.receive(entity,worker,profession,working,stowed));
             c.get().setPacketHandled(true);
         }
     }

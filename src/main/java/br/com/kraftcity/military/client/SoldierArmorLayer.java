@@ -4,6 +4,8 @@ import br.com.kraftcity.builder.client.BuilderArmsLayer;
 import br.com.kraftcity.employment.client.WorkerPose;
 import br.com.residenciasaldeoes.client.ResidentAppearanceModels;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Vector3f;
+import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.VillagerModel;
 import net.minecraft.client.model.geom.EntityModelSet;
@@ -36,13 +38,16 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
             @Override protected void setPartVisibility(HumanoidModel<Villager> model,EquipmentSlot slot){
                 super.setPartVisibility(model,slot);
                 if(slot==EquipmentSlot.HEAD&&!steve){
-                    model.head.y-=2.8F;
+                    offsetAlongPartY(model.head,-2.8F);
                     model.head.yScale=.86F;
                     model.head.zScale=.94F;
                     model.hat.copyFrom(model.head);
                 }
-                if(slot==EquipmentSlot.LEGS&&!steve){model.leftLeg.y-=1;model.rightLeg.y-=1;}
-                if(slot==EquipmentSlot.FEET&&!steve){model.leftLeg.y-=1.2F;model.rightLeg.y-=1.2F;}
+                if(!steve&&(slot==EquipmentSlot.LEGS||slot==EquipmentSlot.FEET)){
+                    float padding=slot==EquipmentSlot.LEGS?.5F:1F;
+                    fitLegHeight(model.leftLeg,padding);
+                    fitLegHeight(model.rightLeg,padding);
+                }
                 if(slot==EquipmentSlot.LEGS&&!steve){
                     // The robe is deeper than the vanilla leggings mesh at rest.
                     model.body.zScale=1.55F;
@@ -51,6 +56,22 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
                 }
             }
         };
+    }
+
+    private static void fitLegHeight(ModelPart leg,float padding){
+        // The villager's leg runs from local Y=0 to 12. Armor deformation extends both ends.
+        leg.yScale*=12F/(12F+2F*padding);
+        offsetAlongPartY(leg,padding*leg.yScale);
+    }
+
+    private static void offsetAlongPartY(ModelPart part,float distance){
+        var offset=new Vector3f(0,distance,0);
+        offset.transform(Vector3f.XP.rotation(part.xRot));
+        offset.transform(Vector3f.YP.rotation(part.yRot));
+        offset.transform(Vector3f.ZP.rotation(part.zRot));
+        part.x+=offset.x();
+        part.y+=offset.y();
+        part.z+=offset.z();
     }
 
     @Override public void render(PoseStack pose,MultiBufferSource buffers,int light,Villager soldier,

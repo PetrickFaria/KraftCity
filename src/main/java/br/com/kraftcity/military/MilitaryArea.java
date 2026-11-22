@@ -1,6 +1,9 @@
 package br.com.kraftcity.military;
 
 import br.com.kraftcity.employment.EmploymentData;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.WeakHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.npc.Villager;
@@ -10,6 +13,9 @@ import net.minecraft.world.phys.Vec3;
 
 final class MilitaryArea {
     private static final java.util.function.Predicate<Vec3> UNRESTRICTED=point->true;
+    private static final Map<Villager,Map<BlockPos,Long>> FAILED_ROUTES=new WeakHashMap<>();
+
+    static void clearRoutes(Villager soldier){FAILED_ROUTES.remove(soldier);}
     static final double WALK=.5;
     static final double CHASE=.75;
     private final AABB bounds;
@@ -19,7 +25,7 @@ final class MilitaryArea {
     }
 
     static AABB boundsAt(BlockPos post){
-        return new AABB(post).inflate(100,15,100);
+        return new AABB(post).inflate(50,15,50);
     }
 
     AABB bounds(){return bounds;}
@@ -94,6 +100,8 @@ final class MilitaryArea {
             var next=nearest(target.add(direction.scale(step)));
             if(move(soldier,next,speed)||move(soldier,nearest(next.add(0,1,0)),speed))return true;
         }
+        var side=new Vec3(-direction.z,0,direction.x).scale(3);
+        if(move(soldier,nearest(target.add(side)),speed)||move(soldier,nearest(target.subtract(side)),speed))return true;
         return false;
     }
 
@@ -108,8 +116,8 @@ final class MilitaryArea {
         var position=new BlockPos(destination);
         if(!contains(destination)||!soldier.level.hasChunkAt(position))return false;
         ensureGroundContact(soldier);
-        var path=soldier.getNavigation().createPath(position,0);
-        return path!=null&&path.canReach()&&permits(path);
+        var path=route(soldier,position);
+        return path!=null&&path.canReach()&&permits(path)&&loaded(soldier,path);
     }
 
     boolean move(Villager soldier,Vec3 destination,double speed){
@@ -121,13 +129,49 @@ final class MilitaryArea {
         var pos=new BlockPos(destination);
         if(!soldier.level.hasChunkAt(pos))return false;
         var navigation=soldier.getNavigation();
-        if(!navigation.isDone()&&pos.equals(navigation.getTargetPos())
-            &&safeNodes(navigation.getPath(),soldier.position(),allowed)&&(permits(navigation.getPath())||!contains(soldier.position())&&enters(navigation.getPath())))return true;
+        var current=navigation.getPath();
+        if(!navigation.isDone()&&current!=null&&pos.equals(current.getTarget())&&loaded(soldier,current)
+            &&safeNodes(current,soldier.position(),allowed)&&(permits(current)||!contains(soldier.position())&&enters(current)))return true;
         ensureGroundContact(soldier);
-        Path path=navigation.createPath(pos,0);
-        return path!=null&&path.canReach()&&safeNodes(path,soldier.position(),allowed)&&(permits(path)||!contains(soldier.position())&&enters(path))
+        Path path=route(soldier,pos);
+        return path!=null&&path.canReach()&&loaded(soldier,path)&&safeNodes(path,soldier.position(),allowed)&&(permits(path)||!contains(soldier.position())&&enters(path))
             &&navigation.moveTo(path,speed);
     }
+    private static Path route(Villager soldier,BlockPos destination){
+        var navigation=soldier.getNavigation();
+        int distance=(int)Math.ceil(soldier.position().distanceTo(Vec3.atBottomCenterOf(destination)));
+        if(distance<=12)return navigation.createPath(destination,0);
+        var failed=FAILED_ROUTES.computeIfAbsent(soldier,worker->new HashMap<>());
+        long now=soldier.level.getGameTime();
+        failed.values().removeIf(time->time<=now);
+        if(failed.containsKey(destination))return null;
+        var requested=destination;
+        // The standard walking navigator normalizes the destination's height before searching.
+        var level=soldier.level;
+        if(level.getBlockState(destination).isAir()){
+            while(destination.getY()>level.getMinBuildHeight()&&level.getBlockState(destination.below()).isAir())
+                destination=destination.below();
+        }else{
+            while(destination.getY()<level.getMaxBuildHeight()-1&&level.getBlockState(destination).getMaterial().isSolid())
+                destination=destination.above();
+        }
+        // Vanilla's default range can discard a valid distant destination before examining its path.
+        navigation.setMaxVisitedNodesMultiplier(4F);
+        try{
+            var path=navigation.createPath(destination,0,Math.min(160,distance+24));
+            if(path==null||!path.canReach()||!loaded(soldier,path))failed.put(requested,now+10);
+            return path;
+        }finally{
+            navigation.resetMaxVisitedNodesMultiplier();
+        }
+    }
+
+    private static boolean loaded(Villager soldier,Path path){
+        for(int i=path.getNextNodeIndex();i<path.getNodeCount();i++)
+            if(!soldier.level.hasChunkAt(path.getNode(i).asBlockPos()))return false;
+        return true;
+    }
+
     private static boolean safeNodes(Path path,Vec3 start,java.util.function.Predicate<Vec3> allowed){
         if(path==null)return false;
         if(allowed==UNRESTRICTED)return true;

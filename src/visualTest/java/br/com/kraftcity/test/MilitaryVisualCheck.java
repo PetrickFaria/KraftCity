@@ -4,6 +4,7 @@ import br.com.kraftcity.military.*;
 import br.com.kraftcity.military.client.SoldierScreen;
 import br.com.kraftcity.employment.*;
 import br.com.kraftcity.employment.client.WorkScreen;
+import br.com.kraftcity.employment.client.WorkerPose;
 import br.com.kraftcity.workforce.WorkforceData;
 import br.com.residenciasaldeoes.ResidenciasDosAldeoes;
 import br.com.residenciasaldeoes.data.ResidenceData;
@@ -158,7 +159,13 @@ public final class MilitaryVisualCheck {
                 check(villager.getMaxHealth()==(actor==0?30:14)&&villager.getHealth()==14,"Integrated LV5 HP");
             }
         });
-        if(t==195)mc.player.closeContainer();
+        if(t==195){
+            var actors=mc.level.getEntitiesOfClass(Villager.class,new AABB(POST).inflate(16));
+            check(actors.stream().anyMatch(v->v.getUUID().equals(worker)&&WorkerPose.profession(v)==Profession.SOLDIER)
+                &&actors.stream().anyMatch(v->WorkerPose.profession(v)==Profession.FARMER),
+                "Worker professions did not synchronize for the nameplate");
+            mc.player.closeContainer();
+        }
         if(t==202)mc.getSingleplayerServer().execute(()->{
             var level=player(mc).getLevel();
             level.setBlock(POST.west(2).south(2),Blocks.BARREL.defaultBlockState(),3);
@@ -301,6 +308,62 @@ public final class MilitaryVisualCheck {
         if(tick==390){
             check(fallNotices==1&&creeperNotices==1,"Expected a single definitive notice for fall and Creeper");
             System.out.println("MILITARY_DEATH_CHAT_PASSED");
+        }
+        if(tick>=390)verifyAppearance(mc,tick-390);
+    }
+
+    private static void verifyAppearance(Minecraft mc,int tick){
+        var bed=HOME.east().south(3).above();
+        if(tick==0)mc.getSingleplayerServer().execute(()->{
+            var p=player(mc);
+            var level=p.getLevel();
+            var v=(Villager)level.getEntity(worker);
+            v.setNoAi(true);
+            // The lethal-zombie fixture legitimately wore out the initial iron armor.
+            var station=station(level);
+            station.equipment.setItem(2,new ItemStack(Items.IRON_HELMET));
+            station.equipment.setItem(3,new ItemStack(Items.IRON_CHESTPLATE));
+            station.equipment.setItem(4,new ItemStack(Items.CHAINMAIL_LEGGINGS));
+            station.equipment.setItem(5,new ItemStack(Items.DIAMOND_BOOTS));
+            Military.bind(station,v);
+            v.moveTo(POST.getX()+.5,POST.getY()+1,POST.getZ()+.5,0,0);
+            v.setYBodyRot(0);v.setYHeadRot(45);v.setXRot(-25);
+            p.setItemInHand(InteractionHand.MAIN_HAND,ItemStack.EMPTY);
+            p.teleportTo(level,POST.getX()+.5,POST.getY()+1,POST.getZ()+4.5,180,0);
+        });
+        if(tick==18){
+            var actors=mc.level.getEntitiesOfClass(Villager.class,new AABB(POST).inflate(12),v->v.getUUID().equals(worker));
+            check(actors.size()==1&&WorkerPose.profession(actors.get(0))==Profession.SOLDIER,"Cured profession label did not recover");
+            capture(mc,"visual-military-helmet-head-turn.png");
+        }
+        if(tick==24)mc.getSingleplayerServer().execute(()->{
+            var p=player(mc);
+            var level=p.getLevel();
+            var v=(Villager)level.getEntity(worker);
+            var head=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.NORTH);
+            level.setBlockAndUpdate(bed.south(),head);
+            level.setBlockAndUpdate(bed,head.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.HEAD));
+            station(level).military.putString("shift","DAY");
+            v.startSleeping(bed);
+            p.teleportTo(level,bed.getX()+3.25,bed.getY()+.75,bed.getZ()+1.25,106,26);
+        });
+        if(tick==45){
+            var actors=mc.level.getEntitiesOfClass(Villager.class,new AABB(bed).inflate(4),v->v.getUUID().equals(worker));
+            check(actors.size()==1&&actors.get(0).isSleeping(),"Armor screenshot was not taken in sleeping pose");
+            var soldier=actors.get(0);
+            for(var slot:List.of(EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET))
+                check(!soldier.getItemBySlot(slot).isEmpty(),"Sleeping equipment missing "+slot);
+            capture(mc,"visual-military-armor-sleep.png");
+        }
+        if(tick==50)mc.getSingleplayerServer().execute(()->{
+            var level=player(mc).getLevel();
+            var v=(Villager)level.getEntity(worker);
+            v.stopSleeping();
+            station(level).military.putString("shift","NIGHT");
+            station(level).setChanged();
+        });
+        if(tick==56){
+            System.out.println("MILITARY_HEAD_AND_SLEEP_ARMOR_PASSED");
             mc.stop();
         }
     }

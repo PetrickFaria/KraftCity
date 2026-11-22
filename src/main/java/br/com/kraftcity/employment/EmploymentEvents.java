@@ -68,7 +68,7 @@ public final class EmploymentEvents {
                     ||s.profession==Profession.FARMER&&br.com.kraftcity.industry.FarmerLogistics.ending(worker);
             ItemStack stowed=worker.isSleeping()||!interrupted&&!working?restingTool(s,worker):ItemStack.EMPTY;
             WorkNetwork.CHANNEL.send(net.minecraftforge.network.PacketDistributor.TRACKING_ENTITY.with(()->worker),
-                new WorkNetwork.Activity(worker.getId(),worker.getUUID(),s.profession==Profession.FARMER,soldier,working&&!interrupted,stowed));
+                new WorkNetwork.Activity(worker.getId(),worker.getUUID(),s.profession,working&&!interrupted,stowed));
         }
         if(server.getTickCount()%20!=0)return;
         for(var s:EmploymentData.get(server.overworld()).stations())Employment.reconcile(server.overworld(),s);
