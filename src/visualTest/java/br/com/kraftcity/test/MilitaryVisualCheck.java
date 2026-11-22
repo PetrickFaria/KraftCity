@@ -204,10 +204,10 @@ public final class MilitaryVisualCheck {
     private static void verifyScreenFits(Minecraft mc){
         var screen=(SoldierScreen)mc.screen;
         int oldWidth=screen.width,oldHeight=screen.height;
-        for(int scale:new int[]{1,2,3,0}){
+        for(int[] resolution:new int[][]{{960,720},{1280,720},{1600,900},{1920,1080}})for(int scale:new int[]{1,2,3,0}){
             int effective=1;
-            while((scale==0||effective<scale)&&960/(effective+1)>=320&&720/(effective+1)>=240)effective++;
-            screen.resize(mc,960/effective,720/effective);
+            while((scale==0||effective<scale)&&resolution[0]/(effective+1)>=320&&resolution[1]/(effective+1)>=240)effective++;
+            screen.resize(mc,resolution[0]/effective,resolution[1]/effective);
             var left=screen.getGuiLeft();
             if(screen.children().stream().anyMatch(w->w instanceof Button b&&b.getMessage().getString().contains("Noturno"))){
                 var night=button(mc,"Noturno");
@@ -261,7 +261,9 @@ public final class MilitaryVisualCheck {
                 var level=player.getLevel();
                 var station=station(level);
                 var soldier=(Villager)level.getEntity(worker);
-                check(station.getItem(0).getCount()<16&&station.equipment.getItem(0).getDamageValue()>0,"No physical bow shot");
+                check(station.getItem(0).getCount()==15&&station.equipment.getItem(0).getDamageValue()==1,"Expected one physical bow shot before 100 ticks");
+                check(station.military.getLong("bowReadyAt")>level.getGameTime(),"Bow cooldown not active after shooting");
+                station.military.putLong("visual_bow_ready",station.military.getLong("bowReadyAt"));
                 station.equipment.setItem(0,new ItemStack(Items.CROSSBOW));
                 station.setItem(0,new ItemStack(Items.ARROW,16));
                 Military.clearTask(soldier,station);
@@ -284,6 +286,11 @@ public final class MilitaryVisualCheck {
                 station.equipment.setItem(0,savedWeapon);
                 station.setItem(0,savedAmmo);
                 Military.clearTask((Villager)level.getEntity(worker),station);
+                long kills=WorkforceData.get(level).soldierKills(worker);
+                check(kills==1,"The credited melee kill was missing or counted more than once");
+                station.military.putLong("visual_kills",kills);
+                station.military.putInt("visual_level",Military.level(level,worker));
+                station.setChanged();
                 verifyDeathNotices(level,player);
                 System.out.println("MILITARY_RANGED_GRAPHICS_AND_AMMO_PASSED");
             });
@@ -330,5 +337,10 @@ public final class MilitaryVisualCheck {
         check(br.com.kraftcity.logistics.DiscardBinding.boundPosition(l,s)==null
             &&l.getBlockEntity(chestPos) instanceof net.minecraft.world.level.block.entity.BarrelBlockEntity barrel
             &&barrel.countItem(Items.ARROW)==16,"Military linked barrel or stock lost");
+        check(s.military.getLong("visual_kills")>0
+            &&WorkforceData.get(l).soldierKills(s.worker)==s.military.getLong("visual_kills")
+            &&Military.level(l,s.worker)==s.military.getInt("visual_level"),"Soldier kill ledger or level lost on restart");
+        check(s.military.getLong("visual_bow_ready")>0
+            &&s.military.getLong("bowReadyAt")==s.military.getLong("visual_bow_ready"),"Bow cooldown lost on restart");
         System.out.println("MILITARY_WORLD_RESTART_PASSED");}
 }

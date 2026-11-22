@@ -384,6 +384,9 @@ public final class MilitaryGameTests {
         clearTestHostiles(f);
         for(var pos:BlockPos.betweenClosed(f.p.offset(-8,0,-8),f.p.offset(8,0,8)))
             if(!pos.equals(f.p))f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
+        var extraHome=f.p.south(9);
+        f.l.setBlock(extraHome,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);
+        ((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)f.l.getBlockEntity(extraHome)).setSize(11);
         f.v.setOnGround(true);
         f.s.equipment.setItem(0,new ItemStack(Items.BOW));
         f.s.setItem(0,new ItemStack(Items.ARROW,8));
@@ -398,6 +401,7 @@ public final class MilitaryGameTests {
         var path=f.v.getNavigation().getPath();
         check(path!=null&&path.canReach(),"No retreat path with two threats");
         var destination=Vec3.atBottomCenterOf(path.getTarget());
+        check(destination.z<f.p.getZ()+4,"The retreat path entered the southern residential area");
         check(front.distanceToSqr(destination)>front.distanceToSqr(f.v)
             &&rear.distanceToSqr(destination)>rear.distanceToSqr(f.v)&&Military.insideArea(f.s,destination),
             "Retreat moved toward one of the threats");
@@ -597,5 +601,129 @@ public final class MilitaryGameTests {
             Military.clearTask(f.v,f.s);
         }
         h.succeed();
+    }
+    @GameTest(template="empty",timeoutTicks=1100,batch="military_live_loot")
+    public static void guard_walks_to_loot_at_10_and_25_unloads_and_returns(GameTestHelper h){
+        var f=fixture(h,20);
+        clearTestHostiles(f);
+        var floor=f.p.below();
+        for(var p:BlockPos.betweenClosed(floor.offset(-3,0,-4),floor.offset(29,0,4)))
+            f.l.setBlock(p,Blocks.STONE.defaultBlockState(),3);
+        var chest=f.p.east(2).south();
+        f.l.setBlock(chest,Blocks.BARREL.defaultBlockState(),3);
+        mode(f,Military.Mode.GUARD);
+        var item10=new net.minecraft.world.entity.item.ItemEntity(f.l,f.p.getX()+10.5,f.p.getY()+.05,f.p.getZ()+.5,new ItemStack(Items.COBBLESTONE,2));
+        var item25=new net.minecraft.world.entity.item.ItemEntity(f.l,f.p.getX()+25.4,f.p.getY()+.05,f.p.getZ()+.5,new ItemStack(Items.IRON_NUGGET,3));
+        var outside=new net.minecraft.world.entity.item.ItemEntity(f.l,f.p.getX()+27.5,f.p.getY()+.05,f.p.getZ()+.5,new ItemStack(Items.GOLD_NUGGET));
+        for(var item:List.of(item10,item25,outside)){
+            item.setDeltaMovement(Vec3.ZERO);f.l.addFreshEntity(item);
+        }
+        f.v.setOnGround(true);
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->{
+            var barrel=(net.minecraft.world.level.block.entity.BarrelBlockEntity)f.l.getBlockEntity(chest);
+            check(barrel.countItem(Items.COBBLESTONE)==2&&barrel.countItem(Items.IRON_NUGGET)==3&&outside.isAlive(),
+              "Guard journey incomplete: "+f.v.position()+" / "+f.v.getNavigation().getTargetPos());
+        }).thenWaitUntil(()->check(f.v.distanceToSqr(Vec3.atBottomCenterOf(f.p.above()))<1e-8,"Guard did not center after deposit"))
+          .thenSucceed();
+    }
+    @GameTest(template="empty",timeoutTicks=1800,batch="military_city_workflow")
+    public static void guard_and_patrol_share_a_city_without_collecting_protected_items(GameTestHelper h){
+        var f=fixture(h,20);
+        clearTestHostiles(f);
+        var neighbors=f.l.getEntitiesOfClass(Villager.class,f.v.getBoundingBox().inflate(100),
+            villager->villager!=f.v&&!villager.isNoAi()&&Military.isSoldier(villager));
+        neighbors.forEach(villager->villager.setNoAi(true));
+        var floor=f.p.below();
+        for(var point:BlockPos.betweenClosed(floor.offset(-12,0,-10),floor.offset(38,0,21)))
+            f.l.setBlock(point,Blocks.STONE.defaultBlockState(),3);
+        var city=ResidenceData.get(f.l);
+        var patrolPos=f.p.south(14);
+        var patrol=EntityType.VILLAGER.create(f.l);
+        patrol.setAge(0);
+        patrol.setNoAi(true);
+        patrol.setPos(Vec3.atBottomCenterOf(patrolPos.above()));
+        f.l.addFreshEntity(patrol);
+        check("ok".equals(city.link(f.l,f.home,patrol)),"Patrol residence");
+        f.l.setBlock(patrolPos,WorkModule.MILITARY.get().defaultBlockState(),3);
+        var patrolStation=((WorkBlockEntity)f.l.getBlockEntity(patrolPos)).station();
+        patrolStation.setItem(31,new ItemStack(Items.EMERALD,30));
+        f.player.setPos(patrol.position());
+        var patrolContract=Employment.hire(f.player,patrolStation,patrol.getUUID(),Profession.SOLDIER);
+        check("ok".equals(patrolContract),"Patrol hire: "+patrolContract);
+        patrolStation.military.putString("mode","FREE");
+        mode(f,Military.Mode.GUARD);
+        var farmer=EntityType.VILLAGER.create(f.l);
+        farmer.setAge(0);
+        farmer.setNoAi(true);
+        var farmPos=f.p.offset(10,-1,14);
+        farmer.setPos(Vec3.atBottomCenterOf(farmPos.above()));
+        f.l.addFreshEntity(farmer);
+        check("ok".equals(city.link(f.l,f.home,farmer)),"Farmer residence");
+        f.l.setBlock(farmPos,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);
+        var farm=((WorkBlockEntity)f.l.getBlockEntity(farmPos)).station();
+        farm.setItem(31,new ItemStack(Items.EMERALD,32));
+        f.player.setPos(farmer.position());
+        var farmContract=Employment.hire(f.player,farm,farmer.getUUID(),Profession.FARMER);
+        check("ok".equals(farmContract),"Farmer hire: "+farmContract);
+        // Keep the farmer's own logistics from consuming the protected test item.
+        for(int slot=0;slot<27;slot++)farm.setItem(slot,new ItemStack(Items.DIRT,64));
+        var guardChest=f.p.offset(2,0,-2);
+        var patrolChest=patrolPos.offset(3,0,-2);
+        var ender=patrolPos.east(2);
+        f.l.setBlock(guardChest,Blocks.BARREL.defaultBlockState(),3);
+        f.l.setBlock(patrolChest,Blocks.BARREL.defaultBlockState(),3);
+        f.l.setBlock(ender,Blocks.ENDER_CHEST.defaultBlockState(),3);
+        var guardBarrel=(net.minecraft.world.level.block.entity.BarrelBlockEntity)f.l.getBlockEntity(guardChest);
+        var patrolBarrel=(net.minecraft.world.level.block.entity.BarrelBlockEntity)f.l.getBlockEntity(patrolChest);
+        for(var station:List.of(f.s,patrolStation)){
+            station.equipment.setItem(0,new ItemStack(station==f.s?Items.BOW:Items.CROSSBOW));
+            station.equipment.setItem(2,new ItemStack(Items.IRON_HELMET));
+            station.equipment.setItem(3,new ItemStack(Items.IRON_CHESTPLATE));
+            station.equipment.setItem(4,new ItemStack(Items.IRON_LEGGINGS));
+            station.equipment.setItem(5,new ItemStack(Items.IRON_BOOTS));
+            station.setItem(0,new ItemStack(Items.ARROW,16));
+        }
+        var front=mob(f,EntityType.ZOMBIE,5);
+        var rear=mob(f,EntityType.ZOMBIE,-3);
+        var creeper=mob(f,EntityType.CREEPER,2);
+        front.setTarget(f.v);
+        rear.setTarget(f.v);
+        check(Military.target(f.l,f.s,f.v)==rear&&!Military.authorized(f.l,f.s,f.v,creeper),"City threat policy");
+        var residential=f.home.north();
+        f.l.setBlock(residential,Blocks.STONE.defaultBlockState(),3);
+        var protectedHouse=cityLoot(f.l,residential.above(),Items.QUARTZ,2);
+        var protectedFarm=cityLoot(f.l,farmPos.east().above(),Items.LAPIS_LAZULI,3);
+        var guardLoot=cityLoot(f.l,f.p.east(10),Items.COBBLESTONE,4);
+        var patrolLoot=cityLoot(f.l,patrolPos.offset(29,0,4),Items.IRON_NUGGET,5);
+        front.discard();
+        rear.discard();
+        creeper.discard();
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->check(!guardLoot.isAlive()&&guardBarrel.countItem(Items.COBBLESTONE)==4
+            &&f.v.distanceToSqr(Vec3.atBottomCenterOf(f.p.above()))<.0025,"City guard did not collect, unload and return: "+f.v.position()))
+            .thenExecute(()->patrol.setNoAi(false))
+            .thenWaitUntil(()->check(!patrolLoot.isAlive()&&patrolBarrel.countItem(Items.IRON_NUGGET)==5,
+                "City patrol did not collect at 29 blocks and unload: "+patrol.position()+" path="+patrol.getNavigation().getTargetPos()))
+            .thenWaitUntil(()->check(patrol.getNavigation().getTargetPos()!=null
+                &&patrol.getNavigation().getTargetPos().distSqr(patrolChest)>4,"City patrol did not resume"))
+            .thenExecute(()->{
+                check(protectedHouse.isAlive()&&protectedFarm.isAlive(),"Protected civic loot changed: residence="+protectedHouse.isAlive()
+                    +" farm="+protectedFarm.isAlive()+" farm stock="+farm.getItem(0));
+                check(br.com.kraftcity.logistics.DiscardChests.automaticMilitaryDestinations(f.l,patrolStation).equals(List.of(patrolChest)),
+                    "The unbound Ender chest became a candidate");
+                f.v.discard();
+                patrol.discard();
+                farmer.discard();
+                neighbors.forEach(villager->villager.setNoAi(false));
+            }).thenSucceed();
+    }
+
+    private static net.minecraft.world.entity.item.ItemEntity cityLoot(ServerLevel level,BlockPos pos,Item item,int count){
+        var center=Vec3.atBottomCenterOf(pos);
+        var loot=new net.minecraft.world.entity.item.ItemEntity(level,center.x,center.y+.05,center.z,new ItemStack(item,count));
+        loot.setDeltaMovement(Vec3.ZERO);
+        level.addFreshEntity(loot);
+        return loot;
     }
 }

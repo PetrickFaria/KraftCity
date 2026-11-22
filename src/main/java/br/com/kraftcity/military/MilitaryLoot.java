@@ -24,6 +24,10 @@ final class MilitaryLoot {
         if(ROUTING.remove(soldier)!=null)soldier.getNavigation().stop();
     }
 
+    static void protectRoute(Villager soldier,List<AABB> areas){
+        ROUTING.put(soldier,areas);
+    }
+
     static Vec3 limitMovement(Villager soldier,Vec3 movement){
         var areas=ROUTING.get(soldier);
         if(areas==null)return movement;
@@ -78,7 +82,7 @@ final class MilitaryLoot {
             }
             if(approach&&attempts++<16){
                 if(area.move(soldier,point,MilitaryArea.WALK,node->!blocked(protectedAreas,node))){
-                    ROUTING.put(soldier,protectedAreas);
+                    protectRoute(soldier,protectedAreas);
                     return true;
                 }
             }
@@ -86,11 +90,11 @@ final class MilitaryLoot {
         return false;
     }
 
-    private static boolean blocked(List<AABB> areas,Vec3 point){
+    static boolean blocked(List<AABB> areas,Vec3 point){
         return areas.stream().anyMatch(box->box.contains(point));
     }
 
-    private static List<AABB> protectedAreas(ServerLevel level,MilitaryArea area){
+    static List<AABB> protectedAreas(ServerLevel level,MilitaryArea area){
         var result=new ArrayList<AABB>();
         for(var home:ResidenceData.get(level).homes()){
             if(!home.dimension.equals(level.dimension())||!level.hasChunkAt(home.pos))continue;

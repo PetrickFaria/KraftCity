@@ -346,6 +346,7 @@ public final class Military {
         var area=new MilitaryArea(s);
         boolean retreating=retreat(l,s,v,area);
         if(!retreating){
+            MilitaryLoot.finish(v);
             if(distance>36)area.move(v,t.position(),MilitaryArea.CHASE);
             else v.getNavigation().stop();
         }
@@ -392,8 +393,10 @@ public final class Military {
                     ||mob instanceof Creeper creeper&&creeper.getSwellDir()>0
                     ||mob.distanceToSqr(soldier)<16&&priority(level,station,soldier,mob,area)!=Integer.MAX_VALUE));
         if(threats.isEmpty())return false;
-        MilitaryLoot.finish(soldier);
         var origin=soldier.position();
+        var protectedAreas=MilitaryLoot.protectedAreas(level,area);
+        // A soldier already defending a protected area may leave it during a retreat.
+        var newlyEntered=protectedAreas.stream().filter(box->!box.contains(origin)).toList();
         var candidates=new ArrayList<Vec3>();
         for(int dx=-4;dx<=4;dx+=2)for(int dz=-4;dz<=4;dz+=2)
             if(dx!=0||dz!=0)candidates.add(Vec3.atBottomCenterOf(soldier.blockPosition().offset(dx,0,dz)));
@@ -403,9 +406,13 @@ public final class Military {
             if(clearance(point,threats)<=current+.5)break;
             if(area.move(soldier,point,MilitaryArea.CHASE,node->{
                 var feet=new BlockPos(node);
-                return level.getFluidState(feet).isEmpty()&&!level.getFluidState(feet.below()).is(net.minecraft.tags.FluidTags.LAVA)
+                return !MilitaryLoot.blocked(newlyEntered,node)&&level.getFluidState(feet).isEmpty()
+                    &&!level.getFluidState(feet.below()).is(net.minecraft.tags.FluidTags.LAVA)
                     &&Math.abs(node.y-origin.y)<=1&&clearance(node,threats)>=Math.min(current,4)-.25;
-            }))return true;
+            })){
+                MilitaryLoot.protectRoute(soldier,protectedAreas);
+                return true;
+            }
         }
         soldier.getNavigation().stop();
         return true;
