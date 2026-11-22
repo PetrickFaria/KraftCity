@@ -24,4 +24,4 @@ A apicultura usa a coleta física, o descarte ao fim do expediente, a navegaçã
 
 ## Evidência
 
-Os GameTests cobrem filtros e inventário compartilhado, áreas e colmeias, flores consumidas, capacidade, produção com frascos ou tesoura, inventário cheio, reprodução vanilla e vínculo da cria. A suíte gráfica exercita as duas páginas e verifica os dados do apiário após reabrir o mundo em outra JVM.
+Os GameTests cobrem filtros e inventário compartilhado, áreas e colmeias, flores consumidas, capacidade, produção com frascos ou tesoura, inventário cheio, reprodução vanilla e vínculo da cria. As rotas são exercitadas com uma colmeia atrás de uma parede, uma tempestade que interrompe o trabalho e um descarte seguido de caminhada até a cama a 20 blocos. A suíte gráfica exercita as duas páginas e verifica os dados do apiário após reabrir o mundo em outra JVM.

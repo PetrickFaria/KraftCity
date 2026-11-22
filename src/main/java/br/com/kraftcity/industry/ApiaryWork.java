@@ -111,7 +111,8 @@ public final class ApiaryWork {
         for(Tag tag:stored){
             var pos=BlockPos.of(((LongTag)tag).getAsLong());
             if(result.size()>=limit)break;
-            if(area.contains(Vec3.atCenterOf(pos))&&(!level.hasChunkAt(pos)||level.getBlockEntity(pos) instanceof BeehiveBlockEntity))
+            if(area.contains(Vec3.atCenterOf(pos))&&(!level.hasChunkAt(pos)
+                ||level.getBlockEntity(pos) instanceof BeehiveBlockEntity&&!claimed(level,station,pos)))
                 result.add(pos);
         }
         if(result.size()<limit){
@@ -155,15 +156,7 @@ public final class ApiaryWork {
             return true;
         }
         show(worker,resource);
-        if(!visible(level,worker,Vec3.atCenterOf(pos),pos)){
-            for(var side:Direction.Plane.HORIZONTAL){
-                var feet=pos.relative(side);
-                if(!level.hasChunkAt(feet))continue;
-                var path=worker.getNavigation().createPath(feet,0);
-                if(path!=null&&path.canReach()&&worker.getNavigation().moveTo(path,.68))return true;
-            }
-            return false;
-        }
+        if(!visible(level,worker,Vec3.atCenterOf(pos),pos))return approachHive(level,station,worker,pos);
         if(!IndustrialWork.allowed(level,station,worker,pos,null,bottling?"honey":"honeycomb")
             ||level.getBlockEntity(pos)!=hive)return false;
         var state=hive.getBlockState();
@@ -179,10 +172,29 @@ public final class ApiaryWork {
         if(!bottling)IndustrialRules.wear(level,station,resource);
         if(!CampfireBlock.isSmokeyPos(level,pos))defendHive(level,station,worker,hive,state);
         worker.getNavigation().stop();
+        worker.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,Vec3.atCenterOf(pos));
         worker.swing(InteractionHand.MAIN_HAND);
         level.playSound(null,pos,bottling?SoundEvents.BOTTLE_FILL:SoundEvents.BEEHIVE_SHEAR,SoundSource.BLOCKS,1,1);
         IndustrialRules.progress(level,station);
         return true;
+    }
+
+    private static boolean approachHive(ServerLevel level,EmploymentData.Station station,Villager worker,BlockPos hive){
+        var bounds=IndustrialWork.area(level,station).expandTowards(0,-1,0);
+        var destination=Vec3.atCenterOf(hive);
+        var options=new ArrayList<BlockPos>();
+        for(var direction:Direction.Plane.HORIZONTAL){
+            for(int down=0;down<=2;down++)options.add(hive.relative(direction).below(down));
+        }
+        options.sort(Comparator.comparingDouble(pos->worker.distanceToSqr(Vec3.atBottomCenterOf(pos))));
+        for(var pos:options){
+            if(!bounds.contains(Vec3.atCenterOf(pos))||!level.hasChunkAt(pos))continue;
+            var eyes=Vec3.atBottomCenterOf(pos).add(0,worker.getEyeHeight(),0);
+            if(!hasView(level,worker,eyes,destination,hive))continue;
+            var path=worker.getNavigation().createPath(pos,0);
+            if(path!=null&&path.canReach()&&worker.getNavigation().moveTo(path,.68))return true;
+        }
+        return false;
     }
 
     private static void defendHive(ServerLevel level,EmploymentData.Station station,Villager worker,
@@ -225,6 +237,7 @@ public final class ApiaryWork {
         flowers.shrink(1);
         int remaining=attempt.getInt("remaining")-1;
         worker.getNavigation().stop();
+        worker.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,bee.getEyePosition());
         worker.swing(InteractionHand.MAIN_HAND);
         if(remaining<=0){
             bind(station,bee);
@@ -269,8 +282,12 @@ public final class ApiaryWork {
     }
 
     private static boolean visible(ServerLevel level,Villager worker,Vec3 target,BlockPos block){
-        if(worker.getEyePosition().distanceToSqr(target)>9)return false;
-        var hit=level.clip(new ClipContext(worker.getEyePosition(),target,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,worker));
+        return hasView(level,worker,worker.getEyePosition(),target,block);
+    }
+
+    private static boolean hasView(ServerLevel level,Villager worker,Vec3 eyes,Vec3 target,BlockPos block){
+        if(eyes.distanceToSqr(target)>9)return false;
+        var hit=level.clip(new ClipContext(eyes,target,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,worker));
         return hit.getType()==HitResult.Type.MISS||block!=null&&block.equals(hit.getBlockPos());
     }
 

@@ -385,6 +385,26 @@ public final class IndustryGameTests {
         }).thenSucceed();
     }
 
+    @GameTest(template="empty",timeoutTicks=360,batch="apiary_hive_path")
+    public static void apiary_walks_around_a_wall_to_reach_a_hive(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var near=Vec3.atBottomCenterOf(f.p.above());
+        var pos=f.p.east(2).above();
+        f.v.setPos(near);
+        for(var at:BlockPos.betweenClosed(f.p.offset(1,1,-1),f.p.offset(1,3,1)))
+            f.l.setBlock(at,Blocks.STONE.defaultBlockState(),3);
+        f.l.setBlock(pos,Blocks.BEEHIVE.defaultBlockState().setValue(BeehiveBlock.HONEY_LEVEL,5),3);
+        ((net.minecraft.world.level.block.entity.BeehiveBlockEntity)f.l.getBlockEntity(pos))
+            .addOccupant(EntityType.BEE.create(f.l),false);
+        f.s.setItem(28,new ItemStack(Items.GLASS_BOTTLE));
+        step(f,1);
+        check(f.s.getItem(28).getCount()==1,"Worker harvested through a wall");
+        f.v.setNoAi(false);
+        h.succeedWhen(()->check(count(f,Items.HONEY_BOTTLE)==1&&f.v.position().distanceToSqr(near)>1,
+            "Waiting for a physical approach around the wall"));
+    }
+
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void all_jobs_keep_shared_inventory_and_additive_save_data(GameTestHelper h){
         for(Profession p:Profession.values())if(p.sector==Profession.Sector.INDUSTRIAL){
@@ -1153,6 +1173,10 @@ public final class IndustryGameTests {
     public static void farmer_discards_and_walks_to_linked_home_a_hundred_blocks_away(GameTestHelper h){verifyLongHomeReturn(h,100,64);}
 
     private static void verifyLongHomeReturn(GameTestHelper h,int distance,int height){
+        verifyLongHomeReturn(h,distance,height,Profession.FARMER);
+    }
+
+    private static void verifyLongHomeReturn(GameTestHelper h,int distance,int height,Profession profession){
         var level=h.getLevel();
         var post=h.absolutePos(new BlockPos(8,2,8)).above(height);
         var home=post.west(distance);
@@ -1174,7 +1198,7 @@ public final class IndustryGameTests {
         var employer=FakePlayerFactory.get(level,new GameProfile(UUID.randomUUID(),"LongFarmRoute"));
         employer.setPos(worker.getX(),worker.getY(),worker.getZ());
         station.setItem(31,new ItemStack(Items.EMERALD,EmploymentConfig.cost(Profession.Sector.INDUSTRIAL)));
-        check(Employment.hire(employer,station,worker.getUUID(),Profession.FARMER).equals("ok"),"Long-range hire failed");
+        check(Employment.hire(employer,station,worker.getUUID(),profession).equals("ok"),"Long-range hire failed");
         var target=post.north().above();
         level.setBlockAndUpdate(target,Blocks.BARREL.defaultBlockState());
         var barrel=(BarrelBlockEntity)level.getBlockEntity(target);
@@ -2115,4 +2139,34 @@ public final class IndustryGameTests {
         }).thenSucceed();
     }
 
+    @GameTest(template="empty",timeoutTicks=850,batch="apiary_route")
+    public static void apiary_discards_and_walks_to_bed(GameTestHelper h){
+        verifyLongHomeReturn(h,20,32,Profession.BEEKEEPER);
+    }
+
+    @GameTest(template="empty",timeoutTicks=480,batch="apiary_storm")
+    public static void apiary_returns_during_thunder_and_works_again_when_clear(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var start=Vec3.atBottomCenterOf(f.p.south().above());
+        f.v.setPos(start);
+        f.v.setNoAi(false);
+        var pos=hive(f,true);
+        f.s.setItem(28,ItemStack.EMPTY);
+        f.l.setWeatherParameters(0,10000,true,true);
+        f.l.setRainLevel(1);
+        f.l.setThunderLevel(1);
+        h.startSequence().thenWaitUntil(()->{
+            check(f.l.isThundering(),"Storm not active");
+            check(f.v.position().distanceToSqr(Vec3.atCenterOf(home))<22,"Apiarist did not return during storm");
+        }).thenExecute(()->{
+            check(f.l.getBlockState(pos).getValue(BeehiveBlock.HONEY_LEVEL)==5&&!f.v.isSleeping(),"Storm consumed a hive or caused daytime sleep");
+            f.l.setWeatherParameters(10000,0,false,false);
+            f.l.setRainLevel(0);
+            f.l.setThunderLevel(0);
+            f.s.setItem(28,new ItemStack(Items.GLASS_BOTTLE));
+        }).thenWaitUntil(()->check(count(f,Items.HONEY_BOTTLE)==1,"Apiarist did not return to harvest"))
+        .thenSucceed();
+    }
 }
