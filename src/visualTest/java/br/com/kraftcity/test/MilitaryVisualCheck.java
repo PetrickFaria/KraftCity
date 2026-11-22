@@ -422,5 +422,11 @@ public final class MilitaryVisualCheck {
         check(l.getEntity(s.worker) instanceof Villager resting&&resting.isSleeping()
             &&resting.getSleepingPos().filter(HOME.east().south(3).above()::equals).isPresent(),
             "Sleeping military pose or bed did not survive reopening");
-        System.out.println("MILITARY_WORLD_RESTART_PASSED");}
+        check(l.getLevelData().isThundering(),"Storm did not survive reopening");
+        System.out.println("MILITARY_WORLD_RESTART_PASSED");
+        // Resume the clear-weather commerce and builder phases after the storm checkpoint.
+        l.setWeatherParameters(12000,0,false,false);
+        l.setRainLevel(0);
+        l.setThunderLevel(0);
+    }
 }
