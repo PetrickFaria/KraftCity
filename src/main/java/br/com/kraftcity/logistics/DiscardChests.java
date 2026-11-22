@@ -24,6 +24,7 @@ public final class DiscardChests {
     public record Access(BlockPos pos,Container inventory){}
     private record Cached(long at,BlockPos post,AABB area,List<BlockPos> positions){}
     private static final Map<ServerLevel,Map<UUID,Cached>> CACHE=new WeakHashMap<>();
+    private static final Map<ServerLevel,Map<UUID,Cached>> MILITARY_CACHE=new WeakHashMap<>();
     public static boolean inRange(AABB area,BlockPos p){
         double x=p.getX()+.5,y=p.getY()+.5,z=p.getZ()+.5;
         double dx=Math.max(0,Math.max(area.minX+.5-x,x-(area.maxX-.5)));
@@ -92,6 +93,29 @@ public final class DiscardChests {
             .thenComparingInt(BlockPos::getX).thenComparingInt(BlockPos::getY).thenComparingInt(BlockPos::getZ));
         var seen=new HashSet<Long>();
         return positions.stream().filter(pos->seen.add(identity(level,pos))).toList();
+    }
+
+    public static List<BlockPos> automaticMilitaryDestinations(ServerLevel level,EmploymentData.Station station){
+        var area=new AABB(station.pos).inflate(5);
+        var cache=MILITARY_CACHE.computeIfAbsent(level,key->new HashMap<>());
+        long now=level.getGameTime();
+        var saved=cache.get(station.id);
+        if(saved!=null&&saved.post.equals(station.pos)&&now>=saved.at&&now-saved.at<20)return saved.positions;
+        var positions=loadedPositions(level,station,area,pos->{
+            if(!DiscardBinding.inRange(level,station,pos))return false;
+            return isAutomaticMilitaryContainer(level,pos);
+        });
+        var seen=new HashSet<Long>();
+        var distinct=positions.stream().filter(pos->seen.add(identity(level,pos))).toList();
+        cache.put(station.id,new Cached(now,station.pos,area,distinct));
+        return distinct;
+    }
+
+    public static boolean isAutomaticMilitaryContainer(ServerLevel level,BlockPos pos){
+        if(!level.hasChunkAt(pos))return false;
+        var tile=level.getBlockEntity(pos);
+        return tile!=null&&!(tile instanceof EnderChestBlockEntity)&&!(tile instanceof WorkerDiscardAccess)
+            &&!ArcaneDiscard.isEnder(tile)&&exposed(level,pos)&&(at(level,pos)!=null||capability(level,pos)!=null);
     }
 
     private static boolean exposed(ServerLevel level,BlockPos pos){
@@ -256,6 +280,6 @@ public final class DiscardChests {
             if(l.getBlockEntity(other) instanceof BaseContainerBlockEntity container&&!container.canOpen(actor))return false;
         }return true;
     }
-    public static void invalidate(ServerLevel l){CACHE.remove(l);}
+    public static void invalidate(ServerLevel l){CACHE.remove(l);MILITARY_CACHE.remove(l);}
     private DiscardChests(){}
 }

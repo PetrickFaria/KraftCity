@@ -9,6 +9,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 final class MilitaryArea {
+    private static final java.util.function.Predicate<Vec3> UNRESTRICTED=point->true;
     static final double WALK=.5;
     static final double CHASE=.75;
     private final AABB bounds;
@@ -20,6 +21,8 @@ final class MilitaryArea {
     static AABB boundsAt(BlockPos post){
         return new AABB(post).inflate(100,15,100);
     }
+
+    AABB bounds(){return bounds;}
 
     boolean contains(Vec3 point){return bounds.contains(point);}
     boolean intersects(AABB area){return bounds.intersects(area);}
@@ -110,17 +113,35 @@ final class MilitaryArea {
     }
 
     boolean move(Villager soldier,Vec3 destination,double speed){
-        if(!contains(destination))return false;
+        return move(soldier,destination,speed,UNRESTRICTED);
+    }
+
+    boolean move(Villager soldier,Vec3 destination,double speed,java.util.function.Predicate<Vec3> allowed){
+        if(!contains(destination)||!allowed.test(destination))return false;
         var pos=new BlockPos(destination);
         if(!soldier.level.hasChunkAt(pos))return false;
         var navigation=soldier.getNavigation();
         if(!navigation.isDone()&&pos.equals(navigation.getTargetPos())
-            &&(permits(navigation.getPath())||!contains(soldier.position())&&enters(navigation.getPath())))return true;
+            &&safeNodes(navigation.getPath(),soldier.position(),allowed)&&(permits(navigation.getPath())||!contains(soldier.position())&&enters(navigation.getPath())))return true;
         ensureGroundContact(soldier);
         Path path=navigation.createPath(pos,0);
-        return path!=null&&path.canReach()&&(permits(path)||!contains(soldier.position())&&enters(path))
+        return path!=null&&path.canReach()&&safeNodes(path,soldier.position(),allowed)&&(permits(path)||!contains(soldier.position())&&enters(path))
             &&navigation.moveTo(path,speed);
     }
+    private static boolean safeNodes(Path path,Vec3 start,java.util.function.Predicate<Vec3> allowed){
+        if(path==null)return false;
+        if(allowed==UNRESTRICTED)return true;
+        var previous=start;
+        for(int i=path.getNextNodeIndex();i<path.getNodeCount();i++){
+            var next=Vec3.atBottomCenterOf(path.getNode(i).asBlockPos());
+            int samples=Math.max(1,(int)Math.ceil(previous.distanceTo(next)*2));
+            for(int step=1;step<=samples;step++)
+                if(!allowed.test(previous.lerp(next,(double)step/samples)))return false;
+            previous=next;
+        }
+        return true;
+    }
+
     private static void ensureGroundContact(Villager soldier){
         if(!soldier.isOnGround()&&Math.abs(soldier.getDeltaMovement().y)<.08
             &&!soldier.level.noCollision(soldier,soldier.getBoundingBox().move(0,-.02,0)))soldier.setOnGround(true);

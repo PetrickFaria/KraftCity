@@ -35,18 +35,20 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
             new HumanoidModel<>(models.bakeLayer(ModelLayers.PLAYER_OUTER_ARMOR))){
             @Override protected void setPartVisibility(HumanoidModel<Villager> model,EquipmentSlot slot){
                 super.setPartVisibility(model,slot);
-                // The villager head and projecting nose have no compatible vanilla helmet shell.
-                if(slot==EquipmentSlot.HEAD&&!steve){model.head.visible=false;model.hat.visible=false;}
+                if(slot==EquipmentSlot.HEAD&&!steve){
+                    model.head.y-=2.8F;
+                    model.head.yScale=.86F;
+                    model.head.zScale=.94F;
+                    model.hat.copyFrom(model.head);
+                }
+                if(slot==EquipmentSlot.LEGS&&!steve){model.leftLeg.y-=1;model.rightLeg.y-=1;}
+                if(slot==EquipmentSlot.FEET&&!steve){model.leftLeg.y-=1.2F;model.rightLeg.y-=1.2F;}
                 if(slot==EquipmentSlot.LEGS&&!steve){
                     // The robe is deeper than the vanilla leggings mesh at rest.
                     model.body.zScale=1.55F;
                     model.leftLeg.zScale=1.55F;
                     model.rightLeg.zScale=1.55F;
                 }
-            }
-            @Override protected net.minecraft.client.model.Model getArmorModelHook(
-                    Villager entity,ItemStack stack,EquipmentSlot slot,HumanoidModel<Villager> model){
-                return slot==EquipmentSlot.HEAD&&!steve?model:super.getArmorModelHook(entity,stack,slot,model);
             }
         };
     }
@@ -61,6 +63,7 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
             var root=villager.root();
             poseModel.young=villager.young;
             poseModel.riding=villager.riding;
+            poseModel.head.copyFrom(root.getChild("head"));
             poseModel.body.copyFrom(root.getChild("body"));
             poseModel.body.zScale=1.3F;
             poseModel.rightLeg.copyFrom(root.getChild("right_leg"));

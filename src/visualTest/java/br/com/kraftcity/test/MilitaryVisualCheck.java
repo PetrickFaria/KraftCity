@@ -60,6 +60,7 @@ public final class MilitaryVisualCheck {
         var s=station(l);
         // The copied GameTest world can contain hostiles from earlier fixtures in this post's range.
         var bounds=Military.areaBounds(POST);
+        l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,new AABB(POST).inflate(25)).forEach(Entity::discard);
         l.getEntitiesOfClass(net.minecraft.world.entity.Mob.class,bounds,
             mob->mob instanceof net.minecraft.world.entity.monster.Enemy&&Military.insideArea(s,mob.position()))
             .forEach(net.minecraft.world.entity.Entity::discard);
@@ -156,19 +157,16 @@ public final class MilitaryVisualCheck {
                 Military.residentHealth(level,villager);
                 check(villager.getMaxHealth()==(actor==0?30:14)&&villager.getHealth()==14,"Integrated LV5 HP");
             }
-            var chest=POST.west(2).south(2);
-            level.setBlock(chest,Blocks.BARREL.defaultBlockState(),3);
         });
-        if(t==193)click(mc,"›");
-        if(t==195)click(mc,"Vincular baú");
-        if(t==199){
-            var chest=POST.west(2).south(2);
-            mc.gameMode.useItemOn(mc.player,InteractionHand.MAIN_HAND,
-                new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(chest),Direction.SOUTH,chest,false));
-        }
+        if(t==195)mc.player.closeContainer();
+        if(t==202)mc.getSingleplayerServer().execute(()->{
+            var level=player(mc).getLevel();
+            level.setBlock(POST.west(2).south(2),Blocks.BARREL.defaultBlockState(),3);
+            level.setBlock(POST.west().south(2),Blocks.ENDER_CHEST.defaultBlockState(),3);
+        });
         if(t==215)mc.getSingleplayerServer().execute(()->{
             var l=player(mc).getLevel();var s=station(l);
-            check(POST.west(2).south(2).equals(br.com.kraftcity.logistics.DiscardBinding.boundPosition(l,s)),"Integrated client chest link");
+            check(br.com.kraftcity.logistics.DiscardBinding.boundPosition(l,s)==null,"Ordinary chest unexpectedly required a binding");
             check(s.getItem(0).getCount()==16,"Integrated combat discarded ammo before safety");
         });
         if(t==200)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();
@@ -180,7 +178,7 @@ public final class MilitaryVisualCheck {
         if(t>210&&t%10==0&&!won)mc.getSingleplayerServer().execute(()->{var l=player(mc).getLevel();var cow=l.getEntity(enemy);if(cow==null||!cow.isAlive()){var s=station(l);check(s.equipment.getItem(0).getDamageValue()>0&&WorkforceData.get(l).progress(worker,Profession.SOLDIER.id()).xp()>0,"No real military hit/XP");Military.select(s,EntityType.COW,false);won=true;System.out.println("MILITARY_GRAPHICAL_COMBAT_AND_XP_PASSED");}});
         if(won&&wonAt<0)wonAt=t;
         if(wonAt>=0){int elapsed=t-wonAt;
-            if(elapsed==90)mc.getSingleplayerServer().execute(()->{
+            if(elapsed==135)mc.getSingleplayerServer().execute(()->{
                 var l=player(mc).getLevel();var s=station(l);var v=(Villager)l.getEntity(worker);
                 var chest=(net.minecraft.world.level.block.entity.BarrelBlockEntity)l.getBlockEntity(POST.west(2).south(2));
                 check(chest.countItem(Items.ARROW)==16,"Integrated guard did not unload after battle");
@@ -211,6 +209,11 @@ public final class MilitaryVisualCheck {
             while((scale==0||effective<scale)&&960/(effective+1)>=320&&720/(effective+1)>=240)effective++;
             screen.resize(mc,960/effective,720/effective);
             var left=screen.getGuiLeft();
+            if(screen.children().stream().anyMatch(w->w instanceof Button b&&b.getMessage().getString().contains("Noturno"))){
+                var night=button(mc,"Noturno");
+                var day=button(mc,"Diurno");
+                check(Math.abs(night.x+day.x+day.getWidth()-(left*2+screen.getXSize()))<=1,"Shift buttons not centered");
+            }
             var top=screen.getGuiTop();
             check(left>=0&&top>=0&&left+screen.getXSize()<=screen.width&&top+screen.getYSize()<=screen.height,
                 "Military GUI overflows "+scale);
@@ -324,7 +327,7 @@ public final class MilitaryVisualCheck {
     }
 
     public static void verifyRestore(ServerLevel l){var s=station(l);check(s.active&&s.worker!=null&&s.profession==Profession.SOLDIER&&s.getItem(31).isEmpty()&&s.military.getBoolean("visual_passed"),"Military saved contract");check(l.getEntity(s.worker) instanceof Villager&&ResidenceData.get(l).owner(s.worker)!=null,"Military saved identity/home");check(s.equipment.getItem(0).is(Items.IRON_SWORD)&&s.equipment.getItem(0).getDamageValue()==s.military.getInt("visual_wear")&&s.equipment.getItem(1).is(Items.SHIELD)&&s.getItem(0).isEmpty(),"Military gear/inventory save");check(WorkforceData.get(l).progress(s.worker,Profession.SOLDIER.id()).xp()==s.military.getLong("visual_xp")&&Military.mode(s)==Military.Mode.GUARD&&Military.shift(s)==Military.Shift.NIGHT&&!Military.selected(s,EntityType.CREEPER),"Military progression/mode/shift save");var chestPos=POST.west(2).south(2);
-        check(chestPos.equals(br.com.kraftcity.logistics.DiscardBinding.boundPosition(l,s))
+        check(br.com.kraftcity.logistics.DiscardBinding.boundPosition(l,s)==null
             &&l.getBlockEntity(chestPos) instanceof net.minecraft.world.level.block.entity.BarrelBlockEntity barrel
             &&barrel.countItem(Items.ARROW)==16,"Military linked barrel or stock lost");
         System.out.println("MILITARY_WORLD_RESTART_PASSED");}

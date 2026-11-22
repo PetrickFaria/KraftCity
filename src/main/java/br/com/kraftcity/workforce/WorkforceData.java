@@ -26,6 +26,9 @@ public final class WorkforceData extends SavedData {
     public static final String NAME = "kraftcity_workforce";
     private static final int SCHEMA = 1;
     private final Map<UUID, WorkerRecord> workers = new LinkedHashMap<>();
+    private final Map<UUID,Long> militaryKills=new LinkedHashMap<>();
+    public long soldierKills(UUID id){return militaryKills.getOrDefault(id,0L);}
+    public void recordSoldierKill(UUID id){militaryKills.merge(id,1L,Long::sum);setDirty();}
     public record Progress(int level,long xp) {
         public Progress { if(level<0||xp<0)throw new IllegalArgumentException("Negative progression"); }
     }
@@ -50,11 +53,13 @@ public final class WorkforceData extends SavedData {
     }
     public boolean rebindHistory(UUID previous,UUID current){
         if(previous.equals(current))return true;
-        if(workers.containsKey(current)||history.containsKey(current))return false;
+        if(workers.containsKey(current)||history.containsKey(current)||militaryKills.containsKey(current))return false;
         WorkerRecord old=workers.remove(previous);var past=history.remove(previous);
         if(old!=null)workers.put(current,new WorkerRecord(current,old.profession(),old.level(),Optional.empty(),old.area(),old.inventory()));
         if(past!=null)history.put(current,past);
-        if(old!=null||past!=null)setDirty();return true;
+        var kills=militaryKills.remove(previous);
+        if(kills!=null)militaryKills.put(current,kills);
+        if(old!=null||past!=null||kills!=null)setDirty();return true;
     }
 
     public static WorkforceData get(ServerLevel level) {
@@ -105,6 +110,9 @@ public final class WorkforceData extends SavedData {
             e.putInt("level",progress.level());e.putLong("xp",progress.xp());past.add(e);
         }));
         tag.put("profession_history",past);
+        var kills=new CompoundTag();
+        militaryKills.forEach((id,count)->kills.putLong(id.toString(),count));
+        tag.put("soldier_kills",kills);
         return tag;
     }
 
@@ -139,6 +147,8 @@ public final class WorkforceData extends SavedData {
             CompoundTag e=(CompoundTag)raw;
             data.history.computeIfAbsent(e.getUUID("id"),k->new LinkedHashMap<>()).put(new ResourceLocation(e.getString("profession")),new Progress(e.getInt("level"),e.getLong("xp")));
         }
+        var kills=tag.getCompound("soldier_kills");
+        for(var key:kills.getAllKeys())data.militaryKills.put(UUID.fromString(key),Math.max(0,kills.getLong(key)));
         return data;
     }
 

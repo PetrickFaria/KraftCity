@@ -43,7 +43,7 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
             button(36,44,174,"Blacklist",()->{blacklist=true;page=0;buttons();send(3,"");});
             button(36,68,174,"Limites",()->MilitaryPreview.toggle(menu.pos));
             if(state!=null&&state.employed()){
-                button(36,92,174,state.discard()!=null?"Desvincular baú":"Vincular baú",()->{
+                button(36,92,174,state.discard()!=null?"Desvincular baú":"Vincular baú especial",()->{
                     if(state.discard()==null)send(5,"");
                     else Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.ConfirmScreen(confirmed->{
                         Minecraft.getInstance().setScreen(this);
@@ -59,7 +59,7 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
         }
         button(214,5,24,"›",()->{settings=true;buttons();});
         boolean oldItems=java.util.stream.IntStream.range(9,32).anyMatch(i->!menu.inventory.getItem(i).isEmpty());
-        if(oldItems||menu.legacyStorage)button(menu.legacyStorage?134:118,87,menu.legacyStorage?104:120,menu.legacyStorage?"Voltar ao estoque":"Itens anteriores",
+        if(oldItems||menu.legacyStorage)button(menu.legacyStorage?134:8,87,menu.legacyStorage?104:58,menu.legacyStorage?"Voltar ao estoque":"Recuperar",
             ()->{menu.legacyStorage=!menu.legacyStorage;buttons();});
         if(menu.legacyStorage)return;
         var modes=new Military.Mode[]{Military.Mode.FOLLOW,Military.Mode.FREE,Military.Mode.GUARD};
@@ -68,9 +68,9 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
             var mode=modes[i];
             button(8+78*i,67,74,(state!=null&&state.mode()==mode.ordinal()?"> ":"")+names[i],()->send(0,mode.name()));
         }
-        button(8,87,52,state!=null&&state.night()?"> Noturno":"Noturno",()->send(1,"NIGHT"));
-        button(63,87,52,state!=null&&!state.night()?"> Diurno":"Diurno",()->send(1,"DAY"));
-        if(state!=null&&!state.employed()&&!oldItems)button(124,87,114,"Treinar residente",()->send(4,""));
+        button((imageWidth-107)/2,87,52,state!=null&&state.night()?"> Noturno":"Noturno",()->send(1,"NIGHT"));
+        button((imageWidth-107)/2+55,87,52,state!=null&&!state.night()?"> Diurno":"Diurno",()->send(1,"DAY"));
+
     }
     private final List<Button> rows=new ArrayList<>();
     private void buttonsForRows(){for(var r:rows)removeWidget(r);rows.clear();var list=filtered();page=Math.max(0,Math.min(page,Math.max(0,(list.size()-1)/6)));
@@ -83,7 +83,7 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
         if(panelOnly())return;
         fill(pose,leftPos+4,topPos+4,leftPos+imageWidth-4,topPos+29,0xFF44372A);
         int progress=menu.state!=null&&menu.state.employed()
-            ?menu.state.level()>=5?WorkerTextures.XP_WIDTH:(int)(WorkerTextures.XP_WIDTH*(menu.state.xp()%75000)/75000):0;
+            ?Military.progressWidth(menu.state.level(),menu.state.kills(),WorkerTextures.XP_WIDTH):0;
         WorkerTextures.drawExperience(pose,leftPos+(imageWidth-WorkerTextures.XP_WIDTH)/2,topPos+WorkerTextures.XP_Y,progress,true);
         for(var slot:menu.slots){
             if(!slot.isActive())continue;

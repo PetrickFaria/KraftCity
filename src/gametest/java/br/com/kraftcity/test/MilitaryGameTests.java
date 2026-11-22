@@ -85,7 +85,7 @@ public final class MilitaryGameTests {
     @GameTest(template="empty",timeoutTicks=40,batch="military") public static void crossbow_quick_charge_multishot_consumes_one_arrow(GameTestHelper h){var f=fixture(h);var z=mob(f,EntityType.ZOMBIE,5);var bow=new ItemStack(Items.CROSSBOW);bow.enchant(Enchantments.MULTISHOT,1);bow.enchant(Enchantments.QUICK_CHARGE,3);f.s.equipment.setItem(0,bow);f.s.setItem(0,new ItemStack(Items.ARROW,2));Military.bind(f.s,f.v);f.s.military.putLong("drawAt",f.l.getGameTime()-11);Military.combat(f.l,f.s,f.v,z);check(f.s.getItem(0).getCount()==1&&bow.getDamageValue()==3,"Crossbow ammo/wear");check(f.l.getEntitiesOfClass(AbstractArrow.class,f.v.getBoundingBox().inflate(3)).size()==3,"Multishot projectiles");h.succeed();}
     @GameTest(template="empty",timeoutTicks=40,batch="military") public static void armor_loses_vanilla_durability_and_enchantments_remain(GameTestHelper h){var f=fixture(h);var armor=new ItemStack(Items.IRON_CHESTPLATE);armor.enchant(Enchantments.ALL_DAMAGE_PROTECTION,2);f.s.equipment.setItem(3,armor);Military.bind(f.s,f.v);f.v.hurt(DamageSource.mobAttack(mob(f,EntityType.ZOMBIE,2)),4);check(armor.getDamageValue()==1&&EnchantmentHelper.getItemEnchantmentLevel(Enchantments.ALL_DAMAGE_PROTECTION,armor)==2,"Armor wear/enchantment damage="+armor.getDamageValue());h.succeed();}
     @GameTest(template="empty",timeoutTicks=40,batch="military") public static void cumulative_five_levels_health_and_fractional_xp(GameTestHelper h){var f=fixture(h);f.v.setHealth(10);for(int i=0;i<5;i++){long xp=i*75000L;WorkforceData.get(f.l).setProgress(f.v.getUUID(),Profession.SOLDIER.id(),Military.level(xp),xp);Military.stats(f.l,f.v);check(Military.level(xp)==i+1&&f.v.getMaxHealth()==14+4*i&&f.v.getHealth()==10,"Level health "+i);}check(Military.level(74999)==1&&Military.level(299999)==4&&Military.level(300000)==5,"Cumulative thresholds");h.succeed();}
-    @GameTest(template="empty",timeoutTicks=40,batch="military") public static void xp_final_soldier_full_other_ten_percent_player_final_half(GameTestHelper h){var f=fixture(h);var z=mob(f,EntityType.ZOMBIE,2);var other=UUID.randomUUID();Military.contribute(f.l,z,f.v.getUUID());Military.contribute(f.l,z,other);int reward=z.getExperienceReward();Military.award(f.l,z,f.v);check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.SOLDIER.id()).xp()==reward*1000L,"Final soldier XP");check(WorkforceData.get(f.l).progress(other,Profession.SOLDIER.id()).xp()==reward*100L,"Other participant XP");Military.contribute(f.l,z,f.v.getUUID());Military.award(f.l,z,f.player);check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.SOLDIER.id()).xp()==reward*1500L,"Player final half");h.succeed();}
+    @GameTest(template="empty",timeoutTicks=40,batch="military") public static void xp_final_soldier_full_other_ten_percent_player_final_half(GameTestHelper h){var f=fixture(h);var z=mob(f,EntityType.ZOMBIE,2);var other=UUID.randomUUID();Military.contribute(f.l,z,f.v.getUUID());Military.contribute(f.l,z,other);int reward=z.getExperienceReward();Military.award(f.l,z,f.v);Military.award(f.l,z,f.v);check(WorkforceData.get(f.l).soldierKills(f.v.getUUID())==1,"Duplicate kill award");check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.SOLDIER.id()).xp()==reward*1000L,"Final soldier XP");check(WorkforceData.get(f.l).progress(other,Profession.SOLDIER.id()).xp()==reward*100L,"Other participant XP");Military.contribute(f.l,z,f.v.getUUID());Military.award(f.l,z,f.player);check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.SOLDIER.id()).xp()==reward*1500L,"Player final half");h.succeed();}
     @GameTest(template="empty",timeoutTicks=40,batch="military") public static void expired_contribution_and_environmental_kill_give_no_xp(GameTestHelper h){var f=fixture(h);var z=mob(f,EntityType.ZOMBIE,2);Military.contribute(f.l,z,f.v.getUUID());var c=z.getPersistentData().getCompound("KCMilitaryContributors");c.putLong(f.v.getUUID().toString(),f.l.getGameTime()-MilitaryModule.CONTRIBUTION_TICKS.get()-1);Military.award(f.l,z,f.player);check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.SOLDIER.id()).xp()==0,"Expired XP");Military.contribute(f.l,z,f.v.getUUID());Military.award(f.l,z,null);check(WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.SOLDIER.id()).xp()==0,"Environmental invented XP");h.succeed();}
     @GameTest(template="empty",timeoutTicks=40,batch="military") public static void zombie_death_intercept_preserves_uuid_gear_home_and_progress(GameTestHelper h){var f=fixture(h);var zombie=mob(f,EntityType.ZOMBIE,1);f.s.equipment.setItem(0,new ItemStack(Items.DIAMOND_SWORD));WorkforceData.get(f.l).setProgress(f.v.getUUID(),Profession.SOLDIER.id(),3,150000);Military.bind(f.s,f.v);f.v.hurt(DamageSource.mobAttack(zombie),1000);var z=f.l.getEntity(f.v.getUUID());check(z instanceof SoldierZombie&&f.s.worker.equals(f.v.getUUID())&&f.s.military.getBoolean("zombie"),"Transformation identity/job");check(f.s.equipment.getItem(0).is(Items.DIAMOND_SWORD)&&ResidenceData.get(f.l).owner(f.v.getUUID())!=null&&((SoldierZombie)z).getMaxHealth()==22,"Transformation data");h.succeed();}
     @GameTest(template="empty",timeoutTicks=40,batch="military") public static void vanilla_weakness_apple_countdown_and_cure_restore_same_soldier(GameTestHelper h){var f=fixture(h);f.s.equipment.setItem(0,new ItemStack(Items.IRON_SWORD));var z=Military.zombify(f.l,f.v);z.addEffect(new MobEffectInstance(MobEffects.WEAKNESS,200));f.player.setItemInHand(InteractionHand.MAIN_HAND,new ItemStack(Items.GOLDEN_APPLE,2));z.mobInteract(f.player,InteractionHand.MAIN_HAND);check(z.isConverting()&&f.player.getMainHandItem().getCount()==1,"Vanilla cure start/payment");var tag=z.saveWithoutId(new CompoundTag());tag.putInt("ConversionTime",1);z.readAdditionalSaveData(tag);z.tick();check(f.l.getEntity(f.v.getUUID()) instanceof Villager&&f.s.worker.equals(f.v.getUUID())&&!f.s.military.getBoolean("zombie"),"Vanilla cure completion");check(f.s.equipment.getItem(0).is(Items.IRON_SWORD),"Cure lost equipment");h.succeed();}
@@ -283,6 +283,125 @@ public final class MilitaryGameTests {
             check(villagers.stream().noneMatch(Employment::fleeing),"Escape persisted after cure");
             f.l.getServer().setDifficulty(difficulty,true);
         }).thenSucceed();
+    }
+
+    @GameTest(template="empty",batch="military_ranged")
+    public static void bow_spacing_survives_target_changes_and_station_save(GameTestHelper h){
+        var f=fixture(h);
+        var bow=new ItemStack(Items.BOW);
+        f.s.equipment.setItem(0,bow);
+        f.s.setItem(0,new ItemStack(Items.ARROW,8));
+        Military.bind(f.s,f.v);
+        var first=mob(f,EntityType.ZOMBIE,6);
+        f.s.military.putLong("drawAt",f.l.getGameTime()-20);
+        Military.combat(f.l,f.s,f.v,first);
+        long firstShot=f.l.getGameTime();
+        check(bow.getDamageValue()==1&&f.s.military.getLong("bowReadyAt")==firstShot+100,"Bow cooldown was not armed");
+        first.discard();
+        Military.clearTask(f.v,f.s);
+        var second=mob(f,EntityType.ZOMBIE,-5);
+        var loaded=EmploymentData.load(EmploymentData.get(f.l).save(new CompoundTag())).station(f.s.id);
+        check(loaded.military.getLong("bowReadyAt")==firstShot+100,"Cooldown lost on save");
+        h.startSequence().thenExecuteFor(99,()->{
+            Military.combat(f.l,f.s,f.v,second);
+            check(bow.getDamageValue()==1&&f.s.getItem(0).getCount()==7,"Bow fired before 100 ticks");
+        }).thenWaitUntil(()->{
+            Military.combat(f.l,f.s,f.v,second);
+            check(bow.getDamageValue()==2&&f.l.getGameTime()-firstShot>=100,"Second shot did not honor cooldown");
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",batch="military_inventory")
+    public static void enlisted_kill_thresholds_preserve_legacy_level_and_xp(GameTestHelper h){
+        var f=fixture(h);
+        long[] counts={49,50,74,75,99,100,124,125};
+        int[] levels={1,2,2,3,3,4,4,5};
+        var data=WorkforceData.get(f.l);
+        long counter=0;
+        for(int i=0;i<counts.length;i++){
+            while(counter<counts[i]){data.recordSoldierKill(f.v.getUUID());counter++;}
+            check(Military.level(f.l,f.v.getUUID())==levels[i],"Wrong cumulative threshold "+counter);
+        }
+        var loaded=WorkforceData.load(data.save(new CompoundTag()));
+        check(loaded.soldierKills(f.v.getUUID())==125,"Kill ledger was not persisted");
+        UUID legacy=UUID.randomUUID();
+        data.setProgress(legacy,Profession.SOLDIER.id(),4,225000);
+        check(Military.level(f.l,legacy)==4&&data.soldierKills(legacy)==0,"Legacy level or exact history changed");
+        check(data.progress(legacy,Profession.SOLDIER.id()).xp()==225000,"Legacy XP changed");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",batch="military_inventory")
+    public static void automatic_discard_excludes_unbound_ender_and_out_of_range(GameTestHelper h){
+        var f=fixture(h,20);
+        var barrel=f.p.offset(5,-5,5);
+        var ender=f.p.east();
+        var outside=f.p.east(6);
+        f.l.setBlock(barrel,Blocks.BARREL.defaultBlockState(),3);
+        f.l.setBlock(ender,Blocks.ENDER_CHEST.defaultBlockState(),3);
+        f.l.setBlock(outside,Blocks.CHEST.defaultBlockState(),3);
+        check(br.com.kraftcity.logistics.DiscardChests.automaticMilitaryDestinations(f.l,f.s).equals(List.of(barrel)),
+            "Military auto-discovery range or private-storage policy");
+        f.s.setItem(0,new ItemStack(Items.COBBLESTONE,5));
+        f.v.setPos(Vec3.atBottomCenterOf(barrel.north()));
+        Military.tick(f.l,f.s,f.v);
+        var destination=(net.minecraft.world.level.block.entity.BarrelBlockEntity)f.l.getBlockEntity(barrel);
+        check(destination.countItem(Items.COBBLESTONE)==5&&f.s.getItem(0).isEmpty(),"Auto-discard did not use the ordinary barrel");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",batch="military_loot_range")
+    public static void guard_and_patrol_scan_distinct_radii_and_skip_residences(GameTestHelper h){
+        var f=fixture(h,20);
+        clearTestHostiles(f);
+        for(var pos:BlockPos.betweenClosed(f.p.offset(0,-1,-2),f.p.offset(30,-1,2)))
+            f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.east()));
+        f.v.setOnGround(true);
+        mode(f,Military.Mode.GUARD);
+        var protectedItem=new net.minecraft.world.entity.item.ItemEntity(f.l,f.home.getX()+1.5,
+            f.home.getY()+1,f.home.getZ()+.5,new ItemStack(Items.BREAD));
+        var boundaryItem=new net.minecraft.world.entity.item.ItemEntity(f.l,f.p.getX()+25.5,
+            f.p.getY()+.5,f.p.getZ()+.5,new ItemStack(Items.IRON_NUGGET));
+        var patrolItem=new net.minecraft.world.entity.item.ItemEntity(f.l,f.p.getX()+28.5,
+            f.p.getY()+.5,f.p.getZ()+.5,new ItemStack(Items.GOLD_NUGGET));
+        f.l.addFreshEntity(protectedItem);f.l.addFreshEntity(boundaryItem);f.l.addFreshEntity(patrolItem);
+        f.v.setPos(f.p.getX()+24.8,f.p.getY(),f.p.getZ()+.5);
+        Military.tick(f.l,f.s,f.v);
+        check(!boundaryItem.isAlive()&&protectedItem.isAlive(),"Guard did not collect at 25 blocks or touched protected loot");
+        f.v.setPos(f.p.getX()+27.8,f.p.getY(),f.p.getZ()+.5);
+        Military.tick(f.l,f.s,f.v);
+        check(patrolItem.isAlive(),"Guard collected outside 25 blocks");
+        mode(f,Military.Mode.FREE);
+        Military.tick(f.l,f.s,f.v);
+        check(!patrolItem.isAlive()&&protectedItem.isAlive(),"Patrol did not collect distant loot or touched a residence");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",batch="military_ranged_threats")
+    public static void ranged_soldier_prefers_nearest_and_retreats_from_both_sides(GameTestHelper h){
+        var f=fixture(h,20);
+        clearTestHostiles(f);
+        for(var pos:BlockPos.betweenClosed(f.p.offset(-8,0,-8),f.p.offset(8,0,8)))
+            if(!pos.equals(f.p))f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
+        f.v.setOnGround(true);
+        f.s.equipment.setItem(0,new ItemStack(Items.BOW));
+        f.s.setItem(0,new ItemStack(Items.ARROW,8));
+        Military.bind(f.s,f.v);
+        var front=mob(f,EntityType.ZOMBIE,3);
+        var rear=mob(f,EntityType.ZOMBIE,-2);
+        var excluded=mob(f,EntityType.CREEPER,1);
+        front.setTarget(f.v);rear.setTarget(f.v);
+        check(Military.target(f.l,f.s,f.v)==rear&&!Military.authorized(f.l,f.s,f.v,excluded),
+            "A closer enemy lost priority or an excluded Creeper became a target");
+        Military.combat(f.l,f.s,f.v,rear);
+        var path=f.v.getNavigation().getPath();
+        check(path!=null&&path.canReach(),"No retreat path with two threats");
+        var destination=Vec3.atBottomCenterOf(path.getTarget());
+        check(front.distanceToSqr(destination)>front.distanceToSqr(f.v)
+            &&rear.distanceToSqr(destination)>rear.distanceToSqr(f.v)&&Military.insideArea(f.s,destination),
+            "Retreat moved toward one of the threats");
+        h.succeed();
     }
 
     @GameTest(template="empty",batch="military_inventory")
