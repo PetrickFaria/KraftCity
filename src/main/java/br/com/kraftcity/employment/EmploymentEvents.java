@@ -65,7 +65,7 @@ public final class EmploymentEvents {
             boolean working=soldier
                 ?br.com.kraftcity.military.Military.onDuty(level,s)
                 :br.com.kraftcity.industry.IndustrialWork.day(level)&&!level.isThundering()
-                    ||s.profession==Profession.FARMER&&br.com.kraftcity.industry.FarmerLogistics.ending(worker);
+                    ||br.com.kraftcity.industry.FarmerLogistics.ending(worker);
             ItemStack stowed=worker.isSleeping()||!interrupted&&!working?restingTool(s,worker):ItemStack.EMPTY;
             WorkNetwork.CHANNEL.send(net.minecraftforge.network.PacketDistributor.TRACKING_ENTITY.with(()->worker),
                 new WorkNetwork.Activity(worker.getId(),worker.getUUID(),s.profession,working&&!interrupted,stowed));

@@ -232,27 +232,159 @@ public final class IndustryGameTests {
         step(f,1);check(f.l.getEntitiesOfClass(Wolf.class,IndustrialWork.area(f.l,f.s),Wolf::isBaby).size()==1,"no real wolf child");
         check(f.s.getItem(29).getCount()==2,"wolf food consumed incorrectly");h.succeed();
     }
-    private static BlockPos hive(F f,boolean safe){var p=f.p.east();f.l.setBlock(p,Blocks.BEEHIVE.defaultBlockState().setValue(BeehiveBlock.HONEY_LEVEL,5),3);if(safe)f.l.setBlock(p.below(),Blocks.CAMPFIRE.defaultBlockState(),3);f.s.industry.putInt("cursor",index(f,p));return p;}
+    private static BlockPos hive(F f,boolean safe){
+        var p=f.p.east().above();
+        f.l.setBlock(p,Blocks.BEEHIVE.defaultBlockState().setValue(BeehiveBlock.HONEY_LEVEL,5),3);
+        if(safe)f.l.setBlock(p.below(),Blocks.CAMPFIRE.defaultBlockState(),3);
+        var occupant=EntityType.BEE.create(f.l);
+        ((net.minecraft.world.level.block.entity.BeehiveBlockEntity)f.l.getBlockEntity(p)).addOccupant(occupant,false);
+        return p;
+    }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void beekeeper_bottles_before_shears_no_lost_consumables(GameTestHelper h){
-        var f=fixture(h,Profession.BEEKEEPER);f.s.setItem(0,new ItemStack(Items.GLASS_BOTTLE,2));f.s.setItem(1,new ItemStack(Items.SHEARS));var p=hive(f,true);
-        for(int i=0;i<2;i++){f.l.setBlock(p,Blocks.BEEHIVE.defaultBlockState().setValue(BeehiveBlock.HONEY_LEVEL,5),3);f.s.industry.putInt("cursor",index(f,p));step(f,1);}
-        check(count(f,Items.HONEY_BOTTLE)==2&&count(f,Items.HONEYCOMB)==0,"bottle priority failed");
-        f.l.setBlock(p,Blocks.BEEHIVE.defaultBlockState().setValue(BeehiveBlock.HONEY_LEVEL,5),3);f.s.industry.putInt("cursor",index(f,p));step(f,1);
-        check(count(f,Items.HONEYCOMB)==3&&f.l.getBlockState(p).is(Blocks.BEEHIVE),"honeycomb or hive preservation");h.succeed();
+        var f=fixture(h,Profession.BEEKEEPER);
+        f.s.setItem(0,new ItemStack(Items.GLASS_BOTTLE,2));
+        f.s.setItem(1,new ItemStack(Items.SHEARS));
+        var pos=hive(f,true);
+        for(int i=0;i<2;i++){
+            f.l.setBlock(pos,f.l.getBlockState(pos).setValue(BeehiveBlock.HONEY_LEVEL,5),3);
+            step(f,1);
+        }
+        check(count(f,Items.HONEY_BOTTLE)==2&&count(f,Items.HONEYCOMB)==0&&f.s.getItem(28).isEmpty(),"bottle priority failed");
+        f.l.setBlock(pos,f.l.getBlockState(pos).setValue(BeehiveBlock.HONEY_LEVEL,5),3);
+        step(f,1);
+        check(count(f,Items.HONEYCOMB)==3&&f.l.getBlockState(pos).is(Blocks.BEEHIVE)
+            &&f.s.getItem(27).getDamageValue()==1,"honeycomb, shears or hive preservation");
+        h.succeed();
     }
-    @GameTest(template="empty",timeoutTicks=40,batch="industry")
-    public static void beekeeper_smoke_and_output_capacity_are_required(GameTestHelper h){
-        var f=fixture(h,Profession.BEEKEEPER);f.s.setItem(27,new ItemStack(Items.GLASS_BOTTLE));var p=hive(f,false);step(f,1);
-        check(f.l.getBlockState(p).getValue(BeehiveBlock.HONEY_LEVEL)==5&&f.s.getItem(27).getCount()==1,"unsafe hive consumed");
-        f.l.setBlock(p.below(),Blocks.CAMPFIRE.defaultBlockState(),3);for(int i=0;i<27;i++)f.s.setItem(i,new ItemStack(Items.STONE,64));f.s.industry.putInt("cursor",index(f,p));step(f,1);
-        check(f.l.getBlockState(p).getValue(BeehiveBlock.HONEY_LEVEL)==5&&f.s.getItem(27).getCount()==1,"full inventory lost honey/bottle");h.succeed();
+
+    @GameTest(template="empty",timeoutTicks=40,batch="apiary_outputs")
+    public static void beekeeper_full_inventory_preserves_bottle_and_honey_then_collects_without_smoke(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        f.s.setItem(28,new ItemStack(Items.GLASS_BOTTLE));
+        var pos=hive(f,false);
+        for(int i=0;i<27;i++)f.s.setItem(i,new ItemStack(Items.STONE,64));
+        step(f,1);
+        check(f.l.getBlockState(pos).getValue(BeehiveBlock.HONEY_LEVEL)==5&&f.s.getItem(28).getCount()==1,"full inventory lost honey/bottle");
+        f.s.setItem(0,ItemStack.EMPTY);
+        step(f,1);
+        check(count(f,Items.HONEY_BOTTLE)==1&&f.s.getItem(28).isEmpty()
+            &&f.l.getBlockState(pos).getValue(BeehiveBlock.HONEY_LEVEL)==0,"smokeless collection failed");
+        h.succeed();
     }
-    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+
+    private static Bee apiaryBee(F f,int remaining){
+        var bee=animal(f,EntityType.BEE,false);
+        bee.setPos(f.p.getX()+1.25,f.p.getY()+1.25,f.p.getZ()+1.25);
+        var attempt=new CompoundTag();
+        attempt.putUUID("station",f.s.id);
+        attempt.putInt("remaining",remaining);
+        bee.getPersistentData().put("KCApiaryAttempt",attempt);
+        return bee;
+    }
+
+    @GameTest(template="empty",timeoutTicks=50,batch="apiary_tame")
+    public static void beekeeper_bonds_bees_after_one_three_and_five_flowers(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        for(int required:new int[]{1,3,5}){
+            var bee=apiaryBee(f,required);
+            f.s.setItem(29,new ItemStack(Items.DANDELION,required-1));
+            step(f,Math.max(1,required-1));
+            check(!bee.getPersistentData().hasUUID("KCApiary")&&f.s.getItem(29).isEmpty(),"Early bond or wrong flower consumption");
+            var serialized=bee.saveWithoutId(new CompoundTag());
+            bee.load(serialized);
+            check(bee.getPersistentData().getCompound("KCApiaryAttempt").getInt("remaining")==1,"Incomplete attempt was lost");
+            f.s.setItem(29,new ItemStack(Items.DANDELION));
+            step(f,1);
+            check(bee.getPersistentData().getUUID("KCApiary").equals(f.s.id)&&f.s.getItem(29).isEmpty(),"Final flower did not bond bee");
+        }
+        var excess=apiaryBee(f,1);
+        f.s.setItem(29,new ItemStack(Items.DANDELION));
+        step(f,1);
+        check(!excess.getPersistentData().hasUUID("KCApiary")&&f.s.getItem(29).getCount()==1,"Bond overflow");
+        var restored=EmploymentData.load(EmploymentData.get(f.l).save(new CompoundTag())).station(f.s.id);
+        check(restored.industry.getCompound("apiary_bees").size()==3,"Bee roster did not survive saving");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=180,batch="apiary_breeding")
     public static void beekeeper_breeds_bees_without_destroying_hives(GameTestHelper h){
-        var f=fixture(h,Profession.BEEKEEPER);level(f,2,25);f.s.setItem(28,new ItemStack(Items.DANDELION,2));animal(f,EntityType.BEE,false);animal(f,EntityType.BEE,false);step(f,1);
-        check(f.l.getEntitiesOfClass(Bee.class,IndustrialWork.area(f.l,f.s),Bee::isBaby).size()==1,"bee reproduction failed");check(f.s.getItem(28).isEmpty(),"flower consumption");h.succeed();
+        var f=fixture(h,Profession.BEEKEEPER);
+        var first=apiaryBee(f,1);
+        var second=apiaryBee(f,1);
+        f.s.setItem(29,new ItemStack(Items.DANDELION,4));
+        step(f,3);
+        check(first.isInLove()&&second.isInLove()&&f.s.getItem(29).isEmpty(),"Natural breeding was not requested");
+        first.setNoAi(false);
+        second.setNoAi(false);
+        var bounds=IndustrialWork.area(f.l,f.s).inflate(4);
+        h.succeedWhen(()->{
+            var chicks=f.l.getEntitiesOfClass(Bee.class,bounds,Bee::isBaby);
+            check(chicks.size()==1&&f.s.industry.getCompound("apiary_bees").size()==3
+                &&chicks.get(0).getPersistentData().getUUID("KCApiary").equals(f.s.id),"Waiting for the natural linked offspring");
+        });
     }
+
+    @GameTest(template="empty",timeoutTicks=50,batch="apiary_area")
+    public static void apiary_dimensions_and_hive_limits_follow_manual_selection(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        var near=hive(f,true);
+        var extra=f.p.west().above();
+        for(var alternative:List.of(extra,f.p.north().above(),f.p.south().above(),
+                f.p.north(2).above(),f.p.south(2).above()))
+            f.l.setBlock(alternative,Blocks.BEE_NEST.defaultBlockState(),3);
+        step(f,1);
+        check(f.s.industry.getList("apiary_hives",net.minecraft.nbt.Tag.TAG_LONG).size()==1,"Lv1 exceeded one hive");
+        for(int lv=1;lv<=5;lv++){
+            int selected=IndustrialRules.size(f.l,f.s);
+            level(f,lv,25*(lv-1));
+            check(IndustrialRules.size(f.l,f.s)==selected,"Level increased selected area");
+            int next=IndustrialRules.maximumSize(lv);
+            check(IndustrialRules.selectSize(f.l,f.s,next),"Cannot select unlocked area");
+            var area=IndustrialWork.area(f.l,f.s);
+            check(area.getXsize()==next&&area.getZsize()==next&&area.getYsize()==5&&area.minY==f.p.getY()+1,"Incorrect apiary bounds");
+            step(f,1);
+            check(f.s.industry.getList("apiary_hives",net.minecraft.nbt.Tag.TAG_LONG).size()==lv,"Wrong hive cap at Lv"+lv);
+        }
+        f.l.removeBlock(near,false);
+        step(f,1);
+        var hives=f.s.industry.getList("apiary_hives",net.minecraft.nbt.Tag.TAG_LONG);
+        check(hives.size()==5&&!hives.contains(net.minecraft.nbt.LongTag.valueOf(near.asLong()))
+            &&f.l.getBlockState(extra).is(Blocks.BEE_NEST),"Destroyed hive was retained or nest ignored");
+        h.succeed();
+    }
+    @GameTest(template="empty",timeoutTicks=100,batch="apiary_nectar")
+    public static void apiary_uses_vanilla_nectar_and_protects_only_its_bonded_bees(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        f.l.setRainLevel(0);
+        var bee=apiaryBee(f,1);
+        var wild=apiaryBee(f,1);
+        wild.getPersistentData().remove("KCApiaryAttempt");
+        wild.getPersistentData().putUUID("KCApiary",UUID.randomUUID());
+        f.s.setItem(29,new ItemStack(Items.DANDELION));
+        step(f,1);
+        check(bee.getPersistentData().getUUID("KCApiary").equals(f.s.id),"Bonded bee fixture");
+        check(!wild.getPersistentData().getUUID("KCApiary").equals(f.s.id),"Foreign bee was adopted");
+        var pos=f.p.east().above();
+        f.l.setBlock(pos,Blocks.BEE_NEST.defaultBlockState().setValue(BeehiveBlock.HONEY_LEVEL,4),3);
+        var hive=(net.minecraft.world.level.block.entity.BeehiveBlockEntity)f.l.getBlockEntity(pos);
+        var nectar=bee.saveWithoutId(new CompoundTag());
+        nectar.putBoolean("HasNectar",true);
+        bee.load(nectar);
+        hive.addOccupantWithPresetTicks(bee,true,2401);
+        h.startSequence().thenWaitUntil(()->{
+            check(f.l.getBlockState(pos).getValue(BeehiveBlock.HONEY_LEVEL)==5,"Waiting for vanilla nectar deposit");
+        }).thenExecute(()->{
+            f.s.setItem(28,new ItemStack(Items.GLASS_BOTTLE));
+            step(f,1);
+            check(count(f,Items.HONEY_BOTTLE)==1,"Vanilla nectar did not produce the bottle");
+            var linked=f.l.getEntitiesOfClass(Bee.class,IndustrialWork.area(f.l,f.s).inflate(8),
+                b->b.getPersistentData().hasUUID("KCApiary")&&b.getPersistentData().getUUID("KCApiary").equals(f.s.id));
+            check(linked.size()==1&&!linked.get(0).isAngry(),"Bonded bee duplication or attack");
+            check(wild.isAngry()||wild.getTarget()==f.v,"Foreign bee lost its ability to retaliate");
+        }).thenSucceed();
+    }
+
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void all_jobs_keep_shared_inventory_and_additive_save_data(GameTestHelper h){
         for(Profession p:Profession.values())if(p.sector==Profession.Sector.INDUSTRIAL){
@@ -260,7 +392,7 @@ public final class IndustryGameTests {
             var restored=EmploymentData.load(EmploymentData.get(f.l).save(new CompoundTag())).station(f.s.id);
             check(restored.getItem(26).getCount()==7&&restored.industry.getLong("fish_elapsed")==42&&restored.worker.equals(f.v.getUUID()),"persist "+p);
             var player=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"SharedJob"));var a=new WorkMenu(1,player.getInventory(),f.s,false,null);var b=new WorkMenu(2,player.getInventory(),f.s,false,f.v.getUUID());
-            check(a.inventory==b.inventory&&a.slots.size()==(p==Profession.FARMER?66:68),"dual menu "+p);
+            check(a.inventory==b.inventory&&a.slots.size()==(p==Profession.FARMER||p==Profession.BEEKEEPER?66:68),"dual menu "+p);
         }h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")

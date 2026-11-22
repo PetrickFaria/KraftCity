@@ -52,7 +52,18 @@ public final class EmploymentVisualCheck {
         int spacing=WorkMenu.farmAuxX(2)-WorkMenu.farmAuxX(1);
         check(spacing>(mc.font.width("Farinha de Osso")+mc.font.width("Balde de Água"))/2+3,
             "Farmer auxiliary labels overlap");
-        check(button(screen,"Demitir")!=null&&button(screen,"Limites")!=null,"Controls missing in compact GUI");
+        check(button(screen,"Demitir")==null&&button(screen,"Vincular Baú")==null&&button(screen,"Limites")==null,
+            "Settings leaked onto the main page");
+        var area=screen.children().stream().filter(Button.class::isInstance).map(Button.class::cast)
+            .filter(b->b.getMessage().getString().contains("×")).toList();
+        check(area.size()==5&&area.get(0).x+area.get(4).x+area.get(4).getWidth()==screen.width,
+            "Area controls are not centered");
+        check(WorkMenu.farmAuxX(0)+WorkMenu.farmAuxX(2)+16==WorkMenu.FARM_WIDTH,"Input slots are not centered");
+        click(screen,"›");
+        check(menu.slots.stream().noneMatch(net.minecraft.world.inventory.Slot::isActive)
+            &&button(screen,"Demitir")!=null&&button(screen,"Exibir Limites")!=null,"Compact settings missing");
+        click(screen,"‹");
+        check(menu.slots.stream().allMatch(net.minecraft.world.inventory.Slot::isActive),"Slots did not return");
         screen.init(mc,mc.getWindow().getGuiScaledWidth(),mc.getWindow().getGuiScaledHeight());
     }
     private static void checkFarmerHeader(WorkScreen screen,String ending,int expectedWidth){
@@ -180,11 +191,15 @@ public final class EmploymentVisualCheck {
         if(ticks==914){
             var screen=screen(mc);
             var menu=(WorkMenu)mc.player.containerMenu;
+            click(screen,"›");
             var dismiss=button(screen,"Demitir");
             check(dismiss!=null&&dismiss.active&&button(screen,"Vincular Baú")!=null,"Dismissal or discard binding control missing");
-            check(dismiss.x>=screen.width/2&&dismiss.y<screen.height/2,"Dismiss button is not in the upper right");
+            check(dismiss.x+dismiss.getWidth()/2==screen.width/2,"Dismiss button is not centered");
             capture(mc,"visual-worker-dismiss.png");
             dismiss.onPress();
+            var confirm=mc.screen.children().stream().filter(Button.class::isInstance).map(Button.class::cast)
+                .filter(b->b.getMessage().getString().equals("Demitir")).findFirst().orElseThrow();
+            confirm.onPress();
             WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Dismiss(menu.containerId,menu.stationId,menu.snapshot.epoch()));
         }
         if(ticks==925){

@@ -13,8 +13,9 @@ public final class WorkMenu extends AbstractContainerMenu {
     public static final int PAYMENT_LIMIT=15;
     public static final int FARM_WIDTH=306, FARM_HEIGHT=235, FARM_GRID_X=73, FARM_PLAYER_Y=157;
     public static final int FARM_AUX_Y=41, FARM_STOCK_Y=69;
-    public static int farmAuxX(int slot){return 14+slot*84;}
-    public final boolean farmer;
+    public static int farmAuxX(int slot){return 61+slot*84;}
+    public final boolean farmer, fieldLayout;
+    public boolean settingsPage;
     private final int ownSlots;
     public final BlockPos pos;
     public final UUID stationId;
@@ -39,15 +40,29 @@ public final class WorkMenu extends AbstractContainerMenu {
         this.profession=profession>=0&&profession<Profession.values().length?Profession.values()[profession]:null;
         this.viaWorker=worker;this.player=inv.player;this.inventory=container==null?new SimpleContainer(EmploymentData.SLOTS):container;
         farmer=!hiring&&this.profession==Profession.FARMER;
+        fieldLayout=farmer||!hiring&&this.profession==Profession.BEEKEEPER;
         if(!hiring){
             for(int row=0;row<3;row++)for(int col=0;col<9;col++)
-                addSlot(new Slot(inventory,row*9+col,(farmer?FARM_GRID_X:94)+col*18,(farmer?FARM_STOCK_Y:26)+row*18));
-            if(farmer){
-                int[] inputs={EmploymentData.TOOL,EmploymentData.INPUT_A,EmploymentData.EQUIPMENT};
-                for(int i=0;i<inputs.length;i++)addSlot(new Slot(inventory,inputs[i],farmAuxX(i),FARM_AUX_Y));
+                addSlot(pageSlot(inventory,row*9+col,(fieldLayout?FARM_GRID_X:94)+col*18,(fieldLayout?FARM_STOCK_Y:26)+row*18));
+            if(fieldLayout){
+                int[] inputs={EmploymentData.TOOL,EmploymentData.INPUT_A,farmer?EmploymentData.EQUIPMENT:EmploymentData.INPUT_B};
+                for(int i=0;i<inputs.length;i++){
+                    int index=i;
+                    addSlot(new Slot(inventory,inputs[i],farmAuxX(i),FARM_AUX_Y){
+                        @Override public boolean isActive(){return !settingsPage;}
+                        @Override public boolean mayPlace(ItemStack stack){
+                            if(!farmer)return br.com.kraftcity.industry.ApiaryWork.validInput(index,stack);
+                            return switch(index){
+                                case 0->stack.getItem() instanceof HoeItem;
+                                case 1->stack.is(Items.BONE_MEAL);
+                                default->stack.is(Items.WATER_BUCKET);
+                            };
+                        }
+                    });
+                }
             }else for(int i=0;i<4;i++)addSlot(new Slot(inventory,EmploymentData.TOOL+i,94+i*36,101));
         }
-        if(!farmer)addSlot(new Slot(inventory,EmploymentData.PAYMENT,hiring?187:274,hiring?158:101){
+        if(!fieldLayout)addSlot(new Slot(inventory,EmploymentData.PAYMENT,hiring?187:274,hiring?158:101){
             @Override public boolean mayPlace(ItemStack stack){
                 return stack.is(Items.EMERALD)&&getItem().getCount()<getMaxStackSize();
             }
@@ -55,11 +70,16 @@ public final class WorkMenu extends AbstractContainerMenu {
                 return hiring&&sector==Profession.Sector.INDUSTRIAL?PAYMENT_LIMIT:super.getMaxStackSize();}
         });
         ownSlots=slots.size();
-        int playerX=farmer?FARM_GRID_X:94;
-        int playerY=farmer?FARM_PLAYER_Y:198+(!hiring&&sector==Profession.Sector.COMMERCIAL?16:0);
+        int playerX=fieldLayout?FARM_GRID_X:94;
+        int playerY=fieldLayout?FARM_PLAYER_Y:198+(!hiring&&sector==Profession.Sector.COMMERCIAL?16:0);
         for(int row=0;row<3;row++)for(int col=0;col<9;col++)
-            addSlot(new Slot(inv,9+row*9+col,playerX+col*18,playerY+row*18));
-        for(int col=0;col<9;col++)addSlot(new Slot(inv,col,playerX+col*18,playerY+58));
+            addSlot(pageSlot(inv,9+row*9+col,playerX+col*18,playerY+row*18));
+        for(int col=0;col<9;col++)addSlot(pageSlot(inv,col,playerX+col*18,playerY+58));
+    }
+    private Slot pageSlot(Container container,int index,int x,int y){
+        return new Slot(container,index,x,y){
+            @Override public boolean isActive(){return !settingsPage;}
+        };
     }
     public EmploymentData.Station station(){return player.level instanceof ServerLevel l?EmploymentData.get(l).station(stationId):null;}
     @Override public boolean stillValid(Player p){
@@ -97,14 +117,14 @@ public final class WorkMenu extends AbstractContainerMenu {
         var station=station();
         var payment=station.getItem(EmploymentData.PAYMENT);
         int price=Employment.cost(p.getLevel(),station.sector,worker);
-        if((job==Profession.FARMER||job==Profession.SOLDIER)&&price>=0&&payment.is(Items.EMERALD)&&payment.getCount()>price
+        if((job==Profession.FARMER||job==Profession.BEEKEEPER||job==Profession.SOLDIER)&&price>=0&&payment.is(Items.EMERALD)&&payment.getCount()>price
             &&!roomFor(p.getInventory(),payment,payment.getCount()-price)){
             status="Libere espaço para receber o troco.";
             sync(p);
             return;
         }
         String result=Employment.hire(p,station,worker,job);
-        if(result.equals("ok")&&(job==Profession.FARMER||job==Profession.SOLDIER))returnBalance(p,station);
+        if(result.equals("ok")&&(job==Profession.FARMER||job==Profession.BEEKEEPER||job==Profession.SOLDIER))returnBalance(p,station);
         status=switch(result){case "ok"->"Contratação concluída.";case "pending"->"Preço comercial pendente.";
             case "payment"->"Esmeraldas insuficientes.";case "ineligible"->"Morador indisponível.";default->"Seleção inválida.";};
         if(result.equals("ok")){var s=station();p.closeContainer();WorkBlock.open(p,s);}else sync(p);
@@ -125,7 +145,7 @@ public final class WorkMenu extends AbstractContainerMenu {
         station.setItem(EmploymentData.PAYMENT,balance);
     }
     public void recoverBalance(ServerPlayer p){
-        if(!farmer||!stillValid(p)||!p.mayBuild()||p.isSpectator()||!p.getLevel().mayInteract(p,pos))return;
+        if(!fieldLayout||!stillValid(p)||!p.mayBuild()||p.isSpectator()||!p.getLevel().mayInteract(p,pos))return;
         var station=station();
         var hit=new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(pos),net.minecraft.core.Direction.UP,pos,false);
         var event=net.minecraftforge.common.ForgeHooks.onRightClickBlock(p,InteractionHand.MAIN_HAND,pos,hit);
@@ -147,11 +167,11 @@ public final class WorkMenu extends AbstractContainerMenu {
         Slot slot=slots.get(index);if(!slot.hasItem())return ItemStack.EMPTY;
         ItemStack item=slot.getItem(),before=item.copy();int own=ownSlots;
         if(index<own){if(!moveItemStackTo(item,own,slots.size(),true))return ItemStack.EMPTY;}
-        else if(!farmer&&item.is(Items.EMERALD)){
+        else if(!fieldLayout&&item.is(Items.EMERALD)){
             slots.get(own-1).safeInsert(item);
             if(item.getCount()==before.getCount())return ItemStack.EMPTY;
         }
-        else if(!hiring){if(!moveItemStackTo(item,0,farmer?own:31,false))return ItemStack.EMPTY;}
+        else if(!hiring){if(!moveItemStackTo(item,0,fieldLayout?own:31,false))return ItemStack.EMPTY;}
         else return ItemStack.EMPTY;
         if(item.isEmpty())slot.set(ItemStack.EMPTY);else slot.setChanged();slot.onTake(p,item);return before;
     }

@@ -11,7 +11,7 @@ import net.minecraftforge.network.*;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class WorkNetwork {
-    public static final SimpleChannel CHANNEL=NetworkRegistry.newSimpleChannel(new ResourceLocation("residenciasaldeoes","employment"),()->"13","13"::equals,"13"::equals);
+    public static final SimpleChannel CHANNEL=NetworkRegistry.newSimpleChannel(new ResourceLocation("residenciasaldeoes","employment"),()->"14","14"::equals,"14"::equals);
     public record Candidate(UUID id,String name,int cost){}
     public record Hire(int menu,UUID station,UUID worker,int profession){
         void encode(FriendlyByteBuf b){b.writeVarInt(menu);b.writeUUID(station);b.writeUUID(worker);b.writeInt(profession);}
@@ -65,7 +65,7 @@ public final class WorkNetwork {
         var s=menu.station();if(s==null)return;var home=br.com.residenciasaldeoes.data.ResidenceData.get(p.getLevel());
         var candidates=menu.hiring?Employment.candidates(p.getLevel()).stream().map(v->new Candidate(v.getUUID(),home.residentName(v.getUUID()),Employment.cost(p.getLevel(),s.sector,v.getUUID()))).toList():List.<Candidate>of();
         var progress=s.worker!=null&&s.profession!=null?br.com.kraftcity.workforce.WorkforceData.get(p.getLevel()).progress(s.worker,s.profession.id()):new br.com.kraftcity.workforce.WorkforceData.Progress(0,0);
-        CHANNEL.send(PacketDistributor.PLAYER.with(()->p),new Snapshot(menu.containerId,s.id,candidates,EmploymentConfig.cost(s.sector),s.worker==null?"Sem trabalhador":menu.farmer?workerName(p,s,home):home.residentName(s.worker),s.worker!=null,Employment.epoch(s),s.worker!=null?br.com.kraftcity.industry.IndustrialRules.level(p.getLevel(),s):progress.level(),progress.xp(),br.com.kraftcity.industry.IndustrialRules.size(p.getLevel(),s),s.industry.getBoolean("preview"),menu.farmer&&s.getItem(EmploymentData.PAYMENT).is(net.minecraft.world.item.Items.EMERALD),s.commerce.getInt("elapsed"),s.worker!=null&&s.profession!=null?br.com.kraftcity.commerce.CommercialWork.duration(br.com.kraftcity.industry.IndustrialRules.level(p.getLevel(),s)):1200,s.commerce.getLong("heat"),s.commerce.getString("status"),status,menu.farmer&&br.com.kraftcity.logistics.DiscardBinding.linked(p.getLevel(),s)));
+        CHANNEL.send(PacketDistributor.PLAYER.with(()->p),new Snapshot(menu.containerId,s.id,candidates,EmploymentConfig.cost(s.sector),s.worker==null?"Sem trabalhador":menu.fieldLayout?workerName(p,s,home):home.residentName(s.worker),s.worker!=null,Employment.epoch(s),s.worker!=null?br.com.kraftcity.industry.IndustrialRules.level(p.getLevel(),s):progress.level(),progress.xp(),br.com.kraftcity.industry.IndustrialRules.size(p.getLevel(),s),s.industry.getBoolean("preview"),menu.fieldLayout&&s.getItem(EmploymentData.PAYMENT).is(net.minecraft.world.item.Items.EMERALD),s.commerce.getInt("elapsed"),s.worker!=null&&s.profession!=null?br.com.kraftcity.commerce.CommercialWork.duration(br.com.kraftcity.industry.IndustrialRules.level(p.getLevel(),s)):1200,s.commerce.getLong("heat"),s.commerce.getString("status"),status,menu.fieldLayout&&br.com.kraftcity.logistics.DiscardBinding.linked(p.getLevel(),s)));
     }
     private static String workerName(ServerPlayer player,EmploymentData.Station station,br.com.residenciasaldeoes.data.ResidenceData home){
         var entity=player.getLevel().getEntity(station.worker);

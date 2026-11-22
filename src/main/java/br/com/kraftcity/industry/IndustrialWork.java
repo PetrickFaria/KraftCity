@@ -35,22 +35,24 @@ public final class IndustrialWork {
     public static boolean ownsNavigation(Villager v){
         if(!(v.level instanceof ServerLevel l))return false;
         var s=EmploymentData.get(l).assigned(v.getUUID());
-        return s!=null&&industrial(s)&&(day(l)||s.profession==Profession.FARMER&&FarmerLogistics.ending(v))&&!v.isSleeping()&&!l.isThundering()&&!Employment.fleeing(v)
+        return s!=null&&industrial(s)&&(day(l)||FarmerLogistics.fieldWorker(s)&&FarmerLogistics.ending(v))&&!v.isSleeping()&&!l.isThundering()&&!Employment.fleeing(v)
             &&!v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced")
             &&!v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")
             &&!v.getPersistentData().contains("residenciasaldeoes_night_door_task");
     }
     public static boolean day(ServerLevel l){long t=Math.floorMod(l.getDayTime(),24000);return t<12000||t>=23000;}
-    public static AABB area(ServerLevel l,EmploymentData.Station s){int r=IndustrialRules.size(l,s)/2;return s.profession==Profession.FARMER ? new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,FarmerWork.HEIGHT+1,r+1)) : new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
+    public static AABB area(ServerLevel l,EmploymentData.Station s){int r=IndustrialRules.size(l,s)/2;if(s.profession==Profession.BEEKEEPER)return new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,6,r+1));return s.profession==Profession.FARMER ? new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,FarmerWork.HEIGHT+1,r+1)) : new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
     public static void tick(ServerLevel l,EmploymentData.Station s){
         if(!industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
         if(l.isThundering()||Employment.fleeing(v)){
+            if(s.profession==Profession.BEEKEEPER)restoreHand(v);
             s.industry.remove("fish_elapsed");
             return;
         }
         if(!day(l)||v.isSleeping()){
+            if(s.profession==Profession.BEEKEEPER)restoreHand(v);
             s.industry.remove("fish_elapsed");
-            if(!day(l)&&s.profession==Profession.FARMER)return;
+            if(!day(l)&&FarmerLogistics.fieldWorker(s))return;
             if(!day(l)){
                 if(s.industry.getLong("deposited_day")!=Math.floorDiv(l.getDayTime(),24000)+1){
                     deposit(l,s,v);s.industry.putLong("deposited_day",Math.floorDiv(l.getDayTime(),24000)+1);s.setChanged();
@@ -76,7 +78,7 @@ public final class IndustrialWork {
             case SHEPHERD->animals(l,s,v,Profession.SHEPHERD);
             case FISHERMAN->fish(l,s,v);
             case BREEDER->animals(l,s,v,Profession.BREEDER);
-            case BEEKEEPER->bees(l,s,v);
+            case BEEKEEPER->ApiaryWork.tick(l,s,v);
             default->{}
         }
     }
@@ -105,11 +107,11 @@ public final class IndustrialWork {
     }
     private static void showTool(Villager v,EmploymentData.Station s){
         if(!v.getPersistentData().contains("KCOriginalHand"))v.getPersistentData().put("KCOriginalHand",v.getMainHandItem().save(new CompoundTag()));
-        if(s.profession==Profession.FARMER&&!v.getPersistentData().contains("KCFarmerOriginalPickup")){
+        if(FarmerLogistics.fieldWorker(s)&&!v.getPersistentData().contains("KCFarmerOriginalPickup")){
             v.getPersistentData().putBoolean("KCFarmerOriginalPickup",v.canPickUpLoot());
             v.setCanPickUpLoot(false);
         }
-        ItemStack view=s.getItem(27).copy();if(s.profession==Profession.FARMER&&view.getItem() instanceof HoeItem)view.getOrCreateTag().putBoolean("KCFarmerDisplay",true);if(!ItemStack.matches(v.getMainHandItem(),view)){
+        ItemStack view=s.profession==Profession.BEEKEEPER?ItemStack.EMPTY:s.getItem(27).copy();if(s.profession==Profession.FARMER&&view.getItem() instanceof HoeItem)view.getOrCreateTag().putBoolean("KCFarmerDisplay",true);if(!ItemStack.matches(v.getMainHandItem(),view)){
             // A visual mirror, never a second inventory; empty drop chance, restored on release.
             v.setItemSlot(EquipmentSlot.MAINHAND,view);v.setDropChance(EquipmentSlot.MAINHAND,0);
         }
@@ -138,18 +140,14 @@ public final class IndustrialWork {
             case FISHERMAN->move(s,27,x->x.getItem() instanceof FishingRodItem);
             case BREEDER->{move(s,28,x->x.is(Items.BONE));move(s,29,x->x.getItem().isEdible()&&x.getItem().getFoodProperties()!=null&&x.getItem().getFoodProperties().isMeat());}
             case BEEKEEPER->{
-                move(s,28,x->x.is(net.minecraft.tags.ItemTags.FLOWERS));
-                if(s.getItem(27).isEmpty()){moveBottle(s);move(s,27,x->x.getItem() instanceof ShearsItem);}
-                if(!s.getItem(27).is(Items.GLASS_BOTTLE)&&find(s,x->x.is(Items.GLASS_BOTTLE),0,27)>=0){
-                    if(insert(s,s.getItem(27).copy(),true)){s.setItem(27,ItemStack.EMPTY);moveBottle(s);}
+                ApiaryWork.migrateInputs(s);
+                for(int i=0;i<3;i++){
+                    int input=i;
+                    move(s,27+i,stack->ApiaryWork.validInput(input,stack));
                 }
             }
             default->{}
         }
-    }
-    private static void moveBottle(EmploymentData.Station s){
-        if(!s.getItem(27).isEmpty())return;int i=find(s,x->x.is(Items.GLASS_BOTTLE),0,27);
-        if(i>=0)s.setItem(27,s.removeItem(i,1));
     }
     public static int find(EmploymentData.Station s,Predicate<ItemStack> p,int min,int max){for(int i=min;i<max;i++)if(!s.getItem(i).isEmpty()&&p.test(s.getItem(i)))return i;return -1;}
     public static boolean food(ItemStack s){return s.is(Items.WHEAT)||s.is(Items.CARROT)||s.is(Items.POTATO)||s.is(Items.BEETROOT)||s.is(Items.WHEAT_SEEDS)||s.is(Items.BEETROOT_SEEDS)||s.is(Items.MELON_SEEDS)||s.is(Items.PUMPKIN_SEEDS);}
@@ -169,7 +167,7 @@ public final class IndustrialWork {
     public static void deposit(ServerLevel l,EmploymentData.Station s,Villager v){
         if(s.profession==Profession.FARMER){FarmerLogistics.depositDirect(l,s,v);return;}
         var offers=DiscardChests.offers(s,stack->true);
-        var destinations=DiscardChests.destinations(l,s,area(l,s));
+        var destinations=s.profession==Profession.BEEKEEPER?br.com.kraftcity.logistics.DiscardBinding.destinations(l,s,area(l,s)):DiscardChests.destinations(l,s,area(l,s));
         for(var pos:destinations){
             if(!DiscardChests.hasOffers(offers))break;
             DiscardChests.deposit(l,s,v,pos,offers,"deposit");
@@ -358,40 +356,6 @@ public final class IndustrialWork {
         var drops=l.getServer().getLootTables().get(new net.minecraft.resources.ResourceLocation("gameplay/fishing/fish")).getRandomItems(ctx.create(LootContextParamSets.FISHING));
         if(!outputs(s,drops,false)){alert(l,s,"space","Sem espaço para pescado.");return;}
         outputs(s,drops,true);IndustrialRules.wear(l,s,rod);IndustrialRules.progress(l,s);s.industry.putInt("fish_elapsed",0);s.setChanged();
-    }
-    private static void bees(ServerLevel l,EmploymentData.Station s,Villager v){
-        int size=IndustrialRules.size(l,s),total=size*size*5,c=s.industry.getInt("cursor");
-        for(int i=0;i<32;i++){
-            int n=Math.floorMod(c+i,total),column=n/5;BlockPos p=s.pos.offset(column%size-size/2,n%5-2,column/size-size/2);
-            if(!l.hasChunkAt(p))continue;BlockState state=l.getBlockState(p);
-            if(!(state.getBlock() instanceof BeehiveBlock hive))continue;
-            var known=s.industry.getList("hives",Tag.TAG_LONG);boolean exists=false;for(Tag raw:known)if(((LongTag)raw).getAsLong()==p.asLong())exists=true;
-            if(!exists){known.add(LongTag.valueOf(p.asLong()));s.industry.put("hives",known);}
-            if(state.getValue(BeehiveBlock.HONEY_LEVEL)!=5)continue;
-            if(!CampfireBlock.isSmokeyPos(l,p)){alert(l,s,"smoke","Colmeia cheia requer fumaça de fogueira para coleta segura.");continue;}
-            ItemStack tool=s.getItem(27);boolean bottle=tool.is(Items.GLASS_BOTTLE),shears=tool.getItem() instanceof ShearsItem;
-            if(!bottle&&find(s,x->x.is(Items.GLASS_BOTTLE),0,27)>=0){alert(l,s,"space","Libere espaço para priorizar os frascos de mel.");return;}
-            if(!bottle&&!shears){alert(l,s,"tool","Faltam frascos vazios ou tesouras para coleta.");return;}
-            if(!reach(v,p)){s.industry.putInt("cursor",n);s.setChanged();return;}
-            if(!allowed(l,s,v,p,null,"honey"))continue;
-            ItemStack result=new ItemStack(bottle?Items.HONEY_BOTTLE:Items.HONEYCOMB,bottle?1:3);
-            if(!insert(s,result,false)){alert(l,s,"space","Sem espaço; mel e frascos preservados.");return;}
-            if(!l.setBlock(p,state.setValue(BeehiveBlock.HONEY_LEVEL,0),3))continue;
-            if(bottle)tool.shrink(1);else IndustrialRules.wear(l,s,tool);
-            insert(s,result,true);IndustrialRules.progress(l,s);s.industry.putInt("cursor",(n+1)%total);s.setChanged();return;
-        }
-        s.industry.putInt("cursor",(c+32)%total);s.setChanged();
-        var animals=l.getEntitiesOfClass(Animal.class,area(l,s),a->a instanceof Bee&&!((Bee)a).isAngry());
-        // Capacity counts live bees plus hive occupants; no reproduction when full.
-        int occupants=animals.size();boolean unloaded=false;
-        var known=s.industry.getList("hives",Tag.TAG_LONG);
-        for(int i=known.size()-1;i>=0;i--){BlockPos p=BlockPos.of(((LongTag)known.get(i)).getAsLong());
-            if(!l.hasChunkAt(p)){unloaded=true;continue;}
-            if(!area(l,s).contains(Vec3.atCenterOf(p))||!(l.getBlockEntity(p) instanceof BeehiveBlockEntity)){known.remove(i);continue;}
-            occupants+=((BeehiveBlockEntity)l.getBlockEntity(p)).getOccupantCount();
-        }
-        if(unloaded)return;
-        if(occupants<IndustrialRules.capacity(IndustrialRules.level(l,s)))breed(l,s,v,animals,Profession.BEEKEEPER);
     }
     private IndustrialWork(){}
 }

@@ -75,12 +75,28 @@ public final class IndustryVisualCheck {
             case SHEPHERD->{s.setItem(27,new ItemStack(IndustrialTools.SHEARS.get(IndustrialTools.STONE).get()));animal(l,s,EntityType.SHEEP);}
             case FISHERMAN->{s.setItem(27,new ItemStack(IndustrialTools.RODS.get(IndustrialTools.STONE).get()));var water=pos.offset(0,-2,0);for(BlockPos at:BlockPos.betweenClosed(water.offset(-1,-1,-1),water.offset(1,1,1)))l.setBlock(at,Blocks.WATER.defaultBlockState(),3);s.industry.putLong("water",water.asLong());s.industry.putInt("fish_elapsed",IndustrialRules.fishingTicks(EmploymentConfig.FISH_TICKS.get(),1));}
             case BREEDER->{WorkforceData.get(l).setProgress(v.getUUID(),profession.id(),2,25);s.setItem(28,new ItemStack(Items.BONE,8));s.setItem(29,new ItemStack(Items.BEEF,2));for(var w:List.of(animal(l,s,EntityType.WOLF),animal(l,s,EntityType.WOLF))){w.setTame(true);w.getPersistentData().putUUID("KraftCityCaretaker",v.getUUID());}}
-            case BEEKEEPER->{s.setItem(0,new ItemStack(Items.GLASS_BOTTLE,2));s.setItem(1,new ItemStack(IndustrialTools.SHEARS.get(3).get()));l.setBlock(target.below(),Blocks.CAMPFIRE.defaultBlockState(),3);l.setBlock(target,Blocks.BEEHIVE.defaultBlockState().setValue(BeehiveBlock.HONEY_LEVEL,5),3);s.industry.putInt("cursor",67);}
+            case BEEKEEPER->{
+                s.setItem(0,new ItemStack(Items.GLASS_BOTTLE,2));
+                s.setItem(1,new ItemStack(IndustrialTools.SHEARS.get(3).get()));
+                s.setItem(29,new ItemStack(Items.DANDELION));
+                v.setPos(pos.getX()+.5,pos.getY()+1,pos.getZ()+1.5);
+                var bee=EntityType.BEE.create(l);
+                bee.setNoAi(true);
+                bee.setPos(target.getX()+.5,target.getY()+1,target.getZ()+.5);
+                var attempt=new net.minecraft.nbt.CompoundTag();
+                attempt.putUUID("station",s.id);attempt.putInt("remaining",1);
+                bee.getPersistentData().put("KCApiaryAttempt",attempt);
+                l.addFreshEntity(bee);
+                IndustrialWork.tick(l,s);
+                check(bee.getPersistentData().getUUID("KCApiary").equals(s.id),"Bee failed to bond");
+                var hivePos=target.above();
+                l.setBlock(hivePos,Blocks.BEEHIVE.defaultBlockState().setValue(BeehiveBlock.HONEY_LEVEL,5),3);
+                ((net.minecraft.world.level.block.entity.BeehiveBlockEntity)l.getBlockEntity(hivePos)).addOccupant(bee,false);
+            }
             default->throw new IllegalStateException();
         }
         // Cursor at (x=+1,z=0,y=0) for the initial 5x5 area.
         if(profession==Profession.FARMER)v.setPos(target.getX()+.5,target.getY()+1,target.getZ()+.5);
-        if(profession==Profession.BEEKEEPER)s.industry.putInt("cursor",67);
         IndustrialWork.tick(l,s);
         if(profession==Profession.FARMER){
             for(int action=0;action<3;action++)IndustrialWork.tick(l,s);
@@ -105,7 +121,9 @@ public final class IndustryVisualCheck {
         }catch(ReflectiveOperationException e){throw new IllegalStateException(e);}
     }
     private static void toggle(Minecraft mc){
-        var screen=(WorkScreen)mc.screen;var b=screen.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.Button).map(c->(net.minecraft.client.gui.components.Button)c).filter(c->c.getMessage().getString().equals("Limites")).findFirst().orElseThrow();b.onPress();
+        var menu=(WorkMenu)mc.player.containerMenu;
+        if(menu.fieldLayout&&!menu.settingsPage)press(mc,"›");
+        press(mc,menu.fieldLayout?"Exibir Limites":"Limites");
     }
     private static Block arcaneBlock(){
         var registry=net.minecraftforge.registries.ForgeRegistries.BLOCKS;
@@ -158,8 +176,9 @@ public final class IndustryVisualCheck {
         if(phase==6){
             if(!(mc.screen instanceof WorkScreen)
                 ||!(mc.player.containerMenu instanceof WorkMenu menu)||menu.snapshot==null)return false;
+            if(!menu.settingsPage)press(mc,"›");
             if(!captureReady("visual-farmer-discard-unbound.png"))return false;
-            press(mc,"Vincular Baú");
+            press(mc,"Vincular Baú Especial");
         }
         if(phase==11){
             if(mc.screen!=null)return false;
@@ -183,8 +202,9 @@ public final class IndustryVisualCheck {
             if(!(mc.screen instanceof WorkScreen)
                 ||!(mc.player.containerMenu instanceof WorkMenu menu)||menu.snapshot==null)return false;
             check(menu.snapshot.discardLinked(),"Bound chest was missing from the menu");
+            if(!menu.settingsPage)press(mc,"›");
             if(!captureReady("visual-farmer-discard-linked.png"))return false;
-            press(mc,"Vinculado");
+            press(mc,"Baú Especial Vinculado");
             check(mc.screen instanceof net.minecraft.client.gui.screens.ConfirmScreen,"No unlink confirmation");
         }
         if(phase==24){
@@ -193,11 +213,12 @@ public final class IndustryVisualCheck {
             check(((WorkMenu)mc.player.containerMenu).snapshot.discardLinked(),"Cancel changed the link");
         }
         if(phase==26){
-            press(mc,"Vinculado");
+            press(mc,"Baú Especial Vinculado");
             press(mc,"Desvincular");
         }
         if(phase==32){
             if(((WorkMenu)mc.player.containerMenu).snapshot.discardLinked())return false;
+            if(((WorkMenu)mc.player.containerMenu).settingsPage)press(mc,"‹");
             System.out.println("FARMER_DISCARD_BINDING_GUI_PASSED");
         }
         if(phase==33)level.getServer().execute(()->{
@@ -229,7 +250,7 @@ public final class IndustryVisualCheck {
                 return;
             }
             if(phase==0)mc.getSingleplayerServer().execute(()->setup(mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()),i));
-            if(phase==45){check(mc.screen instanceof WorkScreen,"Industry menu missing");check(mc.player.containerMenu instanceof WorkMenu m&&m.slots.size()==(i==0?66:68)&&m.snapshot!=null,"Industry menu not synchronized");}
+            if(phase==45){check(mc.screen instanceof WorkScreen,"Industry menu missing");check(mc.player.containerMenu instanceof WorkMenu m&&m.slots.size()==(i==0||i==5?66:68)&&m.snapshot!=null,"Industry menu not synchronized");}
             if(i==0&&phase==35){
                 var menu=(WorkMenu)mc.player.containerMenu;
                 check(menu.snapshot.level()==2&&menu.snapshot.size()==5,"Lv2 changed the active area");
@@ -241,6 +262,19 @@ public final class IndustryVisualCheck {
                 seven.onPress();
             }
             if(phase==50)Screenshot.grab(new File("../build"),"visual-industry-"+Profession.values()[i].path+".png",mc.getMainRenderTarget(),message->{});
+            if(i==5&&phase==52){
+                press(mc,"›");
+                var menu=(WorkMenu)mc.player.containerMenu;
+                check(menu.slots.stream().noneMatch(net.minecraft.world.inventory.Slot::isActive),"Apiary settings exposed stock slots");
+            }
+            if(i==5&&phase==54)Screenshot.grab(new File("../build"),"visual-apiary-settings.png",mc.getMainRenderTarget(),message->{});
+            if(i==5&&phase==55){
+                var menu=(WorkMenu)mc.player.containerMenu;
+                press(mc,"‹");
+                check(menu.slots.stream().allMatch(net.minecraft.world.inventory.Slot::isActive)
+                    &&menu.getSlot(27).getItem().getItem() instanceof net.minecraft.world.item.ShearsItem,"Apiary tools lost after page switch");
+                System.out.println("APIARY_TWO_PAGES_PASSED");
+            }
             if(i==0&&phase==51){
                 check(((WorkMenu)mc.player.containerMenu).snapshot.size()==7
                     &&bounds().stream().anyMatch(b->b.pos().equals(post(0))&&b.size()==7&&b.farmer()),"Selected 7×7 area did not synchronize");
@@ -298,7 +332,12 @@ public final class IndustryVisualCheck {
                 &&s.getItem(27).getDamageValue()>0,"Shepherd output or worn stone shears lost");
             if(i==3)check(count(s,Items.COD)+count(s,Items.SALMON)+count(s,Items.TROPICAL_FISH)+count(s,Items.PUFFERFISH)>0
                 &&s.getItem(27).is(IndustrialTools.RODS.get(IndustrialTools.STONE).get())&&s.getItem(27).getDamageValue()>0,"Fish output or worn stone rod lost");
-            if(i==5)check(count(s,Items.HONEY_BOTTLE)>0,"Honey output lost");
+            if(i==5){
+                check(count(s,Items.HONEY_BOTTLE)>0,"Honey output lost");
+                check(s.industry.getCompound("apiary_bees").size()==1
+                    &&s.industry.getList("apiary_hives",net.minecraft.nbt.Tag.TAG_LONG).size()==1,"Apiary bonds lost");
+                System.out.println("APIARY_WORLD_RESTART_PASSED");
+            }
         }
         if(arcaneBlock()!=null){
             var s=station(l,0);

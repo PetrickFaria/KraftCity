@@ -155,6 +155,7 @@ public final class DiscardChests {
         if(be instanceof EnderChestBlockEntity chest&&be.getBlockState().is(Blocks.ENDER_CHEST)){
             var station=worker.level instanceof ServerLevel level?EmploymentData.get(level).assigned(worker.getUUID()):null;
             return station!=null&&(station.profession==br.com.kraftcity.employment.Profession.FARMER
+                ||station.profession==br.com.kraftcity.employment.Profession.BEEKEEPER
                 ||station.profession==br.com.kraftcity.employment.Profession.SOLDIER)
                 &&DiscardBinding.permitsEnder((ServerLevel)worker.level,station,chest)?EnderDiscard.inventory(chest):null;
         }

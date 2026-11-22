@@ -23,6 +23,7 @@ public final class IndustrialRules {
     public static int size(ServerLevel l,EmploymentData.Station s){
         int max=maximumSize(level(l,s));
         int selected=s.industry.getInt("size");
+        if(s.profession==Profession.BEEKEEPER)return validSize(selected,max)?selected:5;
         if(s.profession==Profession.FARMER){
             if(validSize(selected,13))return selected;
             int legacy=s.industry.getInt("zigzag_size");
@@ -36,14 +37,14 @@ public final class IndustrialRules {
     private static boolean validSize(int size,int max){return size>=5&&size<=max&&size%2==1;}
     public static boolean selectSize(ServerLevel l,EmploymentData.Station s,int size){
         int max=maximumSize(level(l,s));
-        if(!validSize(size,max)||s.profession!=Profession.FARMER&&level(l,s)<5&&size!=max)return false;
+        if(!validSize(size,max)||s.profession!=Profession.FARMER&&s.profession!=Profession.BEEKEEPER&&level(l,s)<5&&size!=max)return false;
         s.industry.putInt("size",size);s.industry.remove("cursor");s.setChanged();return true;
     }
     public static int capacity(int level){return 2*Math.min(5,Math.max(1,level));}
     /** A completed action is one unit; cumulative thresholds are 25/50/75/100. */
     public static void progress(ServerLevel l,EmploymentData.Station s){
         if(s.worker==null||s.profession==null)return;if(s.profession==Profession.FARMER)size(l,s);var data=WorkforceData.get(l);var old=data.progress(s.worker,s.profession.id());
-        long xp=old.xp()+1;int step=s.profession==Profession.FARMER||s.profession==Profession.SHEPHERD?FARMER_XP_PER_LEVEL:EmploymentConfig.OTHER_LEVEL_ACTIONS.get();
+        long xp=old.xp()+1;int step=s.profession==Profession.FARMER||s.profession==Profession.SHEPHERD||s.profession==Profession.BEEKEEPER?FARMER_XP_PER_LEVEL:EmploymentConfig.OTHER_LEVEL_ACTIONS.get();
         int level=Math.min(5,Math.max(old.level(),1+(int)Math.min(4,xp/step)));
         data.setProgress(s.worker,s.profession.id(),level,xp);s.setChanged();
     }

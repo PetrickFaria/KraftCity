@@ -20,15 +20,15 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     private UUID selected;
     private Profession profession;
     private int page;
-    private static final int FARM_AREA_X=66, FARM_AREA_Y=123, XP_WIDTH=182, XP_Y=22;
+    private static final int FARM_AREA_X=(WorkMenu.FARM_WIDTH-172)/2, FARM_AREA_Y=123, XP_WIDTH=182, XP_Y=22;
     private static final String[] FARM_INPUTS={"Enxada","Farinha de Osso","Balde de Água"};
 
     public WorkScreen(WorkMenu menu,Inventory inventory,Component title){
         super(menu,inventory,title);
-        imageWidth=menu.farmer?WorkMenu.FARM_WIDTH:350;
-        imageHeight=menu.farmer?WorkMenu.FARM_HEIGHT:!menu.hiring&&menu.sector==Profession.Sector.COMMERCIAL?296:280;
-        inventoryLabelX=menu.farmer?WorkMenu.FARM_GRID_X:94;
-        inventoryLabelY=menu.farmer?146:!menu.hiring&&menu.sector==Profession.Sector.COMMERCIAL?203:187;
+        imageWidth=menu.fieldLayout?WorkMenu.FARM_WIDTH:350;
+        imageHeight=menu.fieldLayout?WorkMenu.FARM_HEIGHT:!menu.hiring&&menu.sector==Profession.Sector.COMMERCIAL?296:280;
+        inventoryLabelX=menu.fieldLayout?WorkMenu.FARM_GRID_X:94;
+        inventoryLabelY=menu.fieldLayout?146:!menu.hiring&&menu.sector==Profession.Sector.COMMERCIAL?203:187;
         titleLabelY=6;
     }
     @SubscribeEvent public static void setup(FMLClientSetupEvent event){event.enqueueWork(()->net.minecraft.client.gui.screens.MenuScreens.register(WorkModule.MENU.get(),WorkScreen::new));}
@@ -39,7 +39,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     }
     @Override protected void init(){super.init();buttons();}
     private void buttons(){
-        clearWidgets();if(menu.farmer){farmerButtons();return;}if(!menu.hiring){
+        clearWidgets();if(menu.fieldLayout){farmerButtons();return;}if(!menu.hiring){
             if(menu.profession!=null){
                 for(int i=0;i<5;i++){
                     final int size=5+2*i;
@@ -84,17 +84,26 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     }
     private void farmerButtons(){
         var state=menu.snapshot;
-        for(int i=0;i<5;i++){
-            int size=5+i*2;
-            var button=addRenderableWidget(new Button(leftPos+FARM_AREA_X+i*35,topPos+FARM_AREA_Y,32,17,
-                Component.literal(size+"×"+size),b->option(size,0)));
-            button.active=state!=null&&size<=IndustrialRules.maximumSize(state.level());
+        addRenderableWidget(new Button(leftPos+imageWidth-23,topPos+5,17,15,
+            Component.literal(menu.settingsPage?"‹":"›"),b->{
+                if(menu.getCarried().isEmpty()){menu.settingsPage=!menu.settingsPage;buttons();}
+            })).active=menu.getCarried().isEmpty();
+        if(!menu.settingsPage){
+            for(int i=0;i<5;i++){
+                int size=5+i*2;
+                var button=addRenderableWidget(new Button(leftPos+FARM_AREA_X+i*35,topPos+FARM_AREA_Y,32,17,
+                    Component.literal(size+"×"+size),b->option(size,0)));
+                button.active=state!=null&&size<=IndustrialRules.maximumSize(state.level());
+            }
+            if(state!=null&&!state.employed())addRenderableWidget(new Button(leftPos+222,topPos+142,75,16,
+                Component.literal("Contratar"),b->hireAction(-2)));
+            return;
         }
-        addRenderableWidget(new Button(leftPos+246,topPos+FARM_AREA_Y,51,17,
-            Component.literal("Limites"),b->option(0,1)));
+        addRenderableWidget(new Button(leftPos+77,topPos+106,152,18,
+            Component.literal("Exibir Limites"),b->option(0,1)));
         if(state==null)return;
-        addRenderableWidget(new Button(leftPos+225,topPos+40,74,18,
-            Component.literal(state.discardLinked()?"Vinculado":"Vincular Baú"),b->{
+        addRenderableWidget(new Button(leftPos+77,topPos+80,152,18,
+            Component.literal(state.discardLinked()?"Baú Especial Vinculado":"Vincular Baú Especial"),b->{
                 if(!state.discardLinked()){
                     option(0,5);
                     minecraft.player.closeContainer();
@@ -104,14 +113,19 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
                     minecraft.setScreen(this);
                     if(confirmed)option(0,6);
                 },Component.literal("Desvincular o Baú de Descarte?"),
-                    Component.literal("Confirme para remover a associação deste Fazendeiro."),
+                    Component.literal("Confirme para remover a associação deste posto."),
                     Component.literal("Desvincular"),Component.literal("Cancelar")));
             }));
         if(state.employed()){
-            addRenderableWidget(new Button(leftPos+243,topPos+4,54,16,Component.translatable("gui.kraftcity.dismiss"),
-                b->WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Dismiss(menu.containerId,menu.stationId,state.epoch()))));
+            addRenderableWidget(new Button(leftPos+77,topPos+132,152,18,Component.translatable("gui.kraftcity.dismiss"),
+                b->minecraft.setScreen(new net.minecraft.client.gui.screens.ConfirmScreen(confirmed->{
+                    minecraft.setScreen(this);
+                    if(confirmed)WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Dismiss(menu.containerId,menu.stationId,state.epoch()));
+                },Component.literal("Demitir trabalhador?"),
+                    Component.literal("O trabalhador conserva seu histórico profissional."),
+                    Component.literal("Demitir"),Component.literal("Cancelar")))));
         }else{
-            addRenderableWidget(new Button(leftPos+235,topPos+4,62,16,Component.literal("Contratar"),b->hireAction(-2)));
+            addRenderableWidget(new Button(leftPos+77,topPos+132,152,18,Component.literal("Contratar"),b->hireAction(-2)));
         }
         if(state.paymentBalance()){
             addRenderableWidget(new Button(leftPos+243,topPos+144,54,16,Component.literal("Saldo"),b->hireAction(-3),
@@ -127,8 +141,8 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     }
     private String farmerTitle(int width){
         var state=menu.snapshot;
-        if(state==null||!state.employed())return "Fazendeiro";
-        String suffix=" (Fazendeiro) - Lv. "+state.level();
+        if(state==null||!state.employed())return menu.profession.label;
+        String suffix=" ("+menu.profession.label+") - Lv. "+state.level();
         String name=state.worker();
         int available=width-font.width(suffix);
         if(font.width(name)>available)name=font.plainSubstrByWidth(name,Math.max(0,available-font.width("…"))).stripTrailing()+"…";
@@ -142,11 +156,13 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     @Override protected void renderBg(PoseStack pose,float partial,int mx,int my){
         fill(pose,leftPos,topPos,leftPos+imageWidth,topPos+imageHeight,0xFF30271F);
         fill(pose,leftPos+3,topPos+3,leftPos+imageWidth-3,topPos+imageHeight-3,0xFF66513A);
-        if(menu.farmer)drawFarmerBackground(pose);
-        for(var slot:menu.slots){int x=leftPos+slot.x,y=topPos+slot.y;fill(pose,x-1,y-1,x+17,y+17,0xFF251F18);fill(pose,x,y,x+16,y+16,0xFFB69B73);}
+        if(menu.fieldLayout)drawFarmerBackground(pose);
+        for(var slot:menu.slots){if(!slot.isActive())continue;int x=leftPos+slot.x,y=topPos+slot.y;fill(pose,x-1,y-1,x+17,y+17,0xFF251F18);fill(pose,x,y,x+16,y+16,0xFFB69B73);}
     }
     private void drawFarmerBackground(PoseStack pose){
         fill(pose,leftPos+4,topPos+4,leftPos+imageWidth-4,topPos+29,0xFF44372A);
+        WorkerTextures.drawExperience(pose,leftPos+(imageWidth-XP_WIDTH)/2,topPos+XP_Y,farmerXpWidth(),false);
+        if(menu.settingsPage)return;
         fill(pose,leftPos+62,topPos+65,leftPos+244,topPos+121,0xFF4C3D2E);
         fill(pose,leftPos+62,topPos+154,leftPos+244,topPos+232,0xFF4C3D2E);
         var state=menu.snapshot;
@@ -154,13 +170,14 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
             int x=leftPos+FARM_AREA_X+(state.size()-5)/2*35;
             fill(pose,x-1,topPos+FARM_AREA_Y-1,x+33,topPos+FARM_AREA_Y+18,0xFFBFD375);
         }
-        WorkerTextures.drawExperience(pose,leftPos+(imageWidth-XP_WIDTH)/2,topPos+XP_Y,farmerXpWidth(),false);
     }
     @Override protected void renderLabels(PoseStack pose,int mx,int my){
-        if(menu.farmer){
-            drawCenteredString(pose,font,farmerTitle(imageWidth-134),imageWidth/2,8,0xFFF6E8CC);
-            for(int i=0;i<FARM_INPUTS.length;i++)
-                drawCenteredString(pose,font,FARM_INPUTS[i],WorkMenu.farmAuxX(i)+8,31,0xFFF6E8CC);
+        if(menu.fieldLayout){
+            drawCenteredString(pose,font,farmerTitle(imageWidth-54),imageWidth/2,8,0xFFF6E8CC);
+            if(menu.settingsPage)return;
+            String[] inputs=menu.farmer?FARM_INPUTS:new String[]{"Tesoura","Frasco de Vidro","Flor"};
+            for(int i=0;i<inputs.length;i++)
+                drawCenteredString(pose,font,inputs[i],WorkMenu.farmAuxX(i)+8,31,0xFFF6E8CC);
             drawCenteredString(pose,font,"Inventário compartilhado",imageWidth/2,59,0xFFF6E8CC);
             font.draw(pose,playerInventoryTitle,inventoryLabelX,inventoryLabelY,0xFFF6E8CC);
             return;
@@ -203,7 +220,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     }
     @Override public void render(PoseStack pose,int mx,int my,float partial){
         renderBackground(pose);super.render(pose,mx,my,partial);renderTooltip(pose,mx,my);
-        if(!menu.farmer||menu.snapshot==null||!menu.snapshot.employed())return;
+        if(!menu.fieldLayout||menu.snapshot==null||!menu.snapshot.employed())return;
         int x=mx-leftPos,y=my-topPos;
         if(x>=66&&x<240&&y>=6&&y<19){
             renderTooltip(pose,Component.literal(farmerTitle(Integer.MAX_VALUE)),mx,my);

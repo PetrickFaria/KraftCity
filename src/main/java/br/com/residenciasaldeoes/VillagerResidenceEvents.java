@@ -1236,7 +1236,7 @@ public class VillagerResidenceEvents {
             }
             clearHomeReturn(entityData);
             if(weather&&!night){
-                if(station!=null&&station.profession==br.com.kraftcity.employment.Profession.FARMER)
+                if(br.com.kraftcity.industry.FarmerLogistics.fieldWorker(station))
                     circulateDuringStorm(level,villager,home);
                 else if(employed)shelterDuringStorm(level,villager,home);
                 else keepResidentInsideDuringRain(level,data,villager,home,true,true);

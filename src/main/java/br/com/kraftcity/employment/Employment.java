@@ -122,7 +122,7 @@ public final class Employment {
 
     private static double escapeSpeed(ServerLevel level,Villager worker){
         var station=EmploymentData.get(level).assigned(worker.getUUID());
-        return station!=null&&station.profession==Profession.FARMER?.95:1.25;
+        return br.com.kraftcity.industry.FarmerLogistics.fieldWorker(station)?.95:1.25;
     }
 
     private static net.minecraft.world.phys.AABB escapeBounds(ServerLevel level,Villager worker,boolean nightShelter){
@@ -332,6 +332,11 @@ public final class Employment {
                 s.industry.remove("cursor");
             }
             s.industry.putUUID("farmer_area_owner",worker);
+        }
+        if(profession==Profession.BEEKEEPER&&(!s.industry.hasUUID("apiary_worker")
+                ||!worker.equals(s.industry.getUUID("apiary_worker")))){
+            s.industry.putInt("size",5);
+            s.industry.putUUID("apiary_worker",worker);
         }
         converted.bind(s.id);s.profession=profession;s.worker=worker;s.industry.putLong("employment_epoch",epoch(s)+1);s.setChanged();
         var workforce=WorkforceData.get(level);var progress=workforce.progress(worker,profession.id());

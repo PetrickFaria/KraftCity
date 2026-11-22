@@ -134,7 +134,7 @@ public final class FarmerLogistics {
     public static boolean leaveWater(ServerLevel level,Villager worker){
         if(!worker.isInWaterOrBubble()||worker.isPassenger()||worker.isSleeping()||worker.isNoAi())return false;
         var station=EmploymentData.get(level).assigned(worker.getUUID());
-        if(station==null||station.profession!=Profession.FARMER)return false;
+        if(!fieldWorker(station))return false;
         worker.getJumpControl().jump();
         var route=ROUTES.get(worker);
         if(route!=null&&isBank(level,route.target,worker.blockPosition())&&approachCell(level,worker,route.target,false)==0)return true;
@@ -201,7 +201,7 @@ public final class FarmerLogistics {
         int size=IndustrialRules.size(l,s);
         var cells=FarmerWork.zigzag(s.pos,size);
         var candidates=new ArrayList<BlockPos>();
-        for(var base:cells)for(int y=0;y<FarmerWork.HEIGHT;y++){
+        for(var base:cells)for(int y=0;y<(int)area.getYsize();y++){
             var pos=base.above(y);
             if(l.hasChunkAt(pos)&&l.getBlockState(pos).getCollisionShape(l,pos).isEmpty()
                 &&l.getBlockState(pos.above()).getCollisionShape(l,pos.above()).isEmpty()
@@ -301,7 +301,7 @@ public final class FarmerLogistics {
         var area=IndustrialWork.area(l,s);
         var search=pickupArea(area);
         var farms=EmploymentData.get(l).stations().stream().filter(other->other!=s&&other.active&&other.worker!=null
-            &&other.profession==Profession.FARMER&&other.dimension.equals(l.dimension()))
+            &&fieldWorker(other)&&other.dimension.equals(l.dimension()))
             .map(other->new NeighborFarm(other,IndustrialWork.area(l,other)))
             .filter(other->pickupArea(other.area).intersects(search)).toList();
         var rejected=UNREACHABLE_ITEMS.computeIfAbsent(v,k->new HashMap<>());
@@ -333,7 +333,7 @@ public final class FarmerLogistics {
                 return closing;
             }
         }
-        if(IndustrialWork.allowed(l,s,v,item.blockPosition(),item,"farmer_collect")
+        if(IndustrialWork.allowed(l,s,v,item.blockPosition(),item,s.profession==Profession.BEEKEEPER?"apiary_collect":"farmer_collect")
             &&eligible(l,s,area,search,farms,item,false)&&pickupReach(l,v,item)
             &&Employment.valid(l,v.getUUID())&&v.getUUID().equals(s.worker)){
             var take=item.getItem().copy();
@@ -448,6 +448,10 @@ public final class FarmerLogistics {
     }
     private static ItemStack excess(EmploymentData.Station s,int slot,Map<Item,Integer> remaining){
         var stack=s.getItem(slot);
+        if(s.profession==Profession.BEEKEEPER){
+            for(int input=0;input<3;input++)if(ApiaryWork.validInput(input,stack))return ItemStack.EMPTY;
+            return stack;
+        }
         if(stack.isEmpty()||stack.getItem() instanceof net.minecraft.world.item.HoeItem
             ||stack.is(net.minecraft.world.item.Items.BONE_MEAL)||stack.is(net.minecraft.world.item.Items.WATER_BUCKET))return ItemStack.EMPTY;
         int keep=0;
@@ -531,10 +535,14 @@ public final class FarmerLogistics {
         }
     }
 
+    public static boolean fieldWorker(EmploymentData.Station station){
+        return station!=null&&(station.profession==Profession.FARMER||station.profession==Profession.BEEKEEPER);
+    }
+
     public static boolean ending(Villager v){
         if(!(v.level instanceof ServerLevel l))return false;
         var s=EmploymentData.get(l).assigned(v.getUUID());
-        return s!=null&&s.profession==Profession.FARMER&&s.industry.contains("farmer_discard_until")
+        return fieldWorker(s)&&s.industry.contains("farmer_discard_until")
             &&s.industry.getLong("farmer_discard_until")>l.getGameTime();
     }
 
@@ -550,7 +558,7 @@ public final class FarmerLogistics {
 
     public static void cancelClosingForDanger(ServerLevel level,Villager worker){
         var station=EmploymentData.get(level).assigned(worker.getUUID());
-        if(station==null||station.profession!=Profession.FARMER)return;
+        if(!fieldWorker(station))return;
         if(station.industry.contains("farmer_discard_until"))finishClosing(station,worker);
         station.industry.putLong("farmer_discard_day",Math.floorDiv(level.getDayTime(),24000)+1);
         station.setChanged();
@@ -559,14 +567,14 @@ public final class FarmerLogistics {
     public static boolean nightFarmer(ServerLevel level,Villager worker){
         if(IndustrialWork.day(level))return false;
         var station=EmploymentData.get(level).assigned(worker.getUUID());
-        return station!=null&&station.profession==Profession.FARMER;
+        return fieldWorker(station);
     }
 
     /** Called before the resident sleep routine, after emergency navigation. */
     public static boolean beforeHome(ServerLevel l,Villager v){
         if(v.isNoAi())return false;
         var s=EmploymentData.get(l).assigned(v.getUUID());
-        if(s==null||s.profession!=Profession.FARMER||!l.hasChunkAt(s.pos)||!Employment.valid(l,v.getUUID()))return false;
+        if(!fieldWorker(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,v.getUUID()))return false;
         if(IndustrialWork.day(l)){
             if(s.industry.contains("farmer_discard_day")){
                 if(s.industry.contains("farmer_discard_until"))finishClosing(s,v);
