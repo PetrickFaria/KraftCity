@@ -24,6 +24,8 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
     private final HumanoidArmorLayer<Villager,HumanoidModel<Villager>,HumanoidModel<Villager>> armor;
     private final HumanoidModel<Villager> innerArmor,outerArmor;
     private boolean steve;
+    private enum Piece { STANDARD, WAIST, LEFT, RIGHT }
+    private Piece piece=Piece.STANDARD;
 
     public SoldierArmorLayer(RenderLayerParent<Villager,VillagerModel<Villager>> parent,EntityModelSet models){
         super(parent);
@@ -51,10 +53,14 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
                     fitLegHeight(model.rightLeg,padding);
                 }
                 if(slot==EquipmentSlot.LEGS&&!steve){
-                    // The robe is deeper than the vanilla leggings mesh at rest.
                     model.body.zScale=1.55F;
                     model.leftLeg.zScale=1.55F;
                     model.rightLeg.zScale=1.55F;
+                }
+                if(piece!=Piece.STANDARD){
+                    model.body.visible=piece==Piece.WAIST;
+                    model.leftLeg.visible=piece==Piece.LEFT;
+                    model.rightLeg.visible=piece==Piece.RIGHT;
                 }
             }
         };
@@ -66,6 +72,7 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
         offsetAlongPartY(leg,padding*leg.yScale);
         // Seat the foot-facing shell slightly inside the visible sole rather than on its edge.
         leg.y-=padding*.5F;
+        leg.xScale*=1.06F;
     }
 
     private static void offsetAlongPartY(ModelPart part,float distance){
@@ -93,33 +100,67 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
             poseModel.body.zScale=1.3F;
             poseModel.rightLeg.copyFrom(root.getChild("right_leg"));
             poseModel.leftLeg.copyFrom(root.getChild("left_leg"));
-            if(!soldier.getItemBySlot(EquipmentSlot.LEGS).isEmpty()||!soldier.getItemBySlot(EquipmentSlot.FEET).isEmpty()){
-                FreshVillagerParts.alignLegY(root,"right_leg",poseModel.rightLeg);
-                FreshVillagerParts.alignLegY(root,"left_leg",poseModel.leftLeg);
-            }
             poseModel.rightArm.loadPose(poseModel.rightArm.getInitialPose());
             poseModel.leftArm.loadPose(poseModel.leftArm.getInitialPose());
             BuilderArmsLayer.poseArms(soldier,poseModel.rightArm,poseModel.leftArm,stride,amount,age,false);
         }
-        var head=steve||soldier.getItemBySlot(EquipmentSlot.HEAD).isEmpty()?null:FreshVillagerParts.head(getParentModel().root());
-        if(head==null){
+        if(steve){
             armor.render(pose,buffers,light,soldier,stride,amount,partial,age,yaw,pitch);
             return;
         }
 
+        var root=getParentModel().root();
         var pieces=(SoldierArmorLayerInvoker)armor;
         pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.CHEST,light,outerArmor);
-        pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.LEGS,light,innerArmor);
-        pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.FEET,light,outerArmor);
+        var left=FreshVillagerParts.leg(root,"left_leg");
+        var right=FreshVillagerParts.leg(root,"right_leg");
+        if(left==null||right==null){
+            pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.LEGS,light,innerArmor);
+            pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.FEET,light,outerArmor);
+        }else{
+            try{
+                piece=Piece.WAIST;
+                pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.LEGS,light,innerArmor);
+                renderLower(pose,buffers,soldier,light,left,Piece.LEFT,poseModel.leftLeg);
+                renderLower(pose,buffers,soldier,light,right,Piece.RIGHT,poseModel.rightLeg);
+            }finally{
+                piece=Piece.STANDARD;
+            }
+        }
+
+        var head=soldier.getItemBySlot(EquipmentSlot.HEAD).isEmpty()?null:FreshVillagerParts.head(root);
+        if(head==null){
+            pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.HEAD,light,outerArmor);
+            return;
+        }
         pose.pushPose();
         try{
             head.transform(pose,true);
-            poseModel.head.setPos(0,0,0);
-            poseModel.head.setRotation(0,0,0);
-            poseModel.head.xScale=poseModel.head.yScale=poseModel.head.zScale=1F;
+            reset(poseModel.head);
             pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.HEAD,light,outerArmor);
         }finally{
             pose.popPose();
         }
+    }
+
+    private void renderLower(PoseStack pose,MultiBufferSource buffers,Villager soldier,int light,
+                             FreshVillagerParts.Anchor leg,Piece side,ModelPart armorLeg){
+        pose.pushPose();
+        try{
+            piece=side;
+            leg.transform(pose,false);
+            reset(armorLeg);
+            var pieces=(SoldierArmorLayerInvoker)armor;
+            pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.LEGS,light,innerArmor);
+            pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.FEET,light,outerArmor);
+        }finally{
+            pose.popPose();
+        }
+    }
+
+    private static void reset(ModelPart part){
+        part.setPos(0,0,0);
+        part.setRotation(0,0,0);
+        part.xScale=part.yScale=part.zScale=1F;
     }
 }

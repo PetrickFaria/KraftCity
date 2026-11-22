@@ -27,7 +27,10 @@ public final class MilitaryEvents {
     public void bowProjectile(net.minecraftforge.event.entity.EntityJoinLevelEvent event){
         if(!event.loadedFromDisk()&&event.getLevel() instanceof ServerLevel level
             &&event.getEntity() instanceof net.minecraft.world.entity.projectile.AbstractArrow arrow
-            &&arrow.getOwner() instanceof Villager soldier&&!MilitaryBow.admit(level,soldier,arrow))event.setCanceled(true);
+            &&arrow.getOwner() instanceof Villager soldier&&Military.isSoldier(soldier)){
+            if(!MilitaryBow.admit(level,soldier,arrow))event.setCanceled(true);
+            else if(arrow.shotFromCrossbow())arrow.getPersistentData().putLong("KraftCityCrossbowTick",level.getGameTime());
+        }
     }
 
     @SubscribeEvent public void removed(net.minecraftforge.event.entity.EntityLeaveLevelEvent e){

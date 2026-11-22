@@ -20,6 +20,12 @@ public abstract class VillagerTransportMixin {
     @Inject(method="customServerAiStep",at=@At("HEAD"),cancellable=true)
     private void residenciasaldeoes$deliveryOwnsNavigation(CallbackInfo callback) {
         Villager villager=(Villager)(Object)this;
+        if(villager.isSleeping()&&br.com.kraftcity.military.Military.isSoldier(villager)
+                &&br.com.residenciasaldeoes.VillagerResidenceEvents.ownsWorkerRest(villager)){
+            br.com.residenciasaldeoes.VillagerResidenceEvents.stabilizeSleepingResident(villager);
+            callback.cancel();
+            return;
+        }
         if(villager.level instanceof net.minecraft.server.level.ServerLevel
                 &&(villager.getPersistentData().contains("residenciasaldeoes_emerald_transfer")
                 ||villager.getPersistentData().contains("residenciasaldeoes_night_door_task")))

@@ -7,6 +7,7 @@ import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.item.BowItem;
 
 final class MilitaryBow {
+    static final int INTERVAL=120;
     private static final String DEADLINE = "KraftCityBowReadyAt";
 
     static long readyAt(EmploymentData.Station station,Villager soldier){
@@ -24,7 +25,7 @@ final class MilitaryBow {
             ||!arrow.getPersistentData().getBoolean("KCSoldierBow")&&!(soldier.getMainHandItem().getItem() instanceof BowItem))return true;
         long tick=level.getGameTime();
         if(tick<readyAt(station,soldier))return false;
-        long next=tick+100;
+        long next=tick+INTERVAL;
         soldier.getPersistentData().putLong(DEADLINE,next);
         station.military.putLong("bowReadyAt",next);
         station.military.putUUID("bowWorker",soldier.getUUID());

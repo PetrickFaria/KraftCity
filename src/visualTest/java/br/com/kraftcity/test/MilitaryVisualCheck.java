@@ -343,8 +343,12 @@ public final class MilitaryVisualCheck {
             var head=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.NORTH);
             level.setBlockAndUpdate(bed.south(),head);
             level.setBlockAndUpdate(bed,head.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.HEAD));
-            station(level).military.putString("shift","DAY");
+            var station=station(level);
+            station.military.putString("shift","DAY");
+            station.setChanged();
             v.startSleeping(bed);
+            v.setNoAi(false);
+            level.setWeatherParameters(0,2400,true,true);
             p.teleportTo(level,bed.getX()+3.25,bed.getY()+.75,bed.getZ()+1.25,106,26);
         });
         if(tick==45){
@@ -355,13 +359,6 @@ public final class MilitaryVisualCheck {
                 check(!soldier.getItemBySlot(slot).isEmpty(),"Sleeping equipment missing "+slot);
             capture(mc,"visual-military-armor-sleep.png");
         }
-        if(tick==50)mc.getSingleplayerServer().execute(()->{
-            var level=player(mc).getLevel();
-            var v=(Villager)level.getEntity(worker);
-            v.stopSleeping();
-            station(level).military.putString("shift","NIGHT");
-            station(level).setChanged();
-        });
         if(tick==56){
             System.out.println("MILITARY_HEAD_AND_SLEEP_ARMOR_PASSED");
             mc.stop();
@@ -404,7 +401,7 @@ public final class MilitaryVisualCheck {
             });
     }
 
-    public static void verifyRestore(ServerLevel l){var s=station(l);check(s.active&&s.worker!=null&&s.profession==Profession.SOLDIER&&s.getItem(31).isEmpty()&&s.military.getBoolean("visual_passed"),"Military saved contract");check(l.getEntity(s.worker) instanceof Villager&&ResidenceData.get(l).owner(s.worker)!=null,"Military saved identity/home");check(s.equipment.getItem(0).is(Items.IRON_SWORD)&&s.equipment.getItem(0).getDamageValue()==s.military.getInt("visual_wear")&&s.equipment.getItem(1).is(Items.SHIELD)&&s.getItem(0).isEmpty(),"Military gear/inventory save");check(WorkforceData.get(l).progress(s.worker,Profession.SOLDIER.id()).xp()==s.military.getLong("visual_xp")&&Military.mode(s)==Military.Mode.GUARD&&Military.shift(s)==Military.Shift.NIGHT&&!Military.selected(s,EntityType.CREEPER),"Military progression/mode/shift save");var chestPos=POST.west(2).south(2);
+    public static void verifyRestore(ServerLevel l){var s=station(l);check(s.active&&s.worker!=null&&s.profession==Profession.SOLDIER&&s.getItem(31).isEmpty()&&s.military.getBoolean("visual_passed"),"Military saved contract");check(l.getEntity(s.worker) instanceof Villager&&ResidenceData.get(l).owner(s.worker)!=null,"Military saved identity/home");check(s.equipment.getItem(0).is(Items.IRON_SWORD)&&s.equipment.getItem(0).getDamageValue()==s.military.getInt("visual_wear")&&s.equipment.getItem(1).is(Items.SHIELD)&&s.getItem(0).isEmpty(),"Military gear/inventory save");check(WorkforceData.get(l).progress(s.worker,Profession.SOLDIER.id()).xp()==s.military.getLong("visual_xp")&&Military.mode(s)==Military.Mode.GUARD&&Military.shift(s)==Military.Shift.DAY&&!Military.selected(s,EntityType.CREEPER),"Military progression/mode/shift save");var chestPos=POST.west(2).south(2);
         check(br.com.kraftcity.logistics.DiscardBinding.boundPosition(l,s)==null
             &&l.getBlockEntity(chestPos) instanceof net.minecraft.world.level.block.entity.BarrelBlockEntity barrel
             &&barrel.countItem(Items.ARROW)==16,"Military linked barrel or stock lost");
@@ -413,5 +410,8 @@ public final class MilitaryVisualCheck {
             &&Military.level(l,s.worker)==s.military.getInt("visual_level"),"Soldier kill ledger or level lost on restart");
         check(s.military.getLong("visual_bow_ready")>0
             &&s.military.getLong("bowReadyAt")==s.military.getLong("visual_bow_ready"),"Bow cooldown lost on restart");
+        check(l.getEntity(s.worker) instanceof Villager resting&&resting.isSleeping()
+            &&resting.getSleepingPos().filter(HOME.east().south(3).above()::equals).isPresent(),
+            "Sleeping military pose or bed did not survive reopening");
         System.out.println("MILITARY_WORLD_RESTART_PASSED");}
 }

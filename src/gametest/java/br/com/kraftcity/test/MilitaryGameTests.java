@@ -288,6 +288,8 @@ public final class MilitaryGameTests {
     @GameTest(template="empty",batch="military_ranged")
     public static void bow_spacing_survives_target_changes_and_station_save(GameTestHelper h){
         var f=fixture(h);
+        for(var pos:BlockPos.betweenClosed(f.p.offset(-7,0,-1),f.p.offset(7,0,1)))
+            if(!pos.equals(f.p))f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
         var bow=new ItemStack(Items.BOW);
         f.s.equipment.setItem(0,bow);
         f.s.setItem(0,new ItemStack(Items.ARROW,8));
@@ -296,18 +298,18 @@ public final class MilitaryGameTests {
         f.s.military.putLong("drawAt",f.l.getGameTime()-20);
         Military.combat(f.l,f.s,f.v,first);
         long firstShot=f.l.getGameTime();
-        check(bow.getDamageValue()==1&&f.s.military.getLong("bowReadyAt")==firstShot+100,"Bow cooldown was not armed");
+        check(bow.getDamageValue()==1&&f.s.military.getLong("bowReadyAt")==firstShot+120,"Bow cooldown was not armed");
         first.discard();
         Military.clearTask(f.v,f.s);
         var second=mob(f,EntityType.ZOMBIE,-5);
         var loaded=EmploymentData.load(EmploymentData.get(f.l).save(new CompoundTag())).station(f.s.id);
-        check(loaded.military.getLong("bowReadyAt")==firstShot+100,"Cooldown lost on save");
-        h.startSequence().thenExecuteFor(99,()->{
+        check(loaded.military.getLong("bowReadyAt")==firstShot+120,"Cooldown lost on save");
+        h.startSequence().thenExecuteFor(119,()->{
             Military.combat(f.l,f.s,f.v,second);
-            check(bow.getDamageValue()==1&&f.s.getItem(0).getCount()==7,"Bow fired before 100 ticks");
+            check(bow.getDamageValue()==1&&f.s.getItem(0).getCount()==7,"Bow fired before 120 ticks");
         }).thenWaitUntil(()->{
             Military.combat(f.l,f.s,f.v,second);
-            check(bow.getDamageValue()==2&&f.l.getGameTime()-firstShot>=100,"Second shot did not honor cooldown");
+            check(bow.getDamageValue()==2&&f.l.getGameTime()-firstShot>=120,"Second shot did not honor cooldown");
         }).thenSucceed();
     }
 
@@ -860,10 +862,10 @@ public final class MilitaryGameTests {
         bolt.setShotFromCrossbow(true);
         check(f.l.addFreshEntity(bolt),"Crossbow inherited the bow cooldown");
         Military.clearTask(f.v,f.s);
-        h.runAfterDelay(99,()->check(!f.l.addFreshEntity(new Arrow(f.l,f.v)),"Arrow entered before 100 ticks"));
-        h.runAfterDelay(100,()->{
+        h.runAfterDelay(119,()->check(!f.l.addFreshEntity(new Arrow(f.l,f.v)),"Arrow entered before 120 ticks"));
+        h.runAfterDelay(120,()->{
             var next=new Arrow(f.l,f.v);
-            check(f.l.addFreshEntity(next)&&next.getPersistentData().getLong("KCSoldierBowTick")-first>=100,
+            check(f.l.addFreshEntity(next)&&next.getPersistentData().getLong("KCSoldierBowTick")-first>=120,
                 "Second projectile timestamp violated the server interval");
             System.out.println("KRAFTCITY_BOW_SERVER_TICKS "+first+" "+next.getPersistentData().getLong("KCSoldierBowTick"));
             h.succeed();
@@ -915,5 +917,218 @@ public final class MilitaryGameTests {
         check(f.v.zza<0&&Math.abs(net.minecraft.util.Mth.wrapDegrees(f.v.getYRot()+90))<1,
             "The path navigator turned the archer away instead of applying reverse input");
         h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=160,batch="military_search_sighting")
+    public static void patrol_searches_last_sighting_for_five_seconds(GameTestHelper h){
+        var f=fixture(h,20);
+        f.l.getEntitiesOfClass(Monster.class,Military.areaBounds(f.p)).forEach(Entity::discard);
+        for(var pos:BlockPos.betweenClosed(f.p.offset(0,0,-3),f.p.offset(9,0,3)))
+            if(!pos.equals(f.p))f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
+        var resident=mob(f,EntityType.VILLAGER,8);
+        check("ok".equals(ResidenceData.get(f.l).link(f.l,f.home,resident)),"Search fixture resident");
+        var target=mob(f,EntityType.ZOMBIE,7);
+        target.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE,400));
+        f.v.tickCount=10;
+        Military.tick(f.l,f.s,f.v);
+        check(f.s.military.hasUUID("target")&&f.s.military.getUUID("target").equals(target.getUUID()),"Visible hostile was not acquired");
+        var last=new BlockPos(target.position());
+        for(var pos:BlockPos.betweenClosed(f.p.offset(4,1,-3),f.p.offset(4,4,3)))
+            f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
+        target.setPos(target.getX(),target.getY(),target.getZ()+1);
+        h.startSequence().thenExecuteFor(99,()->{
+            check(!f.v.hasLineOfSight(target),"Obstacle no longer occluded the target");
+            Military.tick(f.l,f.s,f.v);
+            check(f.s.military.hasUUID("target")&&f.s.military.getUUID("target").equals(target.getUUID()),"Hidden target abandoned early");
+            var destination=f.v.getNavigation().getTargetPos();
+            check(destination==null||!destination.equals(new BlockPos(target.position()))||destination.equals(last),
+                "Search followed an unseen position instead of the sighting");
+        }).thenWaitUntil(()->{
+            Military.tick(f.l,f.s,f.v);
+            check(!f.s.military.hasUUID("target"),"Expired target was retained or reacquired through a solid wall");
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=85,batch="military_vertical_impact")
+    public static void bow_and_crossbow_projectiles_hit_low_spiders(GameTestHelper h){
+        var f=fixture(h,20);
+        f.l.getEntitiesOfClass(Monster.class,Military.areaBounds(f.p)).forEach(Entity::discard);
+        var spider=mob(f,EntityType.SPIDER,5);
+        spider.setPos(spider.getX(),f.v.getY()-3,spider.getZ());
+        // Put the shooter on the edge of the raised platform with an open descending lane.
+        for(var pos:BlockPos.betweenClosed(f.p.offset(1,-2,-2),f.p.offset(4,0,2)))
+            f.l.setBlock(pos,Blocks.AIR.defaultBlockState(),3);
+        check(f.v.hasLineOfSight(spider),"Raised fixture blocked the test's downhill firing lane");
+        var floor=new BlockPos(spider.position()).below();
+        for(var pos:BlockPos.betweenClosed(floor.offset(-1,0,-1),floor.offset(1,0,1)))
+            f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
+        f.s.equipment.setItem(0,new ItemStack(Items.BOW));
+        f.s.setItem(0,new ItemStack(Items.ARROW,8));
+        Military.bind(f.s,f.v);
+        f.s.military.putLong("drawAt",f.l.getGameTime()-30);
+        float initial=spider.getHealth();
+        Military.combat(f.l,f.s,f.v,spider);
+        check(f.s.getItem(0).getCount()==7,"Bow found no trajectory to the lower spider");
+        h.startSequence().thenWaitUntil(()->check(spider.getHealth()<initial,"Bow flew past the lower spider"))
+            .thenExecute(()->{
+                spider.invulnerableTime=0;
+                var cave=mob(f,EntityType.CAVE_SPIDER,5);
+                cave.setPos(spider.position().add(0,0,1));
+                spider.discard();
+                f.s.military.putUUID("aimFixture",cave.getUUID());
+                f.s.equipment.setItem(0,new ItemStack(Items.CROSSBOW));
+                Military.bind(f.s,f.v);
+                f.s.military.putLong("drawAt",f.l.getGameTime()-30);
+                Military.combat(f.l,f.s,f.v,cave);
+                check(f.l.getEntitiesOfClass(AbstractArrow.class,f.v.getBoundingBox().inflate(7),
+                    a->a.getOwner()==f.v&&a.shotFromCrossbow()).stream().anyMatch(a->a.getDeltaMovement().y<0),
+                    "Crossbow missed downward direction");
+            }).thenWaitUntil(()->{
+                var cave=f.l.getEntity(f.s.military.getUUID("aimFixture"));
+                check(cave==null||cave instanceof LivingEntity living&&living.getHealth()<living.getMaxHealth(),
+                    "Crossbow flew past the cave spider");
+            }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=170,batch="military_sleep_weather")
+    public static void both_soldier_shifts_keep_the_bed_during_thunder(GameTestHelper h){
+        var f=fixture(h,20);
+        var bed=f.home.east(2).above();
+        var head=Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.EAST);
+        f.l.setBlock(bed.west().below(),Blocks.STONE.defaultBlockState(),3);
+        f.l.setBlock(bed.below(),Blocks.STONE.defaultBlockState(),3);
+        f.l.setBlock(bed.west(),head,3);
+        f.l.setBlock(bed,head.setValue(BedBlock.PART,net.minecraft.world.level.block.state.properties.BedPart.HEAD),3);
+        f.s.military.putString("shift","NIGHT");
+        f.v.setPos(Vec3.atBottomCenterOf(bed));
+        f.v.setNoAi(false);
+        f.v.startSleeping(bed);
+        h.runAfterDelay(5,()->f.l.setWeatherParameters(0,1500,true,false));
+        h.runAfterDelay(15,()->{
+            f.l.setWeatherParameters(0,1500,true,true);
+            f.l.setRainLevel(1);
+            f.l.setThunderLevel(1);
+        });
+        h.runAfterDelay(30,()->{
+            check(f.l.isThundering(),"Storm did not become active");
+            check(f.v.isSleeping()&&f.v.getSleepingPos().orElseThrow().equals(bed),"Thunder woke the night-shift soldier during daytime rest");
+            f.l.setWeatherParameters(1500,0,false,false);
+        });
+        h.runAfterDelay(40,()->{
+            check(f.v.isSleeping(),"Clearing a storm ended daytime rest");
+            f.l.setDayTime(14000);
+        });
+        h.runAfterDelay(50,()->{
+            check(!f.v.isSleeping(),"Night-shift worker did not get up on duty");
+            f.s.military.putString("shift","DAY");
+            f.v.startSleeping(bed);
+            f.l.setWeatherParameters(0,1500,true,true);
+        });
+        h.runAfterDelay(75,()->{
+            check(f.v.isSleeping()&&f.v.getSleepingPos().orElseThrow().equals(bed),"Thunder woke the day-shift soldier at night");
+            f.l.setDayTime(1000);
+        });
+        h.runAfterDelay(88,()->{
+            check(!f.v.isSleeping(),"Day-shift worker stayed asleep through the start of duty");
+            f.l.setWeatherParameters(1500,0,false,false);
+            f.l.setRainLevel(0);
+            f.l.setThunderLevel(0);
+            f.v.discard();
+            h.succeed();
+        });
+    }
+
+    @GameTest(template="empty",timeoutTicks=520,batch="military_residential_defense")
+    public static void two_soldiers_defend_a_residence_around_a_fence(GameTestHelper h){
+        var f=fixture(h,20);
+        clearTestHostiles(f);
+        for(var pos:BlockPos.betweenClosed(f.p.offset(-9,0,-10),f.p.offset(15,0,7)))
+            if(!pos.equals(f.p)&&!pos.equals(f.home))f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
+        for(var pos:BlockPos.betweenClosed(f.p.offset(4,1,-2),f.p.offset(4,2,2)))
+            f.l.setBlock(pos,Blocks.OAK_FENCE.defaultBlockState(),3);
+        var resident=mob(f,EntityType.VILLAGER,10);
+        check("ok".equals(ResidenceData.get(f.l).link(f.l,f.home,resident)),"Civilian registration");
+        var second=mob(f,EntityType.VILLAGER,0);
+        var secondPost=f.p.south(2);
+        second.setPos(Vec3.atBottomCenterOf(secondPost.above()));
+        check("ok".equals(ResidenceData.get(f.l).link(f.l,f.home,second)),"Crossbow soldier residence");
+        f.l.setBlock(secondPost,WorkModule.MILITARY.get().defaultBlockState(),3);
+        var station=((WorkBlockEntity)f.l.getBlockEntity(secondPost)).station();
+        station.setItem(31,new ItemStack(Items.EMERALD,15));
+        check("ok".equals(Employment.hire(f.player,station,second.getUUID(),Profession.SOLDIER)),"Crossbow soldier contract");
+        f.s.equipment.setItem(0,new ItemStack(Items.BOW));
+        station.equipment.setItem(0,new ItemStack(Items.CROSSBOW));
+        f.s.setItem(0,new ItemStack(Items.ARROW,8));
+        station.setItem(0,new ItemStack(Items.ARROW,8));
+        var zombie=mob(f,EntityType.ZOMBIE,9);
+        zombie.setPersistenceRequired();
+        zombie.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE,600));
+        zombie.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(60);
+        zombie.setHealth(60);
+        second.setPos(Vec3.atBottomCenterOf(secondPost.north().above()));
+        check(!f.v.hasLineOfSight(zombie)&&!second.hasLineOfSight(zombie),"Fence did not hide the hostile from both posts");
+        check(Military.target(f.l,f.s,f.v)==zombie&&Military.target(f.l,station,second)==zombie,"Unseen threat near resident was not selected");
+        f.v.setNoAi(false);
+        second.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->{
+                check(f.s.getItem(0).getCount()<8&&station.getItem(0).getCount()<8,
+                    "Both soldiers must navigate to a clear shot: "+f.v.position()+" / "+second.position());
+                check(zombie.getHealth()<60,"No projectile hit the fenced threat");
+                check(Military.insideArea(f.s,f.v.position())&&Military.insideArea(station,second.position()),"Pursuit exceeded the military area");
+            }).thenExecute(()->zombie.discard())
+            .thenWaitUntil(()->check(!f.s.military.hasUUID("target")&&!station.military.hasUUID("target"),"Patrol did not resume"))
+            .thenExecute(()->{f.v.discard();second.discard();resident.discard();})
+            .thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=110,batch="military_attack_cadence")
+    public static void sword_recovery_and_crossbow_recovery_are_separate_from_bow(GameTestHelper h){
+        var f=fixture(h,20);
+        var melee=mob(f,EntityType.COW,1);
+        Military.select(f.s,EntityType.COW,true);
+        var sword=new ItemStack(Items.WOODEN_SWORD);
+        f.s.equipment.setItem(0,sword);
+        Military.bind(f.s,f.v);
+        long first=f.l.getGameTime();
+        Military.combat(f.l,f.s,f.v,melee);
+        check(sword.getDamageValue()==1&&f.s.military.getLong("lastMeleeHitAt")==first,"First sword hit not recorded");
+        var aim=melee.position();
+        var enemy=mob(f,EntityType.ZOMBIE,6);
+        f.l.setBlock(enemy.blockPosition().below(),Blocks.STONE.defaultBlockState(),3);
+        enemy.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE,200));
+        h.runAfterDelay(27,()->{
+            melee.setPos(aim);
+            melee.invulnerableTime=0;
+            Military.combat(f.l,f.s,f.v,melee);
+            check(sword.getDamageValue()==1,"Sword attacked before recovery");
+        });
+        h.runAfterDelay(28,()->{
+            melee.setPos(aim);
+            melee.invulnerableTime=0;
+            Military.combat(f.l,f.s,f.v,melee);
+            check(sword.getDamageValue()==2&&f.s.military.getLong("lastMeleeHitAt")==first+28,"Sword interval was not 28 ticks");
+            System.out.println("KRAFTCITY_SWORD_SERVER_TICKS "+first+" "+f.s.military.getLong("lastMeleeHitAt"));
+            melee.discard();
+            f.s.equipment.setItem(0,new ItemStack(Items.CROSSBOW));
+            f.s.setItem(0,new ItemStack(Items.ARROW,4));
+            Military.bind(f.s,f.v);
+            f.s.military.putLong("drawAt",f.l.getGameTime()-30);
+            Military.combat(f.l,f.s,f.v,enemy);
+            check(f.s.getItem(0).getCount()==3,"First crossbow shot not recorded");
+        });
+        h.runAfterDelay(87,()->{
+            f.s.military.putLong("drawAt",f.l.getGameTime()-30);
+            Military.combat(f.l,f.s,f.v,enemy);
+            check(f.s.getItem(0).getCount()==3,"Crossbow attacked before recovery");
+        });
+        h.runAfterDelay(88,()->{
+            f.s.military.putLong("drawAt",f.l.getGameTime()-30);
+            Military.combat(f.l,f.s,f.v,enemy);
+            check(f.s.getItem(0).getCount()==2&&f.s.military.getLong("crossbowReadyAt")==first+148,"Crossbow interval was not 60 ticks");
+            var shots=f.l.getEntitiesOfClass(AbstractArrow.class,f.v.getBoundingBox().inflate(5),a->a.getOwner()==f.v&&a.shotFromCrossbow());
+            check(shots.stream().anyMatch(a->a.getPersistentData().getLong("KraftCityCrossbowTick")==first+88),"Volley lacked server timestamp");
+            System.out.println("KRAFTCITY_CROSSBOW_SERVER_TICKS "+(first+28)+" "+(first+88));
+            h.succeed();
+        });
     }
 }

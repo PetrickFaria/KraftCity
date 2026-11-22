@@ -207,10 +207,12 @@ public final class Military {
         var search=mode==Mode.FREE?area.bounds():v.getBoundingBox().inflate(Math.min(32,MilitaryModule.DETECTION.get()));
         for(var candidate:l.getEntitiesOfClass(Mob.class,search,mob->mob!=v&&selected(s,mob.getType()))){
             int nextRank=priority(l,s,v,candidate,area);
-            if(nextRank==Integer.MAX_VALUE)continue;
+            if(!eligible(l,s,v,candidate,area))continue;
+            boolean visible=v.hasLineOfSight(candidate);
+            boolean remembered=!visible&&candidate.getUUID().equals(previous)&&MilitaryPursuit.remembered(v,candidate);
+            if(nextRank==Integer.MAX_VALUE&&!remembered)continue;
             boolean territorial=mode==Mode.FREE&&nextRank<=2;
-            boolean visible=!territorial&&v.hasLineOfSight(candidate);
-            if(!territorial&&!visible)continue;
+            if(!visible&&!remembered&&(!territorial||MilitaryPursuit.seenBefore(v,candidate)))continue;
             double nextDistance=v.distanceToSqr(candidate);
             if(ranged&&candidate.getUUID().equals(previous))nextDistance=Math.max(0,nextDistance-2);
             boolean local=ranged&&nextDistance<=100;
@@ -218,11 +220,17 @@ public final class Military {
             boolean better=local||previousLocal
                 ?local&&(!previousLocal||nextDistance<distance)
                 :nextRank<rank||nextRank==rank&&nextDistance<distance;
-            if(better&&(territorial||canEngage(s,v,candidate,area,nextDistance,true))){
+            if(best==null||better){
+                if(!territorial&&!remembered&&!canEngage(s,v,candidate,area,nextDistance,true))continue;
                 best=candidate;rank=nextRank;distance=nextDistance;
             }
         }
         return best;
+    }
+
+    private static boolean eligible(ServerLevel level,EmploymentData.Station station,Villager soldier,LivingEntity candidate,MilitaryArea area){
+        return candidate instanceof Mob&&candidate.isAlive()&&!candidate.isInvulnerable()&&area.contains(candidate.position())
+            &&!ally(level,soldier,candidate)&&selected(station,candidate.getType());
     }
 
     private static boolean canEngage(EmploymentData.Station station,Villager soldier,LivingEntity target,
@@ -282,12 +290,27 @@ public final class Military {
             return;
         }
         LivingEntity threat=s.military.hasUUID("target")&&l.getEntity(s.military.getUUID("target")) instanceof LivingEntity current
-            &&priority(l,s,v,current,area)!=Integer.MAX_VALUE?current:null;
-        if(v.tickCount%10==0||threat==null&&s.military.hasUUID("target"))threat=target(l,s,v);
+            &&eligible(l,s,v,current,area)&&(priority(l,s,v,current,area)!=Integer.MAX_VALUE||MilitaryPursuit.remembered(v,current))
+            ?current:null;
+        if(threat!=null&&!v.hasLineOfSight(threat)&&MilitaryPursuit.seenBefore(v,threat)
+            &&!MilitaryPursuit.remembered(v,threat))threat=null;
+        if(v.tickCount%10==0||threat==null&&s.military.hasUUID("target")){
+            MilitaryPursuit.prune(v,l);
+            threat=target(l,s,v);
+        }
         if(threat!=null){
             if(!s.military.hasUUID("target")||!s.military.getUUID("target").equals(threat.getUUID()))clearTask(v,s);
             s.military.putUUID("target",threat.getUUID());
-            combat(l,s,v,threat);
+            if(v.hasLineOfSight(threat)){
+                MilitaryPursuit.observe(v,threat,true);
+                combat(l,s,v,threat);
+            }else{
+                if(!MilitaryPursuit.seenBefore(v,threat))MilitaryPursuit.observe(v,threat,false);
+                v.stopUsingItem();
+                s.military.remove("drawAt");
+                var last=MilitaryPursuit.lastPosition(v,threat);
+                if(!area.approach(v,last,MilitaryArea.CHASE))v.getNavigation().stop();
+            }
             s.setChanged();
             return;
         }
@@ -363,8 +386,8 @@ public final class Military {
         if(!v.hasLineOfSight(t)){area.move(v,t.position(),MilitaryArea.CHASE);shield(v,true);return;}
         v.getNavigation().stop();if(now<s.military.getLong("attackAt")){shield(v,true);return;}
         v.stopUsingItem();v.swing(InteractionHand.MAIN_HAND);
-        if(v.doHurtTarget(t)){if(weapon.getItem() instanceof SwordItem||weapon.canPerformAction(net.minecraftforge.common.ToolActions.SWORD_SWEEP))weapon.hurtAndBreak(1,v,e->e.broadcastBreakEvent(EquipmentSlot.MAINHAND));s.setChanged();}
-        s.military.putLong("attackAt",now+20);s.military.putLong("retreatUntil",now+10);
+        if(v.doHurtTarget(t)){s.military.putLong("lastMeleeHitAt",now);if(weapon.getItem() instanceof SwordItem||weapon.canPerformAction(net.minecraftforge.common.ToolActions.SWORD_SWEEP))weapon.hurtAndBreak(1,v,e->e.broadcastBreakEvent(EquipmentSlot.MAINHAND));s.setChanged();}
+        s.military.putLong("attackAt",now+28);s.military.putLong("retreatUntil",now+10);
     }
     private static void faceThreat(Villager soldier,LivingEntity threat,boolean turnBody){
         var offset=threat.getEyePosition().subtract(soldier.getEyePosition());
@@ -400,19 +423,39 @@ public final class Military {
         if(weapon.getItem() instanceof BowItem&&l.getGameTime()<MilitaryBow.readyAt(s,v)-20){
             s.military.remove("drawAt");v.stopUsingItem();return;
         }
+        boolean crossbow=weapon.getItem() instanceof CrossbowItem;
+        if(crossbow&&l.getGameTime()<s.military.getLong("crossbowReadyAt")-CrossbowItem.getChargeDuration(weapon)){
+            s.military.remove("drawAt");v.stopUsingItem();return;
+        }
+        float speed=crossbow?3.15F:1.6F;
+        var direction=MilitaryAim.trajectory(l,v,t,speed);
+        if(direction==null){
+            s.military.remove("drawAt");v.stopUsingItem();
+            if(!retreating)area.approach(v,t.position(),MilitaryArea.CHASE);
+            return;
+        }
+        var lookPoint=v.getEyePosition().add(direction.scale(8));
+        v.getLookControl().setLookAt(lookPoint.x,lookPoint.y,lookPoint.z,30,25);
+        float pitch=(float)-Math.toDegrees(Math.atan2(direction.y,Math.sqrt(direction.horizontalDistanceSqr())));
+        v.setXRot(net.minecraft.util.Mth.approachDegrees(v.getXRot(),pitch,25F));
         var line=v.getEyePosition();
-        var end=t.getEyePosition();
+        var end=t.getBoundingBox().getCenter();
         var box=new AABB(line,end).inflate(.5);
         if(l.getEntitiesOfClass(LivingEntity.class,box,entity->entity!=v&&entity!=t&&ally(l,v,entity)).stream()
             .anyMatch(entity->entity.getBoundingBox().inflate(.15).clip(line,end).isPresent()))return;
-        if(weapon.getItem() instanceof CrossbowItem&&CrossbowItem.isCharged(weapon)){
-            v.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,t.getEyePosition());
-            CrossbowItem.performShooting(l,v,InteractionHand.MAIN_HAND,weapon,3.15F,1F);CrossbowItem.setCharged(weapon,false);s.military.remove("drawAt");v.stopUsingItem();s.setChanged();return;
+        if(crossbow&&CrossbowItem.isCharged(weapon)){
+            if(l.getGameTime()<s.military.getLong("crossbowReadyAt"))return;
+            v.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,lookPoint);
+            CrossbowItem.performShooting(l,v,InteractionHand.MAIN_HAND,weapon,speed,.35F);
+            CrossbowItem.setCharged(weapon,false);
+            s.military.putLong("crossbowReadyAt",l.getGameTime()+60);
+            s.military.remove("drawAt");v.stopUsingItem();s.setChanged();return;
         }
         if(!s.military.contains("drawAt")){s.military.putLong("drawAt",l.getGameTime());v.stopUsingItem();v.startUsingItem(InteractionHand.MAIN_HAND);return;}
         int quick=EnchantmentHelper.getItemEnchantmentLevel(Enchantments.QUICK_CHARGE,weapon);int load=weapon.getItem() instanceof CrossbowItem?Math.max(5,25-5*quick):20;
         if(l.getGameTime()-s.military.getLong("drawAt")<load
-            ||weapon.getItem() instanceof BowItem&&l.getGameTime()<MilitaryBow.readyAt(s,v))return;
+            ||weapon.getItem() instanceof BowItem&&l.getGameTime()<MilitaryBow.readyAt(s,v)
+            ||crossbow&&l.getGameTime()<s.military.getLong("crossbowReadyAt"))return;
         int slot=ammo(s);if(slot<0)return;var ammunition=s.getItem(slot);boolean infinity=weapon.getItem() instanceof BowItem&&EnchantmentHelper.getItemEnchantmentLevel(Enchantments.INFINITY_ARROWS,weapon)>0&&ammunition.is(Items.ARROW);
         int shots=weapon.getItem() instanceof CrossbowItem&&EnchantmentHelper.getItemEnchantmentLevel(Enchantments.MULTISHOT,weapon)>0?3:1;
         int fired=0;
@@ -421,12 +464,13 @@ public final class Military {
             if(weapon.getItem() instanceof CrossbowItem){arrow.setShotFromCrossbow(true);arrow.setPierceLevel((byte)EnchantmentHelper.getItemEnchantmentLevel(Enchantments.PIERCING,weapon));}
             if(EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FLAMING_ARROWS,weapon)>0)arrow.setSecondsOnFire(100);
             arrow.pickup=net.minecraft.world.entity.projectile.AbstractArrow.Pickup.DISALLOWED;
-            double dx=t.getX()-v.getX(),dz=t.getZ()-v.getZ(),dy=t.getY(.5)-arrow.getY()+Math.sqrt(dx*dx+dz*dz)*.2;arrow.shoot(dx,dy,dz,weapon.getItem() instanceof CrossbowItem?3.15F:1.6F,1F);
+            arrow.shoot(direction.x,direction.y,direction.z,speed,.35F);
             if(shots>1)arrow.setDeltaMovement(arrow.getDeltaMovement().yRot((float)Math.toRadians((i-1)*10)));arrow.getPersistentData().putUUID("KCSoldierShot",v.getUUID());
             if(weapon.getItem() instanceof BowItem)arrow.getPersistentData().putBoolean("KCSoldierBow",true);
             if(l.addFreshEntity(arrow))fired++;
         }
         if(fired==0){s.military.remove("drawAt");v.stopUsingItem();return;}
+        if(crossbow)s.military.putLong("crossbowReadyAt",l.getGameTime()+60);
         if(!infinity)ammunition.shrink(1);weapon.hurtAndBreak(fired,v,e->e.broadcastBreakEvent(EquipmentSlot.MAINHAND));s.military.remove("drawAt");v.stopUsingItem();s.setChanged();
     }
     private static boolean retreat(ServerLevel level,EmploymentData.Station station,Villager soldier,MilitaryArea area){

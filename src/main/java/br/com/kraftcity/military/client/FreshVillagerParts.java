@@ -20,14 +20,9 @@ final class FreshVillagerParts {
         return find("root",root,"nose",8,10,8,false,new ArrayList<>());
     }
 
-    static void alignLegY(ModelPart root,String leg,ModelPart armor){
-        var mesh=find("root",root,leg+"2",4,12,4,false,new ArrayList<>());
-        if(mesh==null)return;
-        var poses=new PoseStack();
-        mesh.transform(poses,false);
-        var pivot=new com.mojang.math.Vector4f(0,0,0,1);
-        pivot.transform(poses.last().pose());
-        armor.y=pivot.y()*16F;
+    static Anchor leg(ModelPart root,String name){
+        var animated=find("root",root,name+"2",4,12,4,false,new ArrayList<>());
+        return animated!=null?animated:find("root",root,name,4,12,4,false,new ArrayList<>());
     }
 
     private static Anchor find(String key,ModelPart part,String id,float width,float height,float depth,

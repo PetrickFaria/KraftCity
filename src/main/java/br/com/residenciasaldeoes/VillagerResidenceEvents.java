@@ -1078,10 +1078,11 @@ public class VillagerResidenceEvents {
         if(!(villager.level instanceof ServerLevel level)||villager.isNoAi()||villager.isTrading()
             ||villager.isPassenger()||br.com.kraftcity.employment.Employment.fleeing(villager))return false;
         long phase=Math.floorMod(level.getDayTime(),DAY_LENGTH);
-        if((phase<NIGHT_START||phase>=NIGHT_END)&&!level.isThundering())return false;
         var station=br.com.kraftcity.employment.EmploymentData.get(level).assigned(villager.getUUID());
-        if(station==null||br.com.kraftcity.military.Military.military(station)
-            &&br.com.kraftcity.military.Military.onDuty(level,station))return false;
+        if(station==null)return false;
+        if(br.com.kraftcity.military.Military.military(station)){
+            if(br.com.kraftcity.military.Military.onDuty(level,station))return false;
+        }else if((phase<NIGHT_START||phase>=NIGHT_END)&&!level.isThundering())return false;
         var home=ResidenceData.get(level).owner(villager.getUUID());
         return home!=null&&home.dimension.equals(level.dimension())&&level.hasChunkAt(home.pos)
             &&level.getBlockEntity(home.pos) instanceof ResidentialAnchorBlockEntity;
@@ -1155,12 +1156,13 @@ public class VillagerResidenceEvents {
         var station=br.com.kraftcity.employment.EmploymentData.get(level).assigned(villager.getUUID());
         boolean employed=station!=null;
         long time=Math.floorMod(level.getDayTime(),DAY_LENGTH);
-        boolean night=time>=NIGHT_START&&time<NIGHT_END;
+        boolean military=br.com.kraftcity.military.Military.military(station);
+        boolean night=military?!br.com.kraftcity.military.Military.onDuty(level,station):time>=NIGHT_START&&time<NIGHT_END;
         if(employed&&!night&&villager.isSleeping()){
             villager.stopSleeping();
             stabilizeSleepingResident(villager);
         }
-        boolean weather=employed?level.isThundering():level.isRaining();var entityData=villager.getPersistentData();
+        boolean weather=!military&&(employed?level.isThundering():level.isRaining());var entityData=villager.getPersistentData();
         boolean doorResume=entityData.getBoolean(NIGHT_DOOR_RESUME);if(doorResume)entityData.remove(NIGHT_DOOR_RESUME);
         boolean forced=entityData.getBoolean(RETURN_FORCED);
         boolean wandering=entityData.contains(NIGHT_WANDER);
@@ -1216,7 +1218,7 @@ public class VillagerResidenceEvents {
             if(!employed&&villager.tickCount%10==0)data.releaseBed(villager.getUUID());
             return;
         }
-        if(!forced&&!weather&&time>=12000L&&time<13000L){
+        if(!military&&!forced&&!weather&&time>=12000L&&time<13000L){
             if(!villager.isSleeping()&&villager.tickCount%40==0){
                 BlockPos approach=findSafeSpot(level,villager,home.pos,home.size);
                 if(approach!=null)villager.getNavigation().moveTo(approach.getX()+0.5,approach.getY(),approach.getZ()+0.5,
