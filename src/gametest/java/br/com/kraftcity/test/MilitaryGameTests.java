@@ -476,9 +476,11 @@ public final class MilitaryGameTests {
             if(!pos.equals(f.p)&&!pos.equals(f.home))f.l.setBlockAndUpdate(pos,Blocks.STONE.defaultBlockState());
             f.l.setBlockAndUpdate(pos.above(7),Blocks.STONE.defaultBlockState());
         }
-        clearTestHostiles(f);
-        // Full-suite fixtures share a world. Keep earlier soldiers from intercepting
-        // this scenario's attackers while retaining all of their saved state.
+        // Earlier fixtures share this generated GameTest world. Clear the soldier's
+        // entire search volume now that patrol can acquire threats far from the post.
+        var territory=Military.areaBounds(f.p);
+        f.l.getEntitiesOfClass(Monster.class,territory).forEach(Entity::discard);
+        f.l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,territory).forEach(Entity::discard);
         var nearbySoldiers=f.l.getEntitiesOfClass(Villager.class,f.v.getBoundingBox().inflate(80),
             villager->villager!=f.v&&!villager.isNoAi()&&Military.isSoldier(villager));
         nearbySoldiers.forEach(villager->villager.setNoAi(true));
@@ -494,6 +496,8 @@ public final class MilitaryGameTests {
         var farmerStation=((WorkBlockEntity)f.l.getBlockEntity(farmerPos)).station();
         farmerStation.setItem(31,new ItemStack(Items.EMERALD,32));
         check("ok".equals(Employment.hire(f.player,farmerStation,farmer.getUUID(),Profession.FARMER)),"Hire nearby farmer");
+        // The item in this scene belongs to the patrol pickup phase.
+        for(int slot=0;slot<27;slot++)farmerStation.setItem(slot,new ItemStack(Items.DIRT,64));
         boolean naturalSpawns=f.l.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING);
         f.l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,f.l.getServer());
         f.l.setWeatherParameters(0,10000,true,true);
