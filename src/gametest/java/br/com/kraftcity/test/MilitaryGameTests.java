@@ -767,10 +767,11 @@ public final class MilitaryGameTests {
         var resident=mob(f,EntityType.VILLAGER,35);
         check("ok".equals(ResidenceData.get(f.l).link(f.l,f.home,resident)),"Remote resident");
         var zombie=mob(f,EntityType.ZOMBIE,44);
-        for(int distance:new int[]{5,20,35,45,50}){
+        for(var defenseMode:List.of(Military.Mode.FREE,Military.Mode.GUARD))for(int distance:new int[]{5,20,35,45,50}){
+            mode(f,defenseMode);
             f.v.setPos(Vec3.atBottomCenterOf(f.p.east(44-distance).above()));
             f.v.setOnGround(true);
-            check(Military.target(f.l,f.s,f.v)==zombie,"Missing reachable remote enemy at "+distance);
+            check(Military.target(f.l,f.s,f.v)==zombie,"Missing reachable remote enemy in "+defenseMode+" at "+distance);
         }
         f.v.setPos(Vec3.atBottomCenterOf(f.p.above()));
         zombie.setPos(Vec3.atBottomCenterOf(f.p.east(45).above()));
@@ -882,7 +883,11 @@ public final class MilitaryGameTests {
         var zombie=mob(f,EntityType.ZOMBIE,39);
         for(var pos:BlockPos.betweenClosed(f.p.offset(4,0,-5),f.p.offset(6,5,5)))
             f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
-        check(!f.v.hasLineOfSight(zombie)&&Military.target(f.l,f.s,f.v)==zombie,"Unseen territorial mob skipped");
+        check(!f.v.hasLineOfSight(zombie),"Wall fixture did not block sight");
+        for(var defenseMode:List.of(Military.Mode.FREE,Military.Mode.GUARD)){
+            mode(f,defenseMode);
+            check(Military.target(f.l,f.s,f.v)==zombie,"Unseen territorial mob skipped in "+defenseMode);
+        }
         f.s.equipment.setItem(0,new ItemStack(Items.BOW));
         f.s.setItem(0,new ItemStack(Items.ARROW,8));
         Military.bind(f.s,f.v);
@@ -921,7 +926,17 @@ public final class MilitaryGameTests {
 
     @GameTest(template="empty",timeoutTicks=160,batch="military_search_sighting")
     public static void patrol_searches_last_sighting_for_five_seconds(GameTestHelper h){
+        searchesLastSighting(h,Military.Mode.FREE);
+    }
+
+    @GameTest(template="empty",timeoutTicks=160,batch="military_guard_search_sighting")
+    public static void guard_searches_last_sighting_for_five_seconds(GameTestHelper h){
+        searchesLastSighting(h,Military.Mode.GUARD);
+    }
+
+    private static void searchesLastSighting(GameTestHelper h,Military.Mode defenseMode){
         var f=fixture(h,20);
+        mode(f,defenseMode);
         f.l.getEntitiesOfClass(Monster.class,Military.areaBounds(f.p)).forEach(Entity::discard);
         for(var pos:BlockPos.betweenClosed(f.p.offset(0,0,-3),f.p.offset(9,0,3)))
             if(!pos.equals(f.p))f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
@@ -1039,7 +1054,7 @@ public final class MilitaryGameTests {
     }
 
     @GameTest(template="empty",timeoutTicks=520,batch="military_residential_defense")
-    public static void two_soldiers_defend_a_residence_around_a_fence(GameTestHelper h){
+    public static void patrol_and_guard_defend_a_residence_around_a_fence(GameTestHelper h){
         var f=fixture(h,20);
         clearTestHostiles(f);
         for(var pos:BlockPos.betweenClosed(f.p.offset(-9,0,-10),f.p.offset(15,0,7)))
@@ -1065,7 +1080,8 @@ public final class MilitaryGameTests {
         zombie.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE,600));
         zombie.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(60);
         zombie.setHealth(60);
-        second.setPos(Vec3.atBottomCenterOf(secondPost.north().above()));
+        station.military.putString("mode",Military.Mode.GUARD.name());
+        final var center=Vec3.atBottomCenterOf(secondPost.above());
         check(!f.v.hasLineOfSight(zombie)&&!second.hasLineOfSight(zombie),"Fence did not hide the hostile from both posts");
         check(Military.target(f.l,f.s,f.v)==zombie&&Military.target(f.l,station,second)==zombie,"Unseen threat near resident was not selected");
         f.v.setNoAi(false);
@@ -1076,8 +1092,12 @@ public final class MilitaryGameTests {
                 check(zombie.getHealth()<60,"No projectile hit the fenced threat");
                 check(Military.insideArea(f.s,f.v.position())&&Military.insideArea(station,second.position()),"Pursuit exceeded the military area");
             }).thenExecute(()->zombie.discard())
-            .thenWaitUntil(()->check(!f.s.military.hasUUID("target")&&!station.military.hasUUID("target"),"Patrol did not resume"))
-            .thenExecute(()->{f.v.discard();second.discard();resident.discard();})
+            .thenWaitUntil(()->{
+                check(!f.s.military.hasUUID("target")&&!station.military.hasUUID("target"),"Defense target was retained");
+                var facing=f.l.getBlockState(secondPost).getValue(WorkBlock.FACING);
+                check(second.position().distanceToSqr(center)<1e-8&&second.getNavigation().isDone()
+                    &&second.getYRot()==facing.toYRot(),"Guard did not return centered and face the post's front");
+            }).thenExecute(()->{f.v.discard();second.discard();resident.discard();})
             .thenSucceed();
     }
 

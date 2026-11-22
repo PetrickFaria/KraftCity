@@ -204,14 +204,15 @@ public final class Military {
         UUID previous=s.military.hasUUID("target")?s.military.getUUID("target"):null;
         double distance=Double.POSITIVE_INFINITY;
         var mode=mode(s);
-        var search=mode==Mode.FREE?area.bounds():v.getBoundingBox().inflate(Math.min(32,MilitaryModule.DETECTION.get()));
+        boolean protectsTerritory=mode==Mode.FREE||mode==Mode.GUARD;
+        var search=protectsTerritory?area.bounds():v.getBoundingBox().inflate(Math.min(32,MilitaryModule.DETECTION.get()));
         for(var candidate:l.getEntitiesOfClass(Mob.class,search,mob->mob!=v&&selected(s,mob.getType()))){
             int nextRank=priority(l,s,v,candidate,area);
             if(!eligible(l,s,v,candidate,area))continue;
             boolean visible=v.hasLineOfSight(candidate);
             boolean remembered=!visible&&candidate.getUUID().equals(previous)&&MilitaryPursuit.remembered(v,candidate);
             if(nextRank==Integer.MAX_VALUE&&!remembered)continue;
-            boolean territorial=mode==Mode.FREE&&nextRank<=2;
+            boolean territorial=protectsTerritory&&nextRank<=2;
             if(!visible&&!remembered&&(!territorial||MilitaryPursuit.seenBefore(v,candidate)))continue;
             double nextDistance=v.distanceToSqr(candidate);
             if(ranged&&candidate.getUUID().equals(previous))nextDistance=Math.max(0,nextDistance-2);
@@ -309,7 +310,8 @@ public final class Military {
                 v.stopUsingItem();
                 s.military.remove("drawAt");
                 var last=MilitaryPursuit.lastPosition(v,threat);
-                if(!area.approach(v,last,MilitaryArea.CHASE))v.getNavigation().stop();
+                boolean leavingPost=mode(s)==Mode.GUARD&&area.leaveGuardPost(s.pos,v,last);
+                if(!leavingPost&&!area.approach(v,last,MilitaryArea.CHASE))v.getNavigation().stop();
             }
             s.setChanged();
             return;

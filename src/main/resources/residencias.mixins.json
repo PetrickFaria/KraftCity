@@ -12,6 +12,8 @@
     "RenderTypeOpacityMixin",
     "ModelPartOpacityMixin",
     "SoldierModelPartAccessor",
+    "SoldierLegCaptureMixin",
+    "SoldierLegCubeMixin",
     "SoldierArmorLayerInvoker",
     "BuilderVillagerArmsMixin",
     "BuilderSteveArmsMixin",

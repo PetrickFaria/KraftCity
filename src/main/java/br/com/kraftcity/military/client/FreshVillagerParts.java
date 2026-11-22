@@ -11,6 +11,10 @@ final class FreshVillagerParts {
     record Anchor(List<ModelPart> chain,ModelPart.Cube geometry){
         void transform(PoseStack poses,boolean head){
             for(var part:chain)part.translateAndRotate(poses);
+            alignGeometry(poses,head);
+        }
+
+        void alignGeometry(PoseStack poses,boolean head){
             poses.translate((geometry.minX+geometry.maxX)/32F,(head?geometry.maxY:geometry.minY)/16F,
                 (geometry.minZ+geometry.maxZ)/32F);
         }

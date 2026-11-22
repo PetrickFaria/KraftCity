@@ -112,20 +112,8 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
         var root=getParentModel().root();
         var pieces=(SoldierArmorLayerInvoker)armor;
         pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.CHEST,light,outerArmor);
-        var left=FreshVillagerParts.leg(root,"left_leg");
-        var right=FreshVillagerParts.leg(root,"right_leg");
-        if(left==null||right==null){
-            pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.LEGS,light,innerArmor);
-            pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.FEET,light,outerArmor);
-        }else{
-            try{
-                piece=Piece.WAIST;
-                pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.LEGS,light,innerArmor);
-                renderLower(pose,buffers,soldier,light,left,Piece.LEFT,poseModel.leftLeg);
-                renderLower(pose,buffers,soldier,light,right,Piece.RIGHT,poseModel.rightLeg);
-            }finally{
-                piece=Piece.STANDARD;
-            }
+        if(!soldier.getItemBySlot(EquipmentSlot.LEGS).isEmpty()||!soldier.getItemBySlot(EquipmentSlot.FEET).isEmpty()){
+            renderLowerArmor(pose,buffers,soldier,light,root,pieces);
         }
 
         var head=soldier.getItemBySlot(EquipmentSlot.HEAD).isEmpty()?null:FreshVillagerParts.head(root);
@@ -143,13 +131,32 @@ public final class SoldierArmorLayer extends RenderLayer<Villager,VillagerModel<
         }
     }
 
+    private void renderLowerArmor(PoseStack pose,MultiBufferSource buffers,Villager soldier,int light,
+                                  ModelPart root,SoldierArmorLayerInvoker pieces){
+        try{
+            piece=Piece.WAIST;
+            pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.LEGS,light,innerArmor);
+            renderLower(pose,buffers,soldier,light,root,Piece.LEFT,poseModel.leftLeg);
+            renderLower(pose,buffers,soldier,light,root,Piece.RIGHT,poseModel.rightLeg);
+        }finally{
+            piece=Piece.STANDARD;
+        }
+    }
+
     private void renderLower(PoseStack pose,MultiBufferSource buffers,Villager soldier,int light,
-                             FreshVillagerParts.Anchor leg,Piece side,ModelPart armorLeg){
+                             ModelPart root,Piece side,ModelPart armorLeg){
         pose.pushPose();
         try{
             piece=side;
-            leg.transform(pose,false);
-            reset(armorLeg);
+            if(SoldierLegPoseCapture.apply(soldier,side==Piece.LEFT,pose)){
+                reset(armorLeg);
+            }else{
+                var leg=FreshVillagerParts.leg(root,side==Piece.LEFT?"left_leg":"right_leg");
+                if(leg!=null){
+                    leg.transform(pose,false);
+                    reset(armorLeg);
+                }
+            }
             var pieces=(SoldierArmorLayerInvoker)armor;
             pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.LEGS,light,innerArmor);
             pieces.kraftcity$renderPiece(pose,buffers,soldier,EquipmentSlot.FEET,light,outerArmor);
