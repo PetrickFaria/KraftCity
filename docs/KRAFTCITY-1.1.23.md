@@ -24,4 +24,12 @@ O arco aplica a espera na entrada da flecha no servidor, vinculada à identidade
 
 Patrulhar usa a posição de ameaças territoriais dentro dos limites e dos chunks carregados no momento da descoberta. Uma cerca pode exigir um desvio. Quando o Soldado já viu o adversário, registra a última posição visível e a mantém por até 100 ticks após perder visão. O parâmetro `buscaAposPerderAlvoTicks` do arquivo `kraftcity-military-server.toml` controla essa duração. Um contato territorial inicial tem uma janela de aproximação própria e limitada. Um inimigo morto ou fora do território deixa de ser elegível. Quando a visão retorna, a informação é atualizada. A posição invisível de um inimigo conhecido não é seguida ao vivo.
 
-A 1.1.22 acrescentava uma elevação proporcional à distância em toda flecha solta e, com a besta pré-carregada, usava os olhos do inimigo. A mira agora usa pontos da caixa de colisão e calcula a trajetória de menor elevação compatível com a velocidade, a gravidade e o arrasto da flecha. A trajetória candidata é consultada contra blocos, e sua inclinação alimenta a pose e a direção do projétil. A licença de ataque territorial é independente da autorização do disparo através da rota calculada.
+A 1.1.22 acrescentava uma elevação proporcional à distância em toda flecha solta e, com a besta pré-carregada, usava os olhos do inimigo. A mira agora usa pontos da caixa de colisão e calcula a trajetória de menor elevação compatível com a velocidade, a gravidade e o arrasto da flecha. A trajetória candidata é consultada contra blocos, e sua inclinação alimenta a pose e a direção do projétil. A detecção territorial autoriza a aproximação. O disparo exige linha de visão, alcance e uma trajetória livre de blocos e aliados.
+
+
+## Cenários de validação
+
+- A troca entre tempo limpo, chuva e tempestade é testada com os dois turnos e uma cama de dois blocos. O cenário gráfico salva o Soldado na cama durante a tempestade e verifica a mesma posição na segunda JVM.
+- O teste de proteção residencial usa dois Soldados, um arqueiro e um besteiro, e um residente vinculado. A cerca de dois blocos deve ocultar o zumbi, e a IA precisa encontrar uma posição livre para os dois disparos. Outro teste verifica a busca pela posição da última visão e seu encerramento.
+- O teste de mira exige impactos reais de arco e besta contra aranhas abaixo do atirador. O teste de orientação anterior continua cobrindo alvos elevados e rebaixados, e a animação de recuo permanece coberta.
+- O cliente Forge verifica animações, equipamentos e persistência. A inspeção adicional com o pacote Fresh Animations 1.8 usa EMF 2.0.2 e ETF 6.0.1.
