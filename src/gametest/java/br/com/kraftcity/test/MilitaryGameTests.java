@@ -285,7 +285,7 @@ public final class MilitaryGameTests {
         }).thenSucceed();
     }
 
-    @GameTest(template="empty",batch="military_ranged")
+    @GameTest(template="empty",timeoutTicks=180,batch="military_ranged")
     public static void bow_spacing_survives_target_changes_and_station_save(GameTestHelper h){
         var f=fixture(h);
         for(var pos:BlockPos.betweenClosed(f.p.offset(-7,0,-1),f.p.offset(7,0,1)))

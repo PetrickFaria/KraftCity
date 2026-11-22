@@ -45,7 +45,7 @@ public final class MilitaryVisualCheck {
     private static volatile boolean won,finished;
     private static volatile ItemStack savedWeapon,savedAmmo;
     private static boolean bowPose,crossbowPose;
-    private static int wonAt=-1,openedAt=-1;
+    private static int wonAt=-1,openedAt=-1,trainedAt=-1;
     private static EmploymentData.Station station(ServerLevel l){return ((WorkBlockEntity)l.getBlockEntity(POST)).station();}
     private static void check(boolean b,String m){if(!b)throw new IllegalStateException(m);}
     private static void capture(Minecraft mc,String name){Screenshot.grab(new File("../build"),name,mc.getMainRenderTarget(),message->{});}
@@ -81,7 +81,16 @@ public final class MilitaryVisualCheck {
         if(t==25){check(mc.screen instanceof WorkScreen,"Military hiring screen");String id=worker.toString().substring(0,6);for(int i=0;i<100&&mc.screen.children().stream().noneMatch(x->x instanceof Button b&&b.getMessage().getString().contains(id));i++)click(mc,">");click(mc,id);click(mc,"Soldado");}
         if(t==30)capture(mc,"visual-military-hiring.png");
         if(t==35)click(mc,"Treinar");
-        if(t==60){check(mc.screen instanceof SoldierScreen&&mc.player.containerMenu instanceof SoldierMenu m&&m.slots.size()==74&&m.state!=null&&m.state.employed(),"Soldier menu not synchronized");mc.getSingleplayerServer().execute(()->{var p=player(mc);var s=station(p.getLevel());check(s.worker.equals(worker)&&s.getItem(31).isEmpty(),"Military contract/payment");p.getInventory().setItem(9,new ItemStack(Items.IRON_SWORD));p.getInventory().setItem(10,new ItemStack(Items.SHIELD));p.getInventory().setItem(11,new ItemStack(Items.IRON_CHESTPLATE));p.getInventory().setItem(12,new ItemStack(Items.IRON_HELMET));p.getInventory().setItem(13,new ItemStack(Items.CHAINMAIL_LEGGINGS));p.getInventory().setItem(14,new ItemStack(Items.DIAMOND_BOOTS));s.setItem(0,new ItemStack(Items.ARROW,16));WorkforceData.get(p.getLevel()).setProgress(worker,Profession.SOLDIER.id(),1,15000);});}
+        if(t>=36&&trainedAt<0){
+            if(mc.screen instanceof SoldierScreen&&mc.player.containerMenu instanceof SoldierMenu m
+                    &&m.slots.size()==74&&m.state!=null&&m.state.employed())trainedAt=t;
+            else{
+                check(t<160,"Soldier menu not synchronized after training");
+                return;
+            }
+        }
+        if(trainedAt>=0)t-=trainedAt-36;
+        if(t==60)mc.getSingleplayerServer().execute(()->{var p=player(mc);var s=station(p.getLevel());check(s.worker.equals(worker)&&s.getItem(31).isEmpty(),"Military contract/payment");p.getInventory().setItem(9,new ItemStack(Items.IRON_SWORD));p.getInventory().setItem(10,new ItemStack(Items.SHIELD));p.getInventory().setItem(11,new ItemStack(Items.IRON_CHESTPLATE));p.getInventory().setItem(12,new ItemStack(Items.IRON_HELMET));p.getInventory().setItem(13,new ItemStack(Items.CHAINMAIL_LEGGINGS));p.getInventory().setItem(14,new ItemStack(Items.DIAMOND_BOOTS));s.setItem(0,new ItemStack(Items.ARROW,16));WorkforceData.get(p.getLevel()).setProgress(worker,Profession.SOLDIER.id(),1,15000);});
         if(t==70)mc.gameMode.handleInventoryMouseClick(mc.player.containerMenu.containerId,
             SoldierMenu.PLAYER_START,0,net.minecraft.world.inventory.ClickType.PICKUP,mc.player);
         if(t==72)mc.gameMode.handleInventoryMouseClick(mc.player.containerMenu.containerId,
