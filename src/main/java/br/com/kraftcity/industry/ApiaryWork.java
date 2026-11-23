@@ -38,6 +38,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.ToolActions;
+import net.minecraftforge.event.ForgeEventFactory;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.living.BabyEntitySpawnEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
@@ -269,7 +270,14 @@ public final class ApiaryWork {
             var eyes=Vec3.atBottomCenterOf(pos).add(0,worker.getEyeHeight(),0);
             if(!hasView(level,worker,eyes,destination,hive))continue;
             var path=worker.getNavigation().createPath(pos,0);
-            if(path!=null&&path.canReach()&&worker.getNavigation().moveTo(path,.68))return true;
+            if(path==null||!path.canReach())continue;
+            boolean inside=true;
+            for(int i=0;i<path.getNodeCount();i++){
+                if(bounds.contains(Vec3.atBottomCenterOf(path.getNode(i).asBlockPos())))continue;
+                inside=false;
+                break;
+            }
+            if(inside&&worker.getNavigation().moveTo(path,.68))return true;
         }
         return false;
     }
@@ -449,8 +457,11 @@ public final class ApiaryWork {
     public static boolean canDiscoverHive(ServerLevel level,Bee bee,BlockPos pos){
         var station=owner(level,bee);
         if(!owned(bee.getPersistentData(),station))return true;
-        return station.dimension.equals(level.dimension())&&IndustrialWork.area(level,station).contains(Vec3.atCenterOf(pos))
-            &&station.industry.getList(HIVES,Tag.TAG_LONG).contains(LongTag.valueOf(pos.asLong()));
+        if(!station.dimension.equals(level.dimension())||!IndustrialWork.area(level,station).contains(Vec3.atCenterOf(pos)))return false;
+        if(station.industry.getList(HIVES,Tag.TAG_LONG).contains(LongTag.valueOf(pos.asLong())))return true;
+        var roster=station.industry.getCompound(BEES);
+        String id=bee.getPersistentData().getUUID(ID).toString();
+        return roster.contains(id,Tag.TAG_LONG)&&roster.getLong(id)==pos.asLong();
     }
 
     public static boolean holdHiveOccupant(ServerLevel level,BlockPos pos,CompoundTag data){
@@ -460,7 +471,9 @@ public final class ApiaryWork {
                 ||!IndustrialWork.area(level,station).contains(Vec3.atCenterOf(pos)))return false;
         var registered=station.industry.getList(HIVES,Tag.TAG_LONG);
         return registered.size()>=hiveCapacity(level,station)&&!registered.contains(LongTag.valueOf(pos.asLong()))
-            &&ApiaryHiveStock.belongsHere(level,station,pos);
+            &&ApiaryHiveStock.belongsHere(level,station,pos)
+            &&level.getEntity(station.worker) instanceof Villager worker&&worker.isAlive()&&!worker.isNoAi()
+            &&ForgeEventFactory.getMobGriefingEvent(level,worker);
     }
     private static int beeCount(EmploymentData.Station station){return station.industry.getCompound(BEES).size();}
     private static void prepareColony(EmploymentData.Station station){

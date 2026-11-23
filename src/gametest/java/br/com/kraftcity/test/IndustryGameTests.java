@@ -744,6 +744,8 @@ public final class IndustryGameTests {
                 "Shrink did not preserve nearest nest");
             check(f.l.getBlockState(inner).is(Blocks.BEE_NEST)&&bee.isAlive()&&count(f,Items.BEE_NEST)==0,
                 "A nest was taken while its bee was outdoors");
+            check(ApiaryWork.canDiscoverHive(f.l,bee,inner)&&!ApiaryWork.canDiscoverHive(f.l,bee,outer),
+                "The habitual bee could not rediscover its nest or acquired a nest outside its area");
             ((BeehiveBlockEntity)f.l.getBlockEntity(inner)).addOccupant(bee,false);
         }).thenWaitUntil(()->{
             check(f.l.isEmptyBlock(inner)&&count(f,Items.BEE_NEST)==1,"Waiting for the returned bee and nest to reach stock");
