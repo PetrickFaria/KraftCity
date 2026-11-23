@@ -11,7 +11,7 @@ import net.minecraftforge.network.*;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class WorkNetwork {
-    public static final SimpleChannel CHANNEL=NetworkRegistry.newSimpleChannel(new ResourceLocation("residenciasaldeoes","employment"),()->"14","14"::equals,"14"::equals);
+    public static final SimpleChannel CHANNEL=NetworkRegistry.newSimpleChannel(new ResourceLocation("residenciasaldeoes","employment"),()->"15","15"::equals,"15"::equals);
     public record Candidate(UUID id,String name,int cost){}
     public record Hire(int menu,UUID station,UUID worker,int profession){
         void encode(FriendlyByteBuf b){b.writeVarInt(menu);b.writeUUID(station);b.writeUUID(worker);b.writeInt(profession);}

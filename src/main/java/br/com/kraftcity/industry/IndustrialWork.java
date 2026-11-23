@@ -111,7 +111,8 @@ public final class IndustrialWork {
             v.getPersistentData().putBoolean("KCFarmerOriginalPickup",v.canPickUpLoot());
             v.setCanPickUpLoot(false);
         }
-        ItemStack view=s.profession==Profession.BEEKEEPER?ItemStack.EMPTY:s.getItem(27).copy();if(s.profession==Profession.FARMER&&view.getItem() instanceof HoeItem)view.getOrCreateTag().putBoolean("KCFarmerDisplay",true);if(!ItemStack.matches(v.getMainHandItem(),view)){
+        if(s.profession==Profession.BEEKEEPER)return;
+        ItemStack view=s.getItem(27).copy();if(s.profession==Profession.FARMER&&view.getItem() instanceof HoeItem)view.getOrCreateTag().putBoolean("KCFarmerDisplay",true);if(!ItemStack.matches(v.getMainHandItem(),view)){
             // A visual mirror, never a second inventory; empty drop chance, restored on release.
             v.setItemSlot(EquipmentSlot.MAINHAND,view);v.setDropChance(EquipmentSlot.MAINHAND,0);
         }

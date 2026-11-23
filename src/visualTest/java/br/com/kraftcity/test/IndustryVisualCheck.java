@@ -263,8 +263,15 @@ public final class IndustryVisualCheck {
             }
             if(phase==50)Screenshot.grab(new File("../build"),"visual-industry-"+Profession.values()[i].path+".png",mc.getMainRenderTarget(),message->{});
             if(i==5&&phase==52){
-                press(mc,"›");
                 var menu=(WorkMenu)mc.player.containerMenu;
+                check(menu.snapshot.size()==7&&menu.snapshot.level()==1,"Apiary client did not receive its new initial area");
+                var sizes=mc.screen.children().stream().filter(net.minecraft.client.gui.components.Button.class::isInstance)
+                    .map(net.minecraft.client.gui.components.Button.class::cast)
+                    .filter(button->button.getMessage().getString().contains("×")).toList();
+                check(sizes.stream().map(button->button.getMessage().getString()).toList()
+                    .equals(List.of("7×7","9×9","11×11","13×13","15×15"))
+                    &&sizes.get(0).active&&sizes.stream().skip(1).noneMatch(button->button.active),"Apiary width options desynchronized");
+                press(mc,"›");
                 check(menu.slots.stream().noneMatch(net.minecraft.world.inventory.Slot::isActive),"Apiary settings exposed stock slots");
             }
             if(i==5&&phase==54)Screenshot.grab(new File("../build"),"visual-apiary-settings.png",mc.getMainRenderTarget(),message->{});

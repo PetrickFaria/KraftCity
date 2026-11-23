@@ -328,6 +328,10 @@ public final class IndustryGameTests {
     @GameTest(template="empty",timeoutTicks=50,batch="apiary_area")
     public static void apiary_dimensions_and_hive_limits_follow_manual_selection(GameTestHelper h){
         var f=fixture(h,Profession.BEEKEEPER);
+        check(IndustrialRules.size(f.l,f.s)==7&&!IndustrialRules.selectSize(f.l,f.s,5)
+            &&!IndustrialRules.selectSize(f.l,f.s,9),"Wrong initial or locked apiary width");
+        f.s.industry.putInt("size",5);
+        check(IndustrialRules.size(f.l,f.s)==7&&f.s.industry.getInt("size")==7,"Old apiary width did not migrate");
         var near=hive(f,true);
         var extra=f.p.west().above();
         for(var alternative:List.of(extra,f.p.north().above(),f.p.south().above(),
@@ -339,7 +343,7 @@ public final class IndustryGameTests {
             int selected=IndustrialRules.size(f.l,f.s);
             level(f,lv,25*(lv-1));
             check(IndustrialRules.size(f.l,f.s)==selected,"Level increased selected area");
-            int next=IndustrialRules.maximumSize(lv);
+            int next=IndustrialRules.maximumSize(Profession.BEEKEEPER,lv);
             check(IndustrialRules.selectSize(f.l,f.s,next),"Cannot select unlocked area");
             var area=IndustrialWork.area(f.l,f.s);
             check(area.getXsize()==next&&area.getZsize()==next&&area.getYsize()==5&&area.minY==f.p.getY()+1,"Incorrect apiary bounds");
@@ -351,6 +355,9 @@ public final class IndustryGameTests {
         var hives=f.s.industry.getList("apiary_hives",net.minecraft.nbt.Tag.TAG_LONG);
         check(hives.size()==5&&!hives.contains(net.minecraft.nbt.LongTag.valueOf(near.asLong()))
             &&f.l.getBlockState(extra).is(Blocks.BEE_NEST),"Destroyed hive was retained or nest ignored");
+        f.s.industry.putInt("size",13);
+        check(IndustrialRules.size(f.l,f.s)==13,"Migrating a width still available changed it");
+        check(IndustrialRules.selectSize(f.l,f.s,7),"Larger apiary could not select a smaller width");
         h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=100,batch="apiary_nectar")
@@ -381,6 +388,13 @@ public final class IndustryGameTests {
             var linked=f.l.getEntitiesOfClass(Bee.class,IndustrialWork.area(f.l,f.s).inflate(8),
                 b->b.getPersistentData().hasUUID("KCApiary")&&b.getPersistentData().getUUID("KCApiary").equals(f.s.id));
             check(linked.size()==1&&!linked.get(0).isAngry(),"Bonded bee duplication or attack");
+            var bonded=linked.get(0);
+            check(((br.com.kraftcity.industry.ApiaryBeeAppearance)bonded).kraftcity$isBonded(),"Stored bee lost its visual bond");
+            bonded.setTarget(f.v);
+            check(bonded.getTarget()!=f.v,"Bonded bee could reselect its own worker");
+            var health=f.v.getHealth();
+            bonded.doHurtTarget(f.v);
+            check(f.v.getHealth()==health&&!bonded.hasStung(),"Bonded bee could sting during its own harvest");
             check(wild.isAngry()||wild.getTarget()==f.v,"Foreign bee lost its ability to retaliate");
         }).thenSucceed();
     }
@@ -403,6 +417,72 @@ public final class IndustryGameTests {
         f.v.setNoAi(false);
         h.succeedWhen(()->check(count(f,Items.HONEY_BOTTLE)==1&&f.v.position().distanceToSqr(near)>1,
             "Waiting for a physical approach around the wall"));
+    }
+
+    @GameTest(template="empty",timeoutTicks=60,batch="apiary_held_tools")
+    public static void apiary_hand_prefers_flower_then_bottle_then_shears(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.above()));
+        var shears=new ItemStack(Items.SHEARS);
+        shears.setDamageValue(7);
+        f.s.setItem(27,shears);
+        step(f,1);
+        check(f.v.getMainHandItem().is(Items.SHEARS)&&shears.getDamageValue()==7,"Idle shears not shown");
+        f.s.setItem(28,new ItemStack(Items.GLASS_BOTTLE,3));
+        step(f,1);
+        check(f.v.getMainHandItem().is(Items.GLASS_BOTTLE)&&f.s.getItem(28).getCount()==3,"Bottle visual priority changed stock");
+        var bee=apiaryBee(f,3);
+        f.s.setItem(29,new ItemStack(Items.DANDELION));
+        step(f,1);
+        check(f.v.getMainHandItem().is(Items.DANDELION)&&f.s.getItem(29).isEmpty(),"Feeding did not show and consume flower");
+        check(!((br.com.kraftcity.industry.ApiaryBeeAppearance)bee).kraftcity$isBonded(),"Unfinished bond changed appearance");
+        step(f,1);
+        check(f.v.getMainHandItem().is(Items.GLASS_BOTTLE),"Hand did not return to bottle");
+        f.s.setItem(28,ItemStack.EMPTY);
+        f.s.setItem(27,ItemStack.EMPTY);
+        step(f,1);
+        check(f.v.getMainHandItem().isEmpty(),"Missing supplies left a phantom display");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=420,batch="apiary_lure")
+    public static void apiary_lures_at_ten_blocks_and_bonds_only_inside(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        f.l.setRainLevel(0);
+        var start=Vec3.atBottomCenterOf(f.p.above());
+        f.v.setPos(start);
+        var bee=apiaryBee(f,1);
+        bee.setPos(start.add(11,0,0));
+        f.s.setItem(29,new ItemStack(Items.DANDELION));
+        step(f,1);
+        check(f.v.getMainHandItem().isEmpty()&&f.s.getItem(29).getCount()==1,"Detected eleven blocks");
+        bee.setPos(start.add(10,0,0));
+        step(f,1);
+        check(f.v.getMainHandItem().is(Items.DANDELION)&&f.s.getItem(29).getCount()==1,"Ten-block lure failed or fed outside");
+        bee.setNoAi(false);
+        var area=IndustrialWork.area(f.l,f.s);
+        h.succeedWhen(()->check(((br.com.kraftcity.industry.ApiaryBeeAppearance)bee).kraftcity$isBonded()
+            &&area.contains(bee.position())&&area.contains(f.v.position())&&f.s.getItem(29).isEmpty(),
+            "Waiting for the bee to fly into the apiary for one flower: "+bee.position()));
+    }
+
+    @GameTest(template="empty",timeoutTicks=80,batch="apiary_boundaries")
+    public static void apiary_bonded_movement_is_bounded_on_all_six_faces(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        var bee=apiaryBee(f,1);
+        f.s.setItem(29,new ItemStack(Items.DANDELION));
+        step(f,1);
+        var area=IndustrialWork.area(f.l,f.s);
+        check(((br.com.kraftcity.industry.ApiaryBeeAppearance)bee).kraftcity$isBonded(),"No test bond");
+        for(var side:Direction.values()){
+            bee.setPos(area.getCenter());
+            bee.move(net.minecraft.world.entity.MoverType.SELF,new Vec3(side.getStepX()*12,side.getStepY()*12,side.getStepZ()*12));
+            var bounds=bee.getBoundingBox();
+            check(bounds.minX>=area.minX&&bounds.maxX<=area.maxX&&bounds.minY>=area.minY
+                &&bounds.maxY<=area.maxY&&bounds.minZ>=area.minZ&&bounds.maxZ<=area.maxZ,"Bee flew past "+side);
+        }
+        h.succeed();
     }
 
     @GameTest(template="empty",timeoutTicks=40,batch="industry")

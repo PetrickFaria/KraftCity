@@ -46,7 +46,7 @@ public final class WorkerPose {
 
     public static float action(Villager worker,float age){
         var activity=ACTIVE.get(worker);
-        return activity==null||activity.profession!=Profession.FARMER&&activity.profession!=Profession.SOLDIER?0:Mth.sin(Mth.PI*Mth.clamp(worker.getAttackAnim(age-worker.tickCount),0,1));
+        return activity==null||activity.profession!=Profession.FARMER&&activity.profession!=Profession.SOLDIER&&activity.profession!=Profession.BEEKEEPER?0:Mth.sin(Mth.PI*Mth.clamp(worker.getAttackAnim(age-worker.tickCount),0,1));
     }
 
     public static boolean soldier(Villager worker){

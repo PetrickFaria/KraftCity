@@ -20,10 +20,19 @@ public final class IndustrialRules {
     }
     public static int level(ServerLevel l,EmploymentData.Station s){return s.worker==null||s.profession==null?1:Math.min(5,Math.max(1,WorkforceData.get(l).progress(s.worker,s.profession.id()).level()));}
     public static int maximumSize(int level){return 3+2*Math.min(5,Math.max(1,level));}
+    public static int minimumSize(Profession profession){return profession==Profession.BEEKEEPER?7:5;}
+    public static int maximumSize(Profession profession,int level){
+        return maximumSize(level)+(minimumSize(profession)-5);
+    }
     public static int size(ServerLevel l,EmploymentData.Station s){
-        int max=maximumSize(level(l,s));
+        int max=maximumSize(s.profession,level(l,s));
         int selected=s.industry.getInt("size");
-        if(s.profession==Profession.BEEKEEPER)return validSize(selected,max)?selected:5;
+        if(s.profession==Profession.BEEKEEPER){
+            // Preserve the old selected width where it still exists, even while the post is vacant.
+            int migrated=validSize(selected,15)?Math.max(7,selected):7;
+            if(migrated!=selected){s.industry.putInt("size",migrated);s.setChanged();}
+            return migrated;
+        }
         if(s.profession==Profession.FARMER){
             if(validSize(selected,13))return selected;
             int legacy=s.industry.getInt("zigzag_size");
@@ -36,8 +45,8 @@ public final class IndustrialRules {
     }
     private static boolean validSize(int size,int max){return size>=5&&size<=max&&size%2==1;}
     public static boolean selectSize(ServerLevel l,EmploymentData.Station s,int size){
-        int max=maximumSize(level(l,s));
-        if(!validSize(size,max)||s.profession!=Profession.FARMER&&s.profession!=Profession.BEEKEEPER&&level(l,s)<5&&size!=max)return false;
+        int max=maximumSize(s.profession,level(l,s));
+        if(size<minimumSize(s.profession)||!validSize(size,max)||s.profession!=Profession.FARMER&&s.profession!=Profession.BEEKEEPER&&level(l,s)<5&&size!=max)return false;
         s.industry.putInt("size",size);s.industry.remove("cursor");s.setChanged();return true;
     }
     public static int capacity(int level){return 2*Math.min(5,Math.max(1,level));}

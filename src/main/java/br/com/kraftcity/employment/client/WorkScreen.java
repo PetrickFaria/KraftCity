@@ -90,10 +90,10 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
             })).active=menu.getCarried().isEmpty();
         if(!menu.settingsPage){
             for(int i=0;i<5;i++){
-                int size=5+i*2;
+                int size=IndustrialRules.minimumSize(menu.profession)+i*2;
                 var button=addRenderableWidget(new Button(leftPos+FARM_AREA_X+i*35,topPos+FARM_AREA_Y,32,17,
                     Component.literal(size+"×"+size),b->option(size,0)));
-                button.active=state!=null&&size<=IndustrialRules.maximumSize(state.level());
+                button.active=state!=null&&size<=IndustrialRules.maximumSize(menu.profession,state.level());
             }
             if(state!=null&&!state.employed())addRenderableWidget(new Button(leftPos+222,topPos+142,75,16,
                 Component.literal("Contratar"),b->hireAction(-2)));
@@ -166,8 +166,9 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         fill(pose,leftPos+62,topPos+65,leftPos+244,topPos+121,0xFF4C3D2E);
         fill(pose,leftPos+62,topPos+154,leftPos+244,topPos+232,0xFF4C3D2E);
         var state=menu.snapshot;
-        if(state!=null&&state.size()>=5&&state.size()<=13){
-            int x=leftPos+FARM_AREA_X+(state.size()-5)/2*35;
+        int minSize=IndustrialRules.minimumSize(menu.profession);
+        if(state!=null&&state.size()>=minSize&&state.size()<=minSize+8){
+            int x=leftPos+FARM_AREA_X+(state.size()-minSize)/2*35;
             fill(pose,x-1,topPos+FARM_AREA_Y-1,x+33,topPos+FARM_AREA_Y+18,0xFFBFD375);
         }
     }
@@ -179,6 +180,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
             for(int i=0;i<inputs.length;i++)
                 drawCenteredString(pose,font,inputs[i],WorkMenu.farmAuxX(i)+8,31,0xFFF6E8CC);
             drawCenteredString(pose,font,"Inventário compartilhado",imageWidth/2,59,0xFFF6E8CC);
+            if(menu.profession==Profession.BEEKEEPER)font.draw(pose,"Altura 5",245,128,0xFFF6E8CC);
             font.draw(pose,playerInventoryTitle,inventoryLabelX,inventoryLabelY,0xFFF6E8CC);
             return;
         }

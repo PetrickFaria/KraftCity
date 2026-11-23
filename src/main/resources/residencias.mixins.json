@@ -39,6 +39,8 @@
     "WorkerGatePathMixin",
     "MilitaryEquipmentMixin",
     "SoldierBoundaryMixin",
+    "ApiaryBeeMovementMixin",
+    "ApiaryBeeAppearanceMixin",
     "SoldierMoveControlMixin",
     "SoldierBodyControlMixin",
     "WorkerConversionMixin",

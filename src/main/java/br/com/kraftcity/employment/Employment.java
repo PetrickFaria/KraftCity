@@ -335,7 +335,7 @@ public final class Employment {
         }
         if(profession==Profession.BEEKEEPER&&(!s.industry.hasUUID("apiary_worker")
                 ||!worker.equals(s.industry.getUUID("apiary_worker")))){
-            s.industry.putInt("size",5);
+            s.industry.putInt("size",7);
             s.industry.putUUID("apiary_worker",worker);
         }
         converted.bind(s.id);s.profession=profession;s.worker=worker;s.industry.putLong("employment_epoch",epoch(s)+1);s.setChanged();
