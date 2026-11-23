@@ -22,6 +22,8 @@ public final class IndustryNetwork {
                     if(command==0&&IndustrialRules.selectSize(p.getLevel(),s,size)){
                         if(FarmerLogistics.fieldWorker(s)&&s.worker!=null
                             &&p.getLevel().getEntity(s.worker) instanceof net.minecraft.world.entity.npc.Villager worker)FarmerLogistics.areaChanged(worker);
+                        if(s.profession==Profession.LUMBERJACK&&s.worker!=null
+                            &&p.getLevel().getEntity(s.worker) instanceof net.minecraft.world.entity.npc.Villager worker)LumberjackWork.pause(worker);
                         sendBounds(p);
                     }
                     else if(command==1){s.industry.putBoolean("preview",!s.industry.getBoolean("preview"));s.setChanged();sendBounds(p);}
@@ -37,10 +39,10 @@ public final class IndustryNetwork {
             }c.get().setPacketHandled(true);
         }
     }
-    public record Bound(ResourceLocation dimension,BlockPos pos,int size,boolean farmer,boolean apiary){}
+    public record Bound(ResourceLocation dimension,BlockPos pos,int size,boolean farmer,boolean apiary,boolean lumberjack){}
     public record Bounds(List<Bound> entries){
-        public void encode(FriendlyByteBuf b){b.writeVarInt(entries.size());for(var e:entries){b.writeResourceLocation(e.dimension);b.writeBlockPos(e.pos);b.writeVarInt(e.size);b.writeBoolean(e.farmer);b.writeBoolean(e.apiary);}}
-        public static Bounds decode(FriendlyByteBuf b){int n=b.readVarInt();if(n<0||n>4096)throw new IllegalArgumentException("bounds");var out=new ArrayList<Bound>();for(int i=0;i<n;i++)out.add(new Bound(b.readResourceLocation(),b.readBlockPos(),b.readVarInt(),b.readBoolean(),b.readBoolean()));return new Bounds(List.copyOf(out));}
+        public void encode(FriendlyByteBuf b){b.writeVarInt(entries.size());for(var e:entries){b.writeResourceLocation(e.dimension);b.writeBlockPos(e.pos);b.writeVarInt(e.size);b.writeBoolean(e.farmer);b.writeBoolean(e.apiary);b.writeBoolean(e.lumberjack);}}
+        public static Bounds decode(FriendlyByteBuf b){int n=b.readVarInt();if(n<0||n>4096)throw new IllegalArgumentException("bounds");var out=new ArrayList<Bound>();for(int i=0;i<n;i++)out.add(new Bound(b.readResourceLocation(),b.readBlockPos(),b.readVarInt(),b.readBoolean(),b.readBoolean(),b.readBoolean()));return new Bounds(List.copyOf(out));}
         public void handle(Supplier<NetworkEvent.Context> c){DistExecutor.unsafeRunWhenOn(Dist.CLIENT,()->()->br.com.kraftcity.industry.client.WorkPreview.set(entries));c.get().setPacketHandled(true);}
     }
     public static void register(){
@@ -49,7 +51,7 @@ public final class IndustryNetwork {
     }
     public static void sendBounds(ServerPlayer p){
         var list=new ArrayList<Bound>();for(var s:EmploymentData.get(p.getLevel()).stations())if(s.active&&s.profession!=null&&s.dimension.equals(p.level.dimension())&&s.industry.getBoolean("preview")&&p.distanceToSqr(s.pos.getX(),s.pos.getY(),s.pos.getZ())<65536&&list.size()<4096)
-            list.add(new Bound(s.dimension.location(),s.pos,IndustrialRules.size(p.getLevel(),s),s.profession==Profession.FARMER,s.profession==Profession.BEEKEEPER));
+            list.add(new Bound(s.dimension.location(),s.pos,IndustrialRules.size(p.getLevel(),s),s.profession==Profession.FARMER,s.profession==Profession.BEEKEEPER,s.profession==Profession.LUMBERJACK));
         WorkNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(()->p),new Bounds(List.copyOf(list)));
     }
     private IndustryNetwork(){}

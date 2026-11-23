@@ -17,7 +17,12 @@ public final class IndustrialEvents {
     private final Map<UUID,Long> next=new HashMap<>();private int cursor;
     @SubscribeEvent public void tick(TickEvent.ServerTickEvent e){
         var server=ServerLifecycleHooks.getCurrentServer();if(e.phase!=TickEvent.Phase.END||server==null)return;
-        var stations=EmploymentData.get(server.overworld()).stations().stream().filter(IndustrialWork::industrial).toList();
+        var industrial=EmploymentData.get(server.overworld()).stations().stream().filter(IndustrialWork::industrial).toList();
+        for(var station:industrial)if(station.profession==Profession.LUMBERJACK){
+            var level=server.getLevel(station.dimension);
+            if(level!=null)IndustrialWork.tick(level,station);
+        }
+        var stations=industrial.stream().filter(s->s.profession!=Profession.LUMBERJACK).toList();
         long now=server.getTickCount();
         for(int i=0;i<Math.min(4,stations.size());i++){
             var s=stations.get(Math.floorMod(cursor++,stations.size()));var l=server.getLevel(s.dimension);
@@ -25,6 +30,8 @@ public final class IndustrialEvents {
         }
         if(now%20==0)for(ServerPlayer p:server.getPlayerList().getPlayers())IndustryNetwork.sendBounds(p);
     }
+    @SubscribeEvent(priority=net.minecraftforge.eventbus.api.EventPriority.LOWEST)
+    public void placed(net.minecraftforge.event.level.BlockEvent.EntityPlaceEvent event){LumberjackTrees.placed(event);}
     @SubscribeEvent public void trample(net.minecraftforge.event.level.BlockEvent.FarmlandTrampleEvent e){
         if(e.getEntity() instanceof Villager v&&v.level instanceof ServerLevel l){
             var station=EmploymentData.get(l).assigned(v.getUUID());

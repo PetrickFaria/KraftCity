@@ -112,7 +112,7 @@ public final class DiscardBinding {
     }
 
     private static boolean valid(ServerLevel level, EmploymentData.Station station) {
-        return station!=null && (station.profession==Profession.FARMER||station.profession==Profession.BEEKEEPER||station.profession==Profession.SOLDIER) && station.at(level, station.pos)
+        return station!=null && (station.profession==Profession.FARMER||station.profession==Profession.BEEKEEPER||station.profession==Profession.LUMBERJACK||station.profession==Profession.SOLDIER) && station.at(level, station.pos)
             && level.hasChunkAt(station.pos) && level.getBlockEntity(station.pos) instanceof WorkBlockEntity post
             && station.id.equals(post.identity());
     }

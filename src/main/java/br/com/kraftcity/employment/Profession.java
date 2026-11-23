@@ -15,7 +15,8 @@ public enum Profession {
     CONFECTIONER("confectioner", "Confeiteiro", Sector.COMMERCIAL),
     GRILL_COOK("grill_cook", "Churrasqueiro", Sector.COMMERCIAL),
     SOLDIER("soldier", "Soldado", Sector.MILITARY),
-    BUILDER("builder", "Construtor", Sector.BUILDER);
+    BUILDER("builder", "Construtor", Sector.BUILDER),
+    LUMBERJACK("lumberjack", "Lenhador", Sector.INDUSTRIAL);
 
     public enum Sector { INDUSTRIAL, COMMERCIAL, MILITARY, BUILDER }
     public final String path, label;

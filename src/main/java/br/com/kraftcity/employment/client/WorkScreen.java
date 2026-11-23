@@ -75,7 +75,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         addRenderableWidget(new Button(leftPos+122,topPos+151,48,18,Component.literal(">"),b->{page++;buttons();})).active=(page+1)*6<candidates.size();
         if(menu.profession!=null)profession=menu.profession;
         int row=0;for(var p:Profession.values())if(p.sector==menu.sector&&(menu.profession==null||menu.profession==p)){
-            addRenderableWidget(new Button(leftPos+181,topPos+30+row++*20,161,18,Component.literal((profession==p?"> ":"")+p.label),b->{profession=p;buttons();}));
+            addRenderableWidget(new Button(leftPos+181,topPos+(menu.sector==Profession.Sector.INDUSTRIAL?27:30)+row++*(menu.sector==Profession.Sector.INDUSTRIAL?18:20),161,18,Component.literal((profession==p?"> ":"")+p.label),b->{profession=p;buttons();}));
         }
         Button hire=addRenderableWidget(new Button(leftPos+216,topPos+155,126,20,Component.literal(menu.sector==Profession.Sector.MILITARY?"Treinar":"Contratar"),b->{
             if(selected!=null&&profession!=null)WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Hire(menu.containerId,menu.stationId,selected,profession.ordinal()));
@@ -90,9 +90,10 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
             })).active=menu.getCarried().isEmpty();
         if(!menu.settingsPage){
             for(int i=0;i<5;i++){
-                int size=IndustrialRules.minimumSize(menu.profession)+i*2;
+                int size=menu.profession==Profession.LUMBERJACK?5*(i+1):IndustrialRules.minimumSize(menu.profession)+i*2;
                 var button=addRenderableWidget(new Button(leftPos+FARM_AREA_X+i*35,topPos+FARM_AREA_Y,32,17,
-                    Component.literal(size+"×"+size),b->option(size,0)));
+                    Component.literal(size+"×"+size),b->option(size,0),
+                    (buttonWidget,pose,x,y)->{if(menu.profession==Profession.LUMBERJACK)renderTooltip(pose,Component.literal(size+"×"+size+"×5"),x,y);}));
                 button.active=state!=null&&size<=IndustrialRules.maximumSize(menu.profession,state.level());
             }
             if(state!=null&&!state.employed())addRenderableWidget(new Button(leftPos+222,topPos+142,75,16,
@@ -167,8 +168,9 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         fill(pose,leftPos+62,topPos+154,leftPos+244,topPos+232,0xFF4C3D2E);
         var state=menu.snapshot;
         int minSize=IndustrialRules.minimumSize(menu.profession);
-        if(state!=null&&state.size()>=minSize&&state.size()<=minSize+8){
-            int x=leftPos+FARM_AREA_X+(state.size()-minSize)/2*35;
+        if(state!=null&&state.size()>=minSize&&state.size()<=IndustrialRules.maximumSize(menu.profession,5)){
+            int index=menu.profession==Profession.LUMBERJACK?state.size()/5-1:(state.size()-minSize)/2;
+            int x=leftPos+FARM_AREA_X+index*35;
             fill(pose,x-1,topPos+FARM_AREA_Y-1,x+33,topPos+FARM_AREA_Y+18,0xFFBFD375);
         }
     }
@@ -176,11 +178,12 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         if(menu.fieldLayout){
             drawCenteredString(pose,font,farmerTitle(imageWidth-54),imageWidth/2,8,0xFFF6E8CC);
             if(menu.settingsPage)return;
-            String[] inputs=menu.farmer?FARM_INPUTS:new String[]{"Tesoura","Frasco de Vidro","Flor"};
+            String[] inputs=menu.farmer?FARM_INPUTS:menu.profession==Profession.LUMBERJACK
+                ?new String[]{"Machado","Mudas"}:new String[]{"Tesoura","Frasco de Vidro","Flor"};
             for(int i=0;i<inputs.length;i++)
                 drawCenteredString(pose,font,inputs[i],WorkMenu.farmAuxX(i)+8,31,0xFFF6E8CC);
             drawCenteredString(pose,font,"Inventário compartilhado",imageWidth/2,59,0xFFF6E8CC);
-            if(menu.profession==Profession.BEEKEEPER)font.draw(pose,"Altura 5",245,128,0xFFF6E8CC);
+            if(menu.profession==Profession.BEEKEEPER||menu.profession==Profession.LUMBERJACK)font.draw(pose,"Altura 5",245,128,0xFFF6E8CC);
             font.draw(pose,playerInventoryTitle,inventoryLabelX,inventoryLabelY,0xFFF6E8CC);
             return;
         }

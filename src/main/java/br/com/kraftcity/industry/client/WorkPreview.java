@@ -67,7 +67,7 @@ public final class WorkPreview {
             pose.translate(pos.getX()-cam.x,pos.getY()-cam.y,pos.getZ()-cam.z);
             // Local bounds and a private pose scope prevent one residence from
             // inheriting another entry's world/camera transform.
-            AABB box=e.farmer()?new AABB(-r,1,-r,r+1,br.com.kraftcity.industry.FarmerWork.HEIGHT+1,r+1):e.apiary()?new AABB(-r,1,-r,r+1,6,r+1):new AABB(-r,-2,-r,r+1,3,r+1);
+            AABB box=e.lumberjack()?br.com.kraftcity.industry.LumberjackWork.bounds(BlockPos.ZERO,e.size()):e.farmer()?new AABB(-r,1,-r,r+1,br.com.kraftcity.industry.FarmerWork.HEIGHT+1,r+1):e.apiary()?new AABB(-r,1,-r,r+1,6,r+1):new AABB(-r,-2,-r,r+1,3,r+1);
             double playerX=mc.player.getX()-pos.getX(),playerY=mc.player.getY()-pos.getY(),playerZ=mc.player.getZ()-pos.getZ();
             boolean playerInside=playerX>=box.minX&&playerX<box.maxX&&playerY>=box.minY&&playerY<box.maxY&&playerZ>=box.minZ&&playerZ<box.maxZ;
             if(shouldRender(true,playerInside)){

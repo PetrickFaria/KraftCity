@@ -41,16 +41,18 @@ public final class IndustrialWork {
             &&!v.getPersistentData().contains("residenciasaldeoes_night_door_task");
     }
     public static boolean day(ServerLevel l){long t=Math.floorMod(l.getDayTime(),24000);return t<12000||t>=23000;}
-    public static AABB area(ServerLevel l,EmploymentData.Station s){int r=IndustrialRules.size(l,s)/2;if(s.profession==Profession.BEEKEEPER)return new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,6,r+1));return s.profession==Profession.FARMER ? new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,FarmerWork.HEIGHT+1,r+1)) : new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
+    public static AABB area(ServerLevel l,EmploymentData.Station s){if(s.profession==Profession.LUMBERJACK)return LumberjackWork.bounds(s.pos,IndustrialRules.size(l,s));int r=IndustrialRules.size(l,s)/2;if(s.profession==Profession.BEEKEEPER)return new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,6,r+1));return s.profession==Profession.FARMER ? new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,FarmerWork.HEIGHT+1,r+1)) : new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
     public static void tick(ServerLevel l,EmploymentData.Station s){
         if(!industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
         if(l.isThundering()||Employment.fleeing(v)){
+            if(s.profession==Profession.LUMBERJACK)LumberjackWork.pause(v);
             IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER){restoreHand(v);ApiaryWork.blocked(l,s,v,"storm_or_danger");}
             s.industry.remove("fish_elapsed");
             return;
         }
         if(!day(l)||v.isSleeping()){
+            if(s.profession==Profession.LUMBERJACK)LumberjackWork.pause(v);
             IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER){restoreHand(v);ApiaryWork.blocked(l,s,v,"rest");}
             s.industry.remove("fish_elapsed");
@@ -63,6 +65,7 @@ public final class IndustrialWork {
             return;
         }
         if(!ownsNavigation(v)||br.com.kraftcity.employment.WorkplaceVisits.leaving(v)){
+            if(s.profession==Profession.LUMBERJACK)LumberjackWork.pause(v);
             IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER)ApiaryWork.blocked(l,s,v,"residential_or_safety_route");
             return;
@@ -74,6 +77,7 @@ public final class IndustrialWork {
         replenish(s);showTool(v,s);
         boolean mobGriefing=ForgeEventFactory.getMobGriefingEvent(l,v);
         if(!mobGriefing&&s.profession!=Profession.BEEKEEPER){
+            if(s.profession==Profession.LUMBERJACK)LumberjackWork.pause(v);
             alert(l,s,"protection","Trabalho bloqueado pela proteção/mobGriefing.");
             IndustrialIdle.tick(l,s,v);
             return;
@@ -88,6 +92,7 @@ public final class IndustrialWork {
             case BUTCHER,SHEPHERD,BREEDER->animals(l,s,v,s.profession);
             case FISHERMAN->fish(l,s,v);
             case BEEKEEPER->ApiaryWork.tick(l,s,v,mobGriefing);
+            case LUMBERJACK->LumberjackWork.tick(l,s,v);
             default->false;
         };
         if(busy)IndustrialIdle.interrupt(v);
@@ -119,14 +124,20 @@ public final class IndustrialWork {
     }
     private static void showTool(Villager v,EmploymentData.Station s){
         if(!v.getPersistentData().contains("KCOriginalHand"))v.getPersistentData().put("KCOriginalHand",v.getMainHandItem().save(new CompoundTag()));
-        if(FarmerLogistics.fieldWorker(s)&&!v.getPersistentData().contains("KCFarmerOriginalPickup")){
+        if((FarmerLogistics.fieldWorker(s)||s.profession==Profession.LUMBERJACK)&&!v.getPersistentData().contains("KCFarmerOriginalPickup")){
             v.getPersistentData().putBoolean("KCFarmerOriginalPickup",v.canPickUpLoot());
             v.setCanPickUpLoot(false);
         }
-        if(s.profession==Profession.BEEKEEPER)return;
+        if(s.profession==Profession.BEEKEEPER||s.profession==Profession.LUMBERJACK)return;
         ItemStack view=s.getItem(27).copy();if(s.profession==Profession.FARMER&&view.getItem() instanceof HoeItem)view.getOrCreateTag().putBoolean("KCFarmerDisplay",true);if(!ItemStack.matches(v.getMainHandItem(),view)){
             // A visual mirror, never a second inventory; empty drop chance, restored on release.
             v.setItemSlot(EquipmentSlot.MAINHAND,view);v.setDropChance(EquipmentSlot.MAINHAND,0);
+        }
+    }
+    static void displayTool(Villager worker,ItemStack stack){
+        if(!ItemStack.matches(worker.getMainHandItem(),stack)){
+            worker.setItemSlot(EquipmentSlot.MAINHAND,stack.copy());
+            worker.setDropChance(EquipmentSlot.MAINHAND,0);
         }
     }
     public static void restoreHand(Villager v){
@@ -150,6 +161,7 @@ public final class IndustrialWork {
             case FARMER->{restoreFarmerInput(s);move(s,27,x->x.getItem() instanceof HoeItem);move(s,28,x->x.is(Items.BONE_MEAL));move(s,30,x->x.is(Items.WATER_BUCKET));}
             case BUTCHER->{move(s,27,x->x.getItem() instanceof AxeItem);for(int i=28;i<=30;i++)move(s,i,IndustrialWork::food);}
             case SHEPHERD->{move(s,27,x->x.getItem() instanceof ShearsItem);move(s,28,x->x.is(Items.WHEAT));}
+            case LUMBERJACK->{move(s,27,x->LumberjackWork.cutTicks(x)>0);move(s,28,LumberjackWork::sapling);}
             case FISHERMAN->move(s,27,x->x.getItem() instanceof FishingRodItem);
             case BREEDER->{move(s,28,x->x.is(Items.BONE));move(s,29,x->x.getItem().isEdible()&&x.getItem().getFoodProperties()!=null&&x.getItem().getFoodProperties().isMeat());}
             case BEEKEEPER->{
@@ -179,8 +191,9 @@ public final class IndustrialWork {
     public static boolean insert(EmploymentData.Station s,ItemStack out,boolean commit){return outputs(s,List.of(out),commit);}
     public static void deposit(ServerLevel l,EmploymentData.Station s,Villager v){
         if(FarmerLogistics.fieldWorker(s)){FarmerLogistics.depositDirect(l,s,v);return;}
-        var offers=DiscardChests.offers(s,stack->true);
-        var destinations=DiscardChests.destinations(l,s,area(l,s));
+        boolean lumberjack=s.profession==Profession.LUMBERJACK;
+        var offers=DiscardChests.offers(s,stack->!lumberjack||!LumberjackWork.sapling(stack)&&LumberjackWork.cutTicks(stack)==0);
+        var destinations=lumberjack?br.com.kraftcity.logistics.DiscardBinding.destinations(l,s,area(l,s)):DiscardChests.destinations(l,s,area(l,s));
         for(var pos:destinations){
             if(!DiscardChests.hasOffers(offers))break;
             DiscardChests.deposit(l,s,v,pos,offers,"deposit");
@@ -215,7 +228,7 @@ public final class IndustrialWork {
     static boolean breakAllowed(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos p){
         if(!allowed(l,s,v,p,null,"harvest"))return false;
         var actor=actor(l,s,v);
-        if(s.profession!=Profession.FARMER){
+        if(s.profession!=Profession.FARMER&&s.profession!=Profession.LUMBERJACK){
             return !MinecraftForge.EVENT_BUS.post(new BlockEvent.BreakEvent(l,p,l.getBlockState(p),actor));
         }
         // This event is a permission probe. Exposing the hoe makes player-tool

@@ -2654,4 +2654,203 @@ public final class IndustryGameTests {
         }).thenWaitUntil(()->check(count(f,Items.HONEY_BOTTLE)==1,"Apiarist did not return to harvest"))
         .thenSucceed();
     }
+
+    private static BlockPos lumberTree(F f, BlockPos root, Block log, Block leaf, int height) {
+        f.l.setBlockAndUpdate(root.below(),Blocks.DIRT.defaultBlockState());
+        for (int y=0;y<height;y++) f.l.setBlockAndUpdate(root.above(y),log.defaultBlockState());
+        var foliage=leaf.defaultBlockState().setValue(LeavesBlock.DISTANCE,1);
+        var crown=root.above(height-1);
+        for (var direction:Direction.Plane.HORIZONTAL) f.l.setBlockAndUpdate(crown.relative(direction),foliage);
+        f.l.setBlockAndUpdate(crown.above(),foliage);
+        return root;
+    }
+
+    @GameTest(template="empty",timeoutTicks=60,batch="lumberjack_bounds")
+    public static void lumberjack_area_is_exact_manual_and_survives_save(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK);
+        check(f.l.getBlockState(f.p).is(WorkModule.PROFESSIONAL.get(Profession.LUMBERJACK).get()),"station conversion");
+        check(f.s.getItem(EmploymentData.PAYMENT).isEmpty(),"ten emeralds");
+        check(!IndustrialRules.selectSize(f.l,f.s,10),"level one unlocked ten");
+        for(int level=1;level<=5;level++){
+            level(f,level,(level-1)*25L);
+            check(IndustrialRules.size(f.l,f.s)==Math.max(5,(level-1)*5),"level expanded area");
+            int width=level*5;
+            check(IndustrialRules.selectSize(f.l,f.s,width),"could not select "+width);
+            var bounds=IndustrialWork.area(f.l,f.s);
+            check(bounds.getXsize()==width&&bounds.getYsize()==5&&bounds.getZsize()==width,"wrong dimensions "+bounds);
+            check(bounds.minX==f.p.getX()-width/2&&bounds.maxX==bounds.minX+width,"even centering");
+        }
+        var restored=EmploymentData.load(EmploymentData.get(f.l).save(new CompoundTag())).station(f.s.id);
+        check(restored!=null&&restored.worker.equals(f.v.getUUID())&&restored.profession==Profession.LUMBERJACK
+                &&restored.industry.getInt("size")==25,"saved lumberjack state");
+        h.succeed();
+    }
+
+    private static void lumberTime(GameTestHelper h,Item axe,int ticks){
+        var f=fixture(h,Profession.LUMBERJACK);
+        for(var p:BlockPos.betweenClosed(f.p.offset(-2,-1,-2),f.p.offset(2,-1,2))) f.l.setBlockAndUpdate(p,Blocks.DIRT.defaultBlockState());
+        var root=lumberTree(f,f.p.east(2),Blocks.OAK_LOG,Blocks.OAK_LEAVES,6);
+        f.v.setPos(f.p.getX()+1.5,f.p.getY(),f.p.getZ()+1.5);
+        f.s.setItem(EmploymentData.TOOL,new ItemStack(axe));
+        f.v.setNoAi(false);
+        long[] first={-1}, second={-1};
+        h.succeedWhen(()->{
+            if(first[0]<0){
+                check(f.l.isEmptyBlock(root),"waiting for first cut");
+                first[0]=f.l.getGameTime();
+            }
+            check(f.l.isEmptyBlock(root.above()),"waiting for second cut");
+            if(second[0]<0)second[0]=f.l.getGameTime();
+            long since=second[0]-first[0];
+            check(since>=ticks&&since<=ticks+2,"second cut took "+since+" ticks instead of "+ticks);
+            check(count(f,Items.OAK_LOG)==2&&f.s.getItem(27).getDamageValue()==2,"loot or durability did not commit twice");
+            f.v.setNoAi(true);
+        });
+    }
+
+    @GameTest(template="empty",timeoutTicks=770,batch="lumberjack_timing")
+    public static void lumberjack_wood_300_ticks(GameTestHelper h){lumberTime(h,Items.WOODEN_AXE,300);}
+    @GameTest(template="empty",timeoutTicks=660,batch="lumberjack_timing")
+    public static void lumberjack_stone_250_ticks(GameTestHelper h){lumberTime(h,Items.STONE_AXE,250);}
+    @GameTest(template="empty",timeoutTicks=550,batch="lumberjack_timing")
+    public static void lumberjack_iron_200_ticks(GameTestHelper h){lumberTime(h,Items.IRON_AXE,200);}
+    @GameTest(template="empty",timeoutTicks=450,batch="lumberjack_timing")
+    public static void lumberjack_gold_150_ticks(GameTestHelper h){lumberTime(h,Items.GOLDEN_AXE,150);}
+    @GameTest(template="empty",timeoutTicks=350,batch="lumberjack_timing")
+    public static void lumberjack_emerald_100_ticks(GameTestHelper h){lumberTime(h,IndustrialTools.AXE.get(),100);}
+    @GameTest(template="empty",timeoutTicks=260,batch="lumberjack_timing")
+    public static void lumberjack_diamond_50_ticks(GameTestHelper h){lumberTime(h,Items.DIAMOND_AXE,50);}
+
+    @GameTest(template="empty",timeoutTicks=720,batch="lumberjack_tall")
+    public static void lumberjack_netherite_and_tall_tree_leave_outside_and_decorative_logs(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK);
+        for(var p:BlockPos.betweenClosed(f.p.offset(-2,-1,-2),f.p.offset(2,-1,2))) f.l.setBlockAndUpdate(p,Blocks.DIRT.defaultBlockState());
+        f.v.setPos(f.p.getX()+1.5,f.p.getY(),f.p.getZ()+1.5);
+        var root=lumberTree(f,f.p.east(2),Blocks.SPRUCE_LOG,Blocks.SPRUCE_LEAVES,8);
+        var outside=lumberTree(f,f.p.west(3),Blocks.BIRCH_LOG,Blocks.BIRCH_LEAVES,5);
+        var decorated=f.p.south(2).west();
+        for(int y=0;y<3;y++) f.l.setBlockAndUpdate(decorated.above(y),Blocks.OAK_LOG.defaultBlockState());
+        f.s.setItem(EmploymentData.TOOL,new ItemStack(Items.NETHERITE_AXE));
+        f.v.setNoAi(false);
+        long[] first={-1};
+        h.succeedWhen(()->{
+            check(f.l.isEmptyBlock(root),"waiting for first cut");
+            if(first[0]<0)first[0]=f.l.getGameTime();
+            if(f.l.getGameTime()-first[0]<40&&f.l.isEmptyBlock(root.above()))h.fail("netherite cut before its full duration");
+            check(f.l.isEmptyBlock(root.above(7)),"waiting for the top log");
+            check(count(f,Items.SPRUCE_LOG)==8&&f.s.getItem(27).getDamageValue()==8,"tall tree count or wear");
+            check(f.l.getBlockState(outside).is(Blocks.BIRCH_LOG)&&f.l.getBlockState(decorated).is(Blocks.OAK_LOG),"outside tree or decor changed");
+            check(f.l.getBlockState(root.east().above(7)).is(Blocks.SPRUCE_LEAVES),"canopy destroyed immediately");
+            f.v.setNoAi(true);
+        });
+    }
+
+    @GameTest(template="empty",timeoutTicks=360,batch="lumberjack_replant")
+    public static void lumberjack_replants_a_single_sapling_after_respecting_the_clearance(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK);
+        level(f,5,100);
+        check(IndustrialRules.selectSize(f.l,f.s,25),"select replant area");
+        var seed=f.p.east(8);
+        for(var soil:BlockPos.betweenClosed(f.p.offset(-12,-1,-12),f.p.offset(12,-1,12))) f.l.setBlockAndUpdate(soil,Blocks.STONE.defaultBlockState());
+        lumberClearance(f,seed);
+        f.l.setBlockAndUpdate(seed.below(),Blocks.DIRT.defaultBlockState());
+        f.l.setBlockAndUpdate(seed,Blocks.DANDELION.defaultBlockState());
+        f.v.setPos(seed.getX()+.5,seed.getY(),seed.getZ()+1.5);
+        f.s.setItem(EmploymentData.INPUT_A,new ItemStack(Items.BIRCH_SAPLING));
+        var obstacle=seed.north(6);
+        f.l.setBlockAndUpdate(obstacle,Blocks.STONE.defaultBlockState());
+        f.v.setNoAi(false);
+        h.runAfterDelay(70,()->{
+            check(!f.l.getBlockState(seed).is(Blocks.BIRCH_SAPLING)&&f.s.getItem(28).getCount()==1,"planted too near an obstacle");
+            f.l.removeBlock(obstacle,false);
+        });
+        h.succeedWhen(()->{
+            check(f.l.getBlockState(seed).is(Blocks.BIRCH_SAPLING),"waiting for a legal sapling");
+            check(f.s.getItem(28).isEmpty(),"seed was not consumed");
+            f.v.setNoAi(true);
+        });
+    }
+
+    @GameTest(template="empty",timeoutTicks=620,batch="lumberjack_protection")
+    public static void lumberjack_rejects_placed_pillars_and_resumes_after_axe_break(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK);
+        for(var cell:BlockPos.betweenClosed(f.p.offset(-2,-1,-2),f.p.offset(2,-1,2)))
+            f.l.setBlockAndUpdate(cell,Blocks.DIRT.defaultBlockState());
+        var good=lumberTree(f,f.p.east(2),Blocks.BIRCH_LOG,Blocks.BIRCH_LEAVES,5);
+        var placed=lumberTree(f,f.p.west(2),Blocks.OAK_LOG,Blocks.OAK_LEAVES,5);
+        var actor=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"LumberjackBuilder"));
+        var snapshot=net.minecraftforge.common.util.BlockSnapshot.create(f.l.dimension(),f.l,placed.above(2));
+        MinecraftForge.EVENT_BUS.post(new net.minecraftforge.event.level.BlockEvent.EntityPlaceEvent(
+                snapshot,f.l.getBlockState(placed.below()),actor));
+        var lastUse=new ItemStack(Items.NETHERITE_AXE);
+        lastUse.setDamageValue(lastUse.getMaxDamage()-1);
+        f.s.setItem(27,lastUse);
+        f.v.setPos(f.p.getX()+1.5,f.p.getY(),f.p.getZ()+1.5);
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->{
+            check(f.l.isEmptyBlock(good)&&f.s.getItem(27).isEmpty(),"first cut did not break axe");
+            check(count(f,Items.BIRCH_LOG)==1,"first cut output");
+        }).thenIdle(65).thenExecute(()->{
+            check(f.l.getBlockState(good.above()).is(Blocks.BIRCH_LOG),"cut continued without axe");
+            check(f.l.getBlockState(placed).is(Blocks.OAK_LOG),"constructed trunk changed");
+            f.s.setItem(4,new ItemStack(Items.NETHERITE_AXE));
+        }).thenWaitUntil(()->{
+            check(f.l.isEmptyBlock(good.above(4)),"waiting for resumed tree");
+            check(count(f,Items.BIRCH_LOG)==5&&f.s.getItem(27).getDamageValue()==4,"resumed tree duplicated output or wear");
+            check(f.l.getBlockState(placed).is(Blocks.OAK_LOG),"constructed trunk changed");
+            f.v.setNoAi(true);
+        }).thenSucceed();
+    }
+
+    private static void lumberClearance(F f,BlockPos root){
+        for(var pos:BlockPos.betweenClosed(root.offset(-6,0,-6),root.offset(7,8,7))){
+            if(pos.distSqr(f.p)<1)continue;
+            if(!f.l.isEmptyBlock(pos))f.l.setBlockAndUpdate(pos,Blocks.AIR.defaultBlockState());
+        }
+    }
+
+    @GameTest(template="empty",timeoutTicks=420,batch="lumberjack_dark_oak")
+    public static void lumberjack_dark_oak_waits_for_four_saplings(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK);
+        level(f,5,100);
+        check(IndustrialRules.selectSize(f.l,f.s,25),"select dark oak area");
+        var root=f.p.east(8);
+        for(var cell:BlockPos.betweenClosed(f.p.offset(-12,-1,-12),f.p.offset(12,-1,12)))
+            f.l.setBlockAndUpdate(cell,Blocks.STONE.defaultBlockState());
+        lumberClearance(f,root);
+        var square=List.of(root,root.east(),root.south(),root.south().east());
+        for(var cell:square)f.l.setBlockAndUpdate(cell.below(),Blocks.DIRT.defaultBlockState());
+        f.s.setItem(28,new ItemStack(Items.DARK_OAK_SAPLING));
+        f.v.setPos(root.getX()+1,root.getY(),root.getZ()+2.5);
+        f.v.setNoAi(false);
+        h.runAfterDelay(80,()->{
+            check(square.stream().noneMatch(cell->f.l.getBlockState(cell).is(Blocks.DARK_OAK_SAPLING))
+                &&f.s.getItem(28).getCount()==1,"dark oak used only one sapling");
+            f.s.setItem(28,new ItemStack(Items.DARK_OAK_SAPLING,4));
+        });
+        h.succeedWhen(()->{
+            check(square.stream().allMatch(cell->f.l.getBlockState(cell).is(Blocks.DARK_OAK_SAPLING)),"waiting for dark oak square");
+            check(f.s.getItem(28).isEmpty(),"did not consume the four saplings");
+            f.v.setNoAi(true);
+        });
+    }
+
+    @GameTest(template="empty",timeoutTicks=360,batch="lumberjack_reduce")
+    public static void lumberjack_resize_cancels_cutting_outside_the_new_area(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK);
+        for(var cell:BlockPos.betweenClosed(f.p.offset(-5,-1,-5),f.p.offset(4,-1,4)))
+            f.l.setBlockAndUpdate(cell,Blocks.DIRT.defaultBlockState());
+        level(f,2,25);
+        check(IndustrialRules.selectSize(f.l,f.s,10),"select initial even area");
+        var root=lumberTree(f,f.p.east(4),Blocks.OAK_LOG,Blocks.OAK_LEAVES,5);
+        f.s.setItem(27,new ItemStack(Items.NETHERITE_AXE));
+        f.v.setPos(f.p.getX()+3.5,f.p.getY(),f.p.getZ()+1.5);
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->check(f.l.isEmptyBlock(root),"waiting for first cut"))
+            .thenExecute(()->check(IndustrialRules.selectSize(f.l,f.s,5),"shrink area"))
+            .thenIdle(85).thenExecute(()->{
+                check(f.l.getBlockState(root.above()).is(Blocks.OAK_LOG)&&count(f,Items.OAK_LOG)==1,"cut outside new area");
+                f.v.setNoAi(true);
+            }).thenSucceed();
+    }
 }

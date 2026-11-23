@@ -40,17 +40,18 @@ public final class WorkMenu extends AbstractContainerMenu {
         this.profession=profession>=0&&profession<Profession.values().length?Profession.values()[profession]:null;
         this.viaWorker=worker;this.player=inv.player;this.inventory=container==null?new SimpleContainer(EmploymentData.SLOTS):container;
         farmer=!hiring&&this.profession==Profession.FARMER;
-        fieldLayout=farmer||!hiring&&this.profession==Profession.BEEKEEPER;
+        fieldLayout=farmer||!hiring&&(this.profession==Profession.BEEKEEPER||this.profession==Profession.LUMBERJACK);
         if(!hiring){
             for(int row=0;row<3;row++)for(int col=0;col<9;col++)
                 addSlot(pageSlot(inventory,row*9+col,(fieldLayout?FARM_GRID_X:94)+col*18,(fieldLayout?FARM_STOCK_Y:26)+row*18));
             if(fieldLayout){
                 int[] inputs={EmploymentData.TOOL,EmploymentData.INPUT_A,farmer?EmploymentData.EQUIPMENT:EmploymentData.INPUT_B};
-                for(int i=0;i<inputs.length;i++){
+                for(int i=0;i<(this.profession==Profession.LUMBERJACK?2:inputs.length);i++){
                     int index=i;
                     addSlot(new Slot(inventory,inputs[i],farmAuxX(i),FARM_AUX_Y){
                         @Override public boolean isActive(){return !settingsPage;}
                         @Override public boolean mayPlace(ItemStack stack){
+                            if(WorkMenu.this.profession==Profession.LUMBERJACK)return index==0?br.com.kraftcity.industry.LumberjackWork.cutTicks(stack)>0:br.com.kraftcity.industry.LumberjackWork.sapling(stack);
                             if(!farmer)return br.com.kraftcity.industry.ApiaryWork.validInput(index,stack);
                             return switch(index){
                                 case 0->stack.getItem() instanceof HoeItem;
@@ -117,14 +118,14 @@ public final class WorkMenu extends AbstractContainerMenu {
         var station=station();
         var payment=station.getItem(EmploymentData.PAYMENT);
         int price=Employment.cost(p.getLevel(),station.sector,worker);
-        if((job==Profession.FARMER||job==Profession.BEEKEEPER||job==Profession.SOLDIER)&&price>=0&&payment.is(Items.EMERALD)&&payment.getCount()>price
+        if((job==Profession.FARMER||job==Profession.BEEKEEPER||job==Profession.LUMBERJACK||job==Profession.SOLDIER)&&price>=0&&payment.is(Items.EMERALD)&&payment.getCount()>price
             &&!roomFor(p.getInventory(),payment,payment.getCount()-price)){
             status="Libere espaço para receber o troco.";
             sync(p);
             return;
         }
         String result=Employment.hire(p,station,worker,job);
-        if(result.equals("ok")&&(job==Profession.FARMER||job==Profession.BEEKEEPER||job==Profession.SOLDIER))returnBalance(p,station);
+        if(result.equals("ok")&&(job==Profession.FARMER||job==Profession.BEEKEEPER||job==Profession.LUMBERJACK||job==Profession.SOLDIER))returnBalance(p,station);
         status=switch(result){case "ok"->"Contratação concluída.";case "pending"->"Preço comercial pendente.";
             case "payment"->"Esmeraldas insuficientes.";case "ineligible"->"Morador indisponível.";default->"Seleção inválida.";};
         if(result.equals("ok")){var s=station();p.closeContainer();WorkBlock.open(p,s);}else sync(p);

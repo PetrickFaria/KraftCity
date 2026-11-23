@@ -22,11 +22,12 @@ public final class IndustrialRules {
     public static int maximumSize(int level){return 3+2*Math.min(5,Math.max(1,level));}
     public static int minimumSize(Profession profession){return profession==Profession.BEEKEEPER?7:5;}
     public static int maximumSize(Profession profession,int level){
-        return maximumSize(level)+(minimumSize(profession)-5);
+        return profession==Profession.LUMBERJACK?5*Math.min(5,Math.max(1,level)):maximumSize(level)+(minimumSize(profession)-5);
     }
     public static int size(ServerLevel l,EmploymentData.Station s){
         int max=maximumSize(s.profession,level(l,s));
         int selected=s.industry.getInt("size");
+        if(s.profession==Profession.LUMBERJACK)return selected>=5&&selected<=max&&selected%5==0?selected:5;
         if(s.profession==Profession.BEEKEEPER){
             // Preserve the old selected width where it still exists, even while the post is vacant.
             int migrated=validSize(selected,15)?Math.max(7,selected):7;
@@ -46,6 +47,10 @@ public final class IndustrialRules {
     private static boolean validSize(int size,int max){return size>=5&&size<=max&&size%2==1;}
     public static boolean selectSize(ServerLevel l,EmploymentData.Station s,int size){
         int max=maximumSize(s.profession,level(l,s));
+        if(s.profession==Profession.LUMBERJACK){
+            if(size<5||size>max||size%5!=0)return false;
+            s.industry.putInt("size",size);s.setChanged();return true;
+        }
         if(size<minimumSize(s.profession)||!validSize(size,max)||s.profession!=Profession.FARMER&&s.profession!=Profession.BEEKEEPER&&level(l,s)<5&&size!=max)return false;
         s.industry.putInt("size",size);s.industry.remove("cursor");s.setChanged();return true;
     }
@@ -53,7 +58,7 @@ public final class IndustrialRules {
     /** A completed action is one unit; cumulative thresholds are 25/50/75/100. */
     public static void progress(ServerLevel l,EmploymentData.Station s){
         if(s.worker==null||s.profession==null)return;if(s.profession==Profession.FARMER)size(l,s);var data=WorkforceData.get(l);var old=data.progress(s.worker,s.profession.id());
-        long xp=old.xp()+1;int step=s.profession==Profession.FARMER||s.profession==Profession.SHEPHERD||s.profession==Profession.BEEKEEPER?FARMER_XP_PER_LEVEL:EmploymentConfig.OTHER_LEVEL_ACTIONS.get();
+        long xp=old.xp()+1;int step=s.profession==Profession.FARMER||s.profession==Profession.SHEPHERD||s.profession==Profession.BEEKEEPER||s.profession==Profession.LUMBERJACK?FARMER_XP_PER_LEVEL:EmploymentConfig.OTHER_LEVEL_ACTIONS.get();
         int level=Math.min(5,Math.max(old.level(),1+(int)Math.min(4,xp/step)));
         data.setProgress(s.worker,s.profession.id(),level,xp);s.setChanged();
     }

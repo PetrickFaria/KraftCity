@@ -21,7 +21,7 @@ abstract class ApiaryHandSaveMixin {
         var data=worker.getPersistentData();
         if(!data.contains("KCOriginalHand",Tag.TAG_COMPOUND))return;
         var station=EmploymentData.get(level).assigned(worker.getUUID());
-        if(station==null||station.profession!=Profession.BEEKEEPER)return;
+        if(station==null||(station.profession!=Profession.BEEKEEPER&&station.profession!=Profession.LUMBERJACK))return;
         var hands=tag.getList("HandItems",Tag.TAG_COMPOUND);
         if(!hands.isEmpty())hands.set(0,data.getCompound("KCOriginalHand").copy());
         var chances=tag.getList("HandDropChances",Tag.TAG_FLOAT);
