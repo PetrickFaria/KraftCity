@@ -53,6 +53,7 @@ public final class ApiaryWork {
     private static final TagKey<net.minecraft.world.item.Item> EMPTY_BOTTLES=
         TagKey.create(Registry.ITEM_REGISTRY,new ResourceLocation("residenciasaldeoes","apiary_bottles"));
     private static final boolean TRACE = Boolean.getBoolean("kraftcity.debugApiaryTaming");
+    private record Candidate(Bee bee,boolean canFeed,boolean lured,boolean visible,double distance){}
     private record Scan(String task,int found,int eligible,int flowers,int population,int capacity,UUID target){}
     private static final Map<Villager,Scan> LAST_SCAN=new WeakHashMap<>();
     private static final Map<Villager,Long> FLOWER_SWINGS=new WeakHashMap<>();
@@ -111,14 +112,22 @@ public final class ApiaryWork {
             var nearby=level.getEntitiesOfClass(Bee.class,worker.getBoundingBox().inflate(12),
                 bee->bee.distanceToSqr(worker)<=100||ApiaryBeeFlight.luredBy(bee,worker));
             var eligible=nearby.stream().filter(bee->wildCandidate(bee)&&ApiaryBeeFlight.available(bee,worker)).toList();
-            var wild=eligible.stream()
-                .filter(bee->!level.isRaining()||work.contains(bee.position())&&visible(level,worker,bee.getEyePosition(),null))
-                .min(Comparator
-                .comparing((Bee bee)->!ApiaryBeeFlight.luredBy(bee,worker))
-                .thenComparing(bee->!worker.hasLineOfSight(bee))
-                .thenComparingDouble(worker::distanceToSqr)).orElse(null);
-            if(wild!=null){
+            var candidates=eligible.stream()
+                .map(bee->new Candidate(bee,canFeed(level,worker,bee,work),
+                    ApiaryBeeFlight.luredBy(bee,worker),worker.hasLineOfSight(bee),bee.distanceToSqr(worker)))
+                .filter(candidate->!level.isRaining()||candidate.canFeed())
+                .sorted(Comparator.comparing((Candidate candidate)->!candidate.canFeed())
+                    .thenComparing(candidate->!candidate.lured())
+                    .thenComparing(candidate->!candidate.visible())
+                    .thenComparingDouble(Candidate::distance))
+                .limit(capacity-population).map(Candidate::bee).toList();
+            if(!candidates.isEmpty()){
+                var wild=candidates.get(0);
                 scan(worker,"taming",nearby.size(),eligible.size(),flowers,population,capacity,wild);
+                if(!level.isRaining()&&work.expandTowards(0,-1,0).contains(worker.position())){
+                    // Keep the colony candidates nearby while the worker feeds them one at a time.
+                    for(var candidate:candidates)ApiaryBeeFlight.lure(candidate,worker,work);
+                }
                 domesticate(level,station,worker,wild,flowers,work);
                 return;
             }
@@ -273,6 +282,10 @@ public final class ApiaryWork {
             &&!bee.isAngry()&&!bee.hasStung()&&!bee.isInLove();
     }
 
+    private static boolean canFeed(ServerLevel level,Villager worker,Bee bee,AABB area){
+        return area.contains(bee.position())&&visible(level,worker,bee.getEyePosition(),null);
+    }
+
     private static void domesticate(ServerLevel level,EmploymentData.Station station,Villager worker,Bee bee,ItemStack flowers,AABB area){
         show(worker,flowers);
         worker.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,bee.getEyePosition());
@@ -281,11 +294,7 @@ public final class ApiaryWork {
             return;
         }
         worker.getNavigation().stop();
-        if(!area.contains(bee.position())||!visible(level,worker,bee.getEyePosition(),null)){
-            ApiaryBeeFlight.lure(bee,worker,area);
-            return;
-        }
-        ApiaryBeeFlight.finishLure(bee);
+        if(!canFeed(level,worker,bee,area))return;
         var data=bee.getPersistentData();
         if(data.hasUUID(OWNER)||beeCount(station)>=capacity(level,station))return;
         if(!IndustrialWork.allowed(level,station,worker,bee.blockPosition(),bee,"apiary_tame")){
@@ -307,6 +316,7 @@ public final class ApiaryWork {
         worker.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,bee.getEyePosition());
         worker.swing(InteractionHand.MAIN_HAND);
         if(remaining<=0){
+            ApiaryBeeFlight.finishLure(bee);
             bind(station,bee);
             clearWorkerAnger(bee,worker);
             data.remove(ATTEMPT);

@@ -543,6 +543,35 @@ public final class IndustryGameTests {
             }).thenSucceed();
     }
 
+    @GameTest(template="empty",timeoutTicks=1200,batch="apiary_three_wild")
+    public static void three_wild_bees_with_mob_griefing_disabled(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        f.l.setRainLevel(0);
+        var start=Vec3.atBottomCenterOf(f.p.above());
+        f.v.setPos(start);
+        var rule=f.l.getGameRules().getRule(net.minecraft.world.level.GameRules.RULE_MOBGRIEFING);
+        rule.set(false,f.l.getServer());
+        h.runAfterDelay(1150,()->rule.set(true,f.l.getServer()));
+        var bees=new ArrayList<Bee>();
+        for(var offset:List.of(new Vec3(2,.1,0),new Vec3(0,.15,2),new Vec3(1,.25,-2))){
+            var bee=EntityType.BEE.create(f.l);bee.setPos(start.add(offset));f.l.addFreshEntity(bee);bees.add(bee);
+        }
+        f.s.setItem(29,new ItemStack(Items.POPPY,64));
+        h.startSequence().thenWaitUntil(()->{
+            check(bees.stream().allMatch(bee->((ApiaryBeeAppearance)bee).kraftcity$isBonded()),"Waiting for three natural bonds");
+            int consumed=64-f.s.getItem(29).getCount();
+            check(consumed>=3&&consumed<=15&&f.s.industry.getCompound("apiary_bees").size()==3,"Incorrect slots or population");
+        }).thenExecute(()->{
+            var excess=EntityType.BEE.create(f.l);excess.setPos(start.add(-2,0,0));f.l.addFreshEntity(excess);bees.add(excess);
+        }).thenIdle(75).thenExecute(()->{
+            check(!((ApiaryBeeAppearance)bees.get(3)).kraftcity$isBonded()&&!bees.get(3).getPersistentData().contains("KCApiaryAttempt"),"Fourth bee interacted at capacity");
+            rule.set(true,f.l.getServer());
+            System.out.println("KC127_THREE_NORMAL_BONDS_AT_CAPACITY_WITHOUT_MOB_GRIEFING");
+        }).thenSucceed();
+    }
+
+
     @GameTest(template="empty",timeoutTicks=80,batch="apiary_boundaries")
     public static void apiary_bonded_movement_is_bounded_on_all_six_faces(GameTestHelper h){
         var f=fixture(h,Profession.BEEKEEPER);
