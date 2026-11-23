@@ -17,6 +17,7 @@
     "SoldierArmorLayerInvoker",
     "BuilderVillagerArmsMixin",
     "BuilderSteveArmsMixin",
+    "LumberjackSwingMixin",
     "FarmerHoeLayerMixin"
   ],
   "injectors": {
