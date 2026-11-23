@@ -436,13 +436,18 @@ public final class IndustryGameTests {
         step(f,1);
         check(f.v.getMainHandItem().is(Items.DANDELION)&&f.s.getItem(29).isEmpty(),"Feeding did not show and consume flower");
         check(!((br.com.kraftcity.industry.ApiaryBeeAppearance)bee).kraftcity$isBonded(),"Unfinished bond changed appearance");
-        step(f,1);
-        check(f.v.getMainHandItem().is(Items.GLASS_BOTTLE),"Hand did not return to bottle");
-        f.s.setItem(28,ItemStack.EMPTY);
-        f.s.setItem(27,ItemStack.EMPTY);
-        step(f,1);
-        check(f.v.getMainHandItem().isEmpty(),"Missing supplies left a phantom display");
-        h.succeed();
+        var saved=f.v.saveWithoutId(new CompoundTag());
+        check(ItemStack.of(saved.getList("HandItems",net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0)).isEmpty(),
+            "Visual mirror became durable equipment in the saved villager");
+        h.runAfterDelay(10,()->{
+            step(f,1);
+            check(f.v.getMainHandItem().is(Items.GLASS_BOTTLE),"Hand did not return to bottle after the swing");
+            f.s.setItem(28,ItemStack.EMPTY);
+            f.s.setItem(27,ItemStack.EMPTY);
+            step(f,1);
+            check(f.v.getMainHandItem().isEmpty(),"Missing supplies left a phantom display");
+            h.succeed();
+        });
     }
 
     @GameTest(template="empty",timeoutTicks=420,batch="apiary_lure")

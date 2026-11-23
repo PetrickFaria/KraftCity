@@ -41,6 +41,7 @@
     "SoldierBoundaryMixin",
     "ApiaryBeeMovementMixin",
     "ApiaryBeeAppearanceMixin",
+    "ApiaryHandSaveMixin",
     "SoldierMoveControlMixin",
     "SoldierBodyControlMixin",
     "WorkerConversionMixin",

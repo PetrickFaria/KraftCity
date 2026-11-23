@@ -5,6 +5,8 @@ import br.com.kraftcity.employment.Profession;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -50,6 +52,7 @@ public final class ApiaryWork {
     private static final String OWNER="KCApiary", ID="KCApiaryBee", ATTEMPT="KCApiaryAttempt", BREED="KCApiaryBreed";
     private static final TagKey<net.minecraft.world.item.Item> EMPTY_BOTTLES=
         TagKey.create(Registry.ITEM_REGISTRY,new ResourceLocation("residenciasaldeoes","apiary_bottles"));
+    private static final Map<Villager,Long> FLOWER_SWINGS=new WeakHashMap<>();
     private static final int SHEARS=EmploymentData.TOOL, BOTTLES=EmploymentData.INPUT_A, FLOWERS=EmploymentData.INPUT_B;
 
     public static boolean validInput(int slot,ItemStack stack){
@@ -85,7 +88,7 @@ public final class ApiaryWork {
 
     static void tick(ServerLevel level,EmploymentData.Station station,Villager worker){
         var work=IndustrialWork.area(level,station);
-        show(worker,collectionItem(station));
+        if(FLOWER_SWINGS.getOrDefault(worker,0L)<=level.getGameTime())show(worker,collectionItem(station));
         var hives=registeredHives(level,station,work);
         var bees=level.getEntitiesOfClass(Bee.class,work,bee->work.contains(bee.position())&&bee.isAlive());
         for(var pos:hives){
@@ -276,6 +279,7 @@ public final class ApiaryWork {
             attempt.putInt("remaining",1+bee.getRandom().nextInt(5));
         }
         flowers.shrink(1);
+        FLOWER_SWINGS.put(worker,level.getGameTime()+8);
         int remaining=attempt.getInt("remaining")-1;
         worker.getNavigation().stop();
         worker.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,bee.getEyePosition());
@@ -317,6 +321,7 @@ public final class ApiaryWork {
             bee.setInLove(null);
         }
         flowers.shrink(2);
+        FLOWER_SWINGS.put(worker,now+8);
         worker.getNavigation().stop();
         worker.swing(InteractionHand.MAIN_HAND);
         station.industry.putLong("apiary_breed_until",now+600);
