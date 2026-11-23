@@ -897,7 +897,12 @@ public final class IndustryGameTests {
             var restored=EmploymentData.load(EmploymentData.get(f.l).save(new CompoundTag())).station(f.s.id);
             check(restored.getItem(26).getCount()==7&&restored.industry.getLong("fish_elapsed")==42&&restored.worker.equals(f.v.getUUID()),"persist "+p);
             var player=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"SharedJob"));var a=new WorkMenu(1,player.getInventory(),f.s,false,null);var b=new WorkMenu(2,player.getInventory(),f.s,false,f.v.getUUID());
-            check(a.inventory==b.inventory&&a.slots.size()==(p==Profession.FARMER||p==Profession.BEEKEEPER?66:68),"dual menu "+p);
+            int expectedSlots=switch(p){
+                case FARMER,BEEKEEPER->66;
+                case LUMBERJACK->65;
+                default->68;
+            };
+            check(a.inventory==b.inventory&&a.slots.size()==expectedSlots&&b.slots.size()==expectedSlots,"dual menu "+p);
         }h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
@@ -1132,6 +1137,10 @@ public final class IndustryGameTests {
                 case FISHERMAN->water(f);
                 case BREEDER->animal(f,EntityType.WOLF,false);
                 case BEEKEEPER->hive(f,true);
+                case LUMBERJACK->{
+                    lumberTree(f,f.p.east(2),Blocks.OAK_LOG,Blocks.OAK_LEAVES,5);
+                    f.v.setNoAi(false);
+                }
                 default->{}
             }
             step(f,1);check(WorkforceData.get(f.l).progress(f.v.getUUID(),p.id()).xp()==0,"free progress without requirement "+p);

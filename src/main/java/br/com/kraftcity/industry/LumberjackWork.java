@@ -128,6 +128,9 @@ public final class LumberjackWork {
         session.resetCut();
         if (level.getGameTime() >= session.scanAfter) {
             session.scanAfter = level.getGameTime() + SEARCH_INTERVAL;
+            if (cutTicks(axe)==0 && (!job.isEmpty() || IndustrialWork.find(station,LumberjackWork::sapling,0,EmploymentData.INPUT_A+1)<0)) {
+                IndustrialWork.alert(level,station,"lumberjack_axe","Falta um machado válido para cortar árvores.");
+            }
             if (cutTicks(axe) > 0 && job.isEmpty()) {
                 var tree = selectTree(level, station, worker, session, area);
                 if (tree != null) {
