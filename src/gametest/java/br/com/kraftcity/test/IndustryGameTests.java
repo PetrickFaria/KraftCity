@@ -15,6 +15,7 @@ import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.animal.*;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.*;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.entity.*;
 import net.minecraft.world.level.block.state.BlockState;
@@ -570,6 +571,51 @@ public final class IndustryGameTests {
         }).thenSucceed();
     }
 
+
+    @GameTest(template="empty",timeoutTicks=230,batch="apiary_roster_repair")
+    public static void apiary_repairs_missing_records_without_touching_live_or_housed_bees(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        f.l.setRainLevel(0);
+        var worker=Vec3.atBottomCenterOf(f.p.above());
+        f.v.setPos(worker);
+        var live=apiaryBee(f,1);
+        f.s.setItem(29,new ItemStack(Items.POPPY,2));
+        step(f,1);
+        var housed=apiaryBee(f,1);
+        step(f,1);
+        var liveId=live.getPersistentData().getUUID("KCApiaryBee");
+        var housedId=housed.getPersistentData().getUUID("KCApiaryBee");
+        var hivePos=f.p.east().above();
+        f.l.setBlock(hivePos,Blocks.BEEHIVE.defaultBlockState(),3);
+        ((BeehiveBlockEntity)f.l.getBlockEntity(hivePos)).addOccupant(housed,false);
+        var orphan=UUID.randomUUID();
+        var roster=f.s.industry.getCompound("apiary_bees");
+        roster.putBoolean(orphan.toString(),true);
+        var command="kraftcity apiario reparar "+f.p.getX()+" "+f.p.getY()+" "+f.p.getZ()+" ";
+        var server=f.l.getServer();
+        var source=server.createCommandSourceStack().withLevel(f.l).withSuppressedOutput();
+        var area=IndustrialWork.area(f.l,f.s).inflate(8);
+        var first=new ChunkPos(new BlockPos(area.minX,0,area.minZ));
+        var last=new ChunkPos(new BlockPos(area.maxX,0,area.maxZ));
+        h.startSequence().thenWaitUntil(()->{
+            for(int x=first.x;x<=last.x;x++)for(int z=first.z;z<=last.z;z++)
+                check(f.l.getChunkSource().getChunkNow(x,z)!=null&&f.l.areEntitiesLoaded(ChunkPos.asLong(x,z)),
+                    "Waiting for apiary surroundings");
+        }).thenExecute(()->{
+            check(server.getCommands().performPrefixedCommand(source,command+orphan+" "+liveId)==0&&roster.size()==3,
+                "Repair removed a loaded bee or partially applied");
+            check(server.getCommands().performPrefixedCommand(source,command+housedId)==0&&roster.size()==3,
+                "Repair removed a bee inside a hive");
+            check(server.getCommands().performPrefixedCommand(source,command+orphan)==1&&roster.size()==2
+                &&f.s.industry.getCompound("apiary_retired_bees").contains(orphan.toString()),"Missing bond was not archived");
+            var arriving=apiaryBee(f,1);
+            arriving.setPos(worker.add(0,.35,1.2));
+            f.s.setItem(29,new ItemStack(Items.DANDELION));
+            step(f,1);
+            check(((ApiaryBeeAppearance)arriving).kraftcity$isBonded()&&f.s.getItem(29).isEmpty(),
+                "Archived record still prevents taming");
+        }).thenSucceed();
+    }
 
     @GameTest(template="empty",timeoutTicks=80,batch="apiary_boundaries")
     public static void apiary_bonded_movement_is_bounded_on_all_six_faces(GameTestHelper h){

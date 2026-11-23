@@ -48,14 +48,17 @@ import net.minecraftforge.fml.common.Mod;
 
 @Mod.EventBusSubscriber(modid="residenciasaldeoes")
 public final class ApiaryWork {
-    private static final String HIVES="apiary_hives", BEES="apiary_bees";
-    private static final String OWNER="KCApiary", ID="KCApiaryBee", ATTEMPT="KCApiaryAttempt", BREED="KCApiaryBreed";
+    private static final String HIVES="apiary_hives";
+    static final String BEES="apiary_bees", ARCHIVED_BEES="apiary_retired_bees";
+    static final String OWNER="KCApiary", ID="KCApiaryBee";
+    private static final String ATTEMPT="KCApiaryAttempt", BREED="KCApiaryBreed";
     private static final TagKey<net.minecraft.world.item.Item> EMPTY_BOTTLES=
         TagKey.create(Registry.ITEM_REGISTRY,new ResourceLocation("residenciasaldeoes","apiary_bottles"));
     private static final boolean TRACE = Boolean.getBoolean("kraftcity.debugApiaryTaming");
     private record Candidate(Bee bee,boolean canFeed,boolean lured,boolean visible,double distance){}
     private record Scan(String task,int found,int eligible,int flowers,int population,int capacity,UUID target){}
-    private static final Map<Villager,Scan> LAST_SCAN=new WeakHashMap<>();
+    private record LoggedScan(Scan state,long tick){}
+    private static final Map<Villager,LoggedScan> LAST_SCAN=new WeakHashMap<>();
     private static final Map<Villager,Long> FLOWER_SWINGS=new WeakHashMap<>();
     private static final int SHEARS=EmploymentData.TOOL, BOTTLES=EmploymentData.INPUT_A, FLOWERS=EmploymentData.INPUT_B;
 
@@ -106,8 +109,13 @@ public final class ApiaryWork {
         int population=beeCount(station)+reservedBirth(level,station);
         int capacity=capacity(level,station);
         if(!validInput(2,flowers)||population>=capacity){
-            scan(worker,population>=capacity?"capacity":"no_flowers",
-                0,0,flowers,population,capacity,null);
+            if(TRACE){
+                var observed=level.getEntitiesOfClass(Bee.class,worker.getBoundingBox().inflate(10),
+                    bee->bee.distanceToSqr(worker)<=100);
+                int eligible=(int)observed.stream().filter(ApiaryWork::wildCandidate).count();
+                scan(worker,population>=capacity?"capacity":"no_flowers",
+                    observed.size(),eligible,flowers,population,capacity,null);
+            }
         }else{
             var nearby=level.getEntitiesOfClass(Bee.class,worker.getBoundingBox().inflate(12),
                 bee->bee.distanceToSqr(worker)<=100||ApiaryBeeFlight.luredBy(bee,worker));
@@ -144,8 +152,11 @@ public final class ApiaryWork {
     private static void scan(Villager worker,String task,int found,int eligible,ItemStack flowers,int population,int capacity,Bee target){
         if(!TRACE)return;
         var state=new Scan(task,found,eligible,flowers.getCount(),population,capacity,target==null?null:target.getUUID());
-        if(!state.equals(LAST_SCAN.put(worker,state)))
-            com.mojang.logging.LogUtils.getLogger().info("Apiary taming worker={} {}",worker.getUUID(),state);
+        long now=worker.level.getGameTime();
+        var last=LAST_SCAN.get(worker);
+        if(last!=null&&(state.equals(last.state())||state.task().equals(last.state().task())&&now-last.tick()<20))return;
+        LAST_SCAN.put(worker,new LoggedScan(state,now));
+        com.mojang.logging.LogUtils.getLogger().info("Apiary taming worker={} {}",worker.getUUID(),state);
     }
 
     private static List<BlockPos> registeredHives(ServerLevel level,EmploymentData.Station station,AABB area){
@@ -432,6 +443,7 @@ public final class ApiaryWork {
         if(!(event.getEntity() instanceof Bee bee)||!(event.getLevel() instanceof ServerLevel level))return;
         ApiaryBeeFlight.install(bee);
         var existing=owner(level,bee);
+        restoreArchivedBond(level,existing,bee);
         ((ApiaryBeeAppearance)bee).kraftcity$setBonded(existing!=null&&owned(bee.getPersistentData(),existing));
         var data=bee.getPersistentData();
         if(!data.hasUUID("KCApiaryNewborn"))return;
@@ -444,6 +456,17 @@ public final class ApiaryWork {
             bind(station,bee);
             IndustrialRules.progress(level,station);
         }
+    }
+
+    private static void restoreArchivedBond(ServerLevel level,EmploymentData.Station station,Bee bee){
+        var data=bee.getPersistentData();
+        if(station==null||!station.active||!station.dimension.equals(level.dimension())
+                ||!data.hasUUID(ID))return;
+        var archived=station.industry.getCompound(ARCHIVED_BEES);
+        var id=data.getUUID(ID).toString();
+        if(!archived.contains(id)||beeCount(station)+reservedBirth(level,station)>=capacity(level,station))return;
+        archived.remove(id);
+        bind(station,bee);
     }
 
     @SubscribeEvent(priority=EventPriority.LOWEST)
@@ -494,6 +517,7 @@ public final class ApiaryWork {
         var anger=bee.getPersistentAngerTarget();
         var target=anger!=null&&level.getEntity(anger) instanceof Villager worker?worker:bee.getTarget();
         if(protectedWorker(bee,target))clearWorkerAnger(bee,(Villager)target);
+        if(bee.tickCount%20==0)restoreArchivedBond(level,owner(level,bee),bee);
         var area=territory(level,bee);
         if(area==null)return;
         ApiaryBeeFlight.guide(level,bee,area);
