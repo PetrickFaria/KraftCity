@@ -7,7 +7,7 @@ import java.util.List;
 import net.minecraft.client.model.geom.ModelPart;
 
 /** Anchors supplied by the active Fresh Animations 1.8 model geometry. */
-final class FreshVillagerParts {
+public final class FreshVillagerParts {
     record Anchor(List<ModelPart> chain,ModelPart.Cube geometry){
         void transform(PoseStack poses,boolean head){
             for(var part:chain)part.translateAndRotate(poses);
@@ -18,6 +18,14 @@ final class FreshVillagerParts {
             poses.translate((geometry.minX+geometry.maxX)/32F,(head?geometry.maxY:geometry.minY)/16F,
                 (geometry.minZ+geometry.maxZ)/32F);
         }
+    }
+
+    /** Aligns headwear to a nested Fresh Animations head, when present. */
+    public static boolean applyHead(ModelPart root,PoseStack poses){
+        var anchor=head(root);
+        if(anchor==null)return false;
+        anchor.transform(poses,true);
+        return true;
     }
 
     static Anchor head(ModelPart root){

@@ -2,6 +2,7 @@ package br.com.kraftcity.industry.client;
 
 import br.com.kraftcity.employment.Profession;
 import br.com.kraftcity.employment.client.WorkerPose;
+import br.com.kraftcity.military.client.FreshVillagerParts;
 import br.com.residenciasaldeoes.ResidenciasDosAldeoes;
 import br.com.residenciasaldeoes.client.ResidentAppearanceModels;
 import br.com.residenciasaldeoes.client.ResidentOpacity;
@@ -82,7 +83,8 @@ public final class BeekeeperHelmetLayer extends RenderLayer<Villager, VillagerMo
 
         pose.pushPose();
         try {
-            getParentModel().getHead().translateAndRotate(pose);
+            var model = getParentModel();
+            if (!FreshVillagerParts.applyHead(model.root(), pose)) model.getHead().translateAndRotate(pose);
             hat.render(pose, buffers.getBuffer(RenderType.entityCutoutNoCull(HAT_TEXTURE)), light, OverlayTexture.NO_OVERLAY);
             // These quads emit vertices directly, so they apply the resident fade here.
             // Preview buffers already scale incoming vertex alpha.
