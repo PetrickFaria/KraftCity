@@ -178,9 +178,9 @@ public final class IndustrialWork {
     }
     public static boolean insert(EmploymentData.Station s,ItemStack out,boolean commit){return outputs(s,List.of(out),commit);}
     public static void deposit(ServerLevel l,EmploymentData.Station s,Villager v){
-        if(s.profession==Profession.FARMER){FarmerLogistics.depositDirect(l,s,v);return;}
+        if(FarmerLogistics.fieldWorker(s)){FarmerLogistics.depositDirect(l,s,v);return;}
         var offers=DiscardChests.offers(s,stack->true);
-        var destinations=s.profession==Profession.BEEKEEPER?br.com.kraftcity.logistics.DiscardBinding.destinations(l,s,area(l,s)):DiscardChests.destinations(l,s,area(l,s));
+        var destinations=DiscardChests.destinations(l,s,area(l,s));
         for(var pos:destinations){
             if(!DiscardChests.hasOffers(offers))break;
             DiscardChests.deposit(l,s,v,pos,offers,"deposit");

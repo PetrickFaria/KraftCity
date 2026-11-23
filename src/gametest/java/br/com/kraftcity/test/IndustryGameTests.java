@@ -349,7 +349,11 @@ public final class IndustryGameTests {
             var area=IndustrialWork.area(f.l,f.s);
             check(area.getXsize()==next&&area.getZsize()==next&&area.getYsize()==5&&area.minY==f.p.getY()+1,"Incorrect apiary bounds");
             step(f,1);
-            check(f.s.industry.getList("apiary_hives",net.minecraft.nbt.Tag.TAG_LONG).size()==lv,"Wrong hive cap at Lv"+lv);
+            for(int tier=1;tier<=lv;tier++){
+                check(IndustrialRules.selectSize(f.l,f.s,5+2*tier),"Cannot select legal width");
+                step(f,1);
+                check(f.s.industry.getList("apiary_hives",Tag.TAG_LONG).size()==tier,"Wrong hive cap at level "+lv+" / tier "+tier);
+            }
         }
         f.l.removeBlock(near,false);
         step(f,1);
@@ -701,6 +705,9 @@ public final class IndustryGameTests {
             check(saved.getTagElement("BlockStateTag").getString("honey_level").equals("3"),"Nest honey lost");
             level(f,2,25);
             f.l.setBlock(fence,Blocks.OAK_FENCE.defaultBlockState(),3);
+        }).thenIdle(30).thenExecute(()->{
+            check(f.l.isEmptyBlock(fence.above()),"Promotion alone placed a second hive");
+            check(IndustrialRules.selectSize(f.l,f.s,9),"Lv2 could not select 9x9");
             f.l.setBlock(fence.east(),Blocks.OAK_FENCE.defaultBlockState(),3);
         }).thenIdle(30).thenExecute(()->{
             check(f.l.isEmptyBlock(fence.above())&&f.l.isEmptyBlock(fence.east().above()),"A connected fence was used");
@@ -710,6 +717,127 @@ public final class IndustryGameTests {
             check(count(f,Items.BEE_NEST)==0&&f.l.getBlockState(fence.above()).getValue(BeehiveBlock.HONEY_LEVEL)==3
                 &&((BeehiveBlockEntity)f.l.getBlockEntity(fence.above())).getOccupantCount()==1,"Placement lost data or duplicated stock");
         }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=450,batch="kc131_hive_reduction")
+    public static void apiary_shrinks_waits_for_its_bee_and_recognizes_existing_hives_on_expansion(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.above()));
+        level(f,3,50);
+        check(IndustrialRules.selectSize(f.l,f.s,11),"Select Lv3 area");
+        var near=f.p.west().above();
+        var inner=f.p.east(2).above();
+        var outer=f.p.north(5).above();
+        for(var pos:List.of(near,inner,outer))f.l.setBlock(pos,Blocks.BEE_NEST.defaultBlockState(),3);
+        f.l.setBlock(inner,f.l.getBlockState(inner).setValue(BeehiveBlock.HONEY_LEVEL,3),3);
+        var bee=apiaryBee(f,1);
+        f.s.setItem(29,new ItemStack(Items.POPPY));
+        step(f,1);
+        var bond=bee.getPersistentData().getUUID("KCApiaryBee");
+        ApiaryWork.recordHive(f.l,bee.getPersistentData(),inner);
+        check(IndustrialRules.selectSize(f.l,f.s,7),"Shrink apiary");
+        f.v.setNoAi(false);
+        h.startSequence().thenIdle(90).thenExecute(()->{
+            var registered=f.s.industry.getList("apiary_hives",Tag.TAG_LONG);
+            check(registered.size()==1&&registered.get(0).equals(net.minecraft.nbt.LongTag.valueOf(near.asLong())),
+                "Shrink did not preserve nearest nest");
+            check(f.l.getBlockState(inner).is(Blocks.BEE_NEST)&&bee.isAlive()&&count(f,Items.BEE_NEST)==0,
+                "A nest was taken while its bee was outdoors");
+            ((BeehiveBlockEntity)f.l.getBlockEntity(inner)).addOccupant(bee,false);
+        }).thenWaitUntil(()->{
+            check(f.l.isEmptyBlock(inner)&&count(f,Items.BEE_NEST)==1,"Waiting for the returned bee and nest to reach stock");
+            check(f.l.getBlockState(outer).is(Blocks.BEE_NEST),"Worker collected outside its current selection");
+            var item=f.s.getItem(0);
+            var occupant=item.getTagElement("BlockEntityTag").getList("Bees",Tag.TAG_COMPOUND).getCompound(0);
+            check(occupant.getCompound("EntityData").getCompound("ForgeData").getUUID("KCApiaryBee").equals(bond)
+                &&item.getTagElement("BlockStateTag").getString("honey_level").equals("3"),"Stored identity or honey lost");
+        }).thenExecute(()->{
+            f.l.setBlock(f.p.south(2).above(),Blocks.OAK_FENCE.defaultBlockState(),3);
+            check(IndustrialRules.selectSize(f.l,f.s,11),"Expand without another promotion");
+        }).thenWaitUntil(()->{
+            var placed=f.p.south(2).above(2);
+            check(f.l.getBlockState(placed).is(Blocks.BEE_NEST)&&count(f,Items.BEE_NEST)==0,"Waiting for stocked nest");
+            check(f.s.industry.getList("apiary_hives",Tag.TAG_LONG).size()==3
+                &&f.l.getBlockState(outer).is(Blocks.BEE_NEST),"Existing outer nest was not recognized");
+            var hive=(BeehiveBlockEntity)f.l.getBlockEntity(placed);
+            check(hive.getOccupantCount()==1&&f.l.getBlockState(placed).getValue(BeehiveBlock.HONEY_LEVEL)==3,"Replaced nest lost content");
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=700,batch="kc131_hive_craft")
+    public static void apiary_crafts_only_for_open_capacity_and_consumes_exact_split_ingredients(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.above()));
+        f.l.setBlock(f.p.east().above(),Blocks.BEEHIVE.defaultBlockState(),3);
+        f.s.setItem(0,new ItemStack(Items.HONEYCOMB,6));
+        f.s.setItem(1,new ItemStack(Items.OAK_PLANKS,2));
+        f.s.setItem(2,new ItemStack(Items.BIRCH_PLANKS));
+        level(f,2,25);
+        f.v.setNoAi(false);
+        h.startSequence().thenIdle(90).thenExecute(()->{
+            check(count(f,Items.BEEHIVE)==0&&count(f,Items.HONEYCOMB)==6,"Promotion alone authorized crafting");
+            check(IndustrialRules.selectSize(f.l,f.s,9),"Expand to crafting capacity");
+            f.s.setItem(2,ItemStack.EMPTY);
+        }).thenIdle(45).thenExecute(()->{
+            check(count(f,Items.BEEHIVE)==0&&count(f,Items.HONEYCOMB)==6,"Two planks authorized crafting");
+            f.s.setItem(0,new ItemStack(Items.HONEYCOMB,5));
+            f.s.setItem(2,new ItemStack(Items.BIRCH_PLANKS));
+        }).thenIdle(45).thenExecute(()->{
+            check(count(f,Items.BEEHIVE)==0&&count(f,Items.HONEYCOMB)==5,"Five combs authorized crafting");
+            f.s.setItem(0,new ItemStack(Items.HONEYCOMB,10));
+            f.s.setItem(3,new ItemStack(Items.BEE_NEST));
+        }).thenIdle(90).thenExecute(()->{
+            check(count(f,Items.HONEYCOMB)==10&&count(f,Items.BEEHIVE)==0,"Existing stored nest did not suppress crafting");
+            f.s.setItem(3,ItemStack.EMPTY);
+            f.s.setItem(1,new ItemStack(Items.OAK_PLANKS,4));
+            for(int slot=2;slot<27;slot++)f.s.setItem(slot,new ItemStack(Items.COBBLESTONE,64));
+        }).thenIdle(90).thenExecute(()->{
+            check(count(f,Items.HONEYCOMB)==10&&count(f,Items.OAK_PLANKS)==4&&count(f,Items.BEEHIVE)==0,"Full storage lost resources");
+            f.s.setItem(1,new ItemStack(Items.OAK_PLANKS,2));
+            f.s.setItem(2,new ItemStack(Items.BIRCH_PLANKS));
+        }).thenWaitUntil(()->{
+            check(count(f,Items.BEEHIVE)==1&&count(f,Items.HONEYCOMB)==4,"Waiting for exactly one hive from mixed planks");
+            check(count(f,Items.OAK_PLANKS)+count(f,Items.BIRCH_PLANKS)==0,"Recipe used the wrong number of planks");
+        }).thenExecute(()->{
+            // The player takes the first craft and supplies materials for another.
+            for(int slot=0;slot<27;slot++)f.s.setItem(slot,ItemStack.EMPTY);
+            f.s.setItem(0,new ItemStack(Items.HONEYCOMB,6));
+            f.s.setItem(1,new ItemStack(Items.OAK_PLANKS,3));
+        }).thenWaitUntil(()->{
+            check(count(f,Items.BEEHIVE)==1&&count(f,Items.HONEYCOMB)==0,"Six reserved combs were not sufficient");
+        }).thenExecute(()->{
+            f.s.setItem(27,new ItemStack(Items.SHEARS));
+            hive(f,true);
+        }).thenWaitUntil(()->{
+            check(count(f,Items.HONEYCOMB)==3,"First real harvest has not replenished the reserve");
+        }).thenExecute(()->{
+            var pos=f.p.east().above();
+            f.l.setBlock(pos,f.l.getBlockState(pos).setValue(BeehiveBlock.HONEY_LEVEL,5),3);
+        }).thenWaitUntil(()->{
+            check(count(f,Items.HONEYCOMB)==6&&count(f,Items.BEEHIVE)==1,"Second real harvest or anti-duplication failed");
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=80,batch="kc131_comb_reserve")
+    public static void apiary_discards_only_combs_above_the_shared_reserve(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        var pos=f.p.west().above();
+        f.l.setBlock(pos,Blocks.BARREL.defaultBlockState(),3);
+        var barrel=(BarrelBlockEntity)f.l.getBlockEntity(pos);
+        f.s.industry.putLong("discard",pos.asLong());
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.above()));
+        for(int total:new int[]{0,4,6,10,20}){
+            barrel.clearContent();
+            f.s.setItem(0,new ItemStack(Items.HONEYCOMB,Math.min(4,total)));
+            f.s.setItem(1,new ItemStack(Items.HONEYCOMB,Math.max(0,total-4)));
+            f.s.setItem(2,new ItemStack(Items.BEE_NEST));
+            IndustrialWork.deposit(f.l,f.s,f.v);
+            check(count(f,Items.HONEYCOMB)==Math.min(total,6)&&barrel.countItem(Items.HONEYCOMB)==Math.max(0,total-6)
+                &&count(f,Items.BEE_NEST)==1,"Reserve or conservation at "+total);
+        }
+        h.succeed();
     }
 
     @GameTest(template="empty",timeoutTicks=200,batch="kc130_hive_cycle")

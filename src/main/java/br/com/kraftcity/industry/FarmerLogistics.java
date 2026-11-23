@@ -453,9 +453,15 @@ public final class FarmerLogistics {
     private static ItemStack excess(EmploymentData.Station s,int slot,Map<Item,Integer> remaining){
         var stack=s.getItem(slot);
         if(s.profession==Profession.BEEKEEPER){
-            if(ApiaryHiveStock.reserved(stack))return ItemStack.EMPTY;
+            if(ApiaryHiveStock.isHive(stack)||stack.is(net.minecraft.tags.ItemTags.PLANKS))return ItemStack.EMPTY;
             for(int input=0;input<3;input++)if(ApiaryWork.validInput(input,stack))return ItemStack.EMPTY;
-            return stack;
+            if(!stack.is(net.minecraft.world.item.Items.HONEYCOMB))return stack;
+            int left=remaining.getOrDefault(stack.getItem(),ApiaryHiveStock.COMB_RESERVE);
+            int keep=Math.min(left,stack.getCount());
+            remaining.put(stack.getItem(),left-keep);
+            var surplus=stack.copy();
+            surplus.shrink(keep);
+            return surplus;
         }
         if(stack.isEmpty()||stack.getItem() instanceof net.minecraft.world.item.HoeItem
             ||stack.is(net.minecraft.world.item.Items.BONE_MEAL)||stack.is(net.minecraft.world.item.Items.WATER_BUCKET))return ItemStack.EMPTY;

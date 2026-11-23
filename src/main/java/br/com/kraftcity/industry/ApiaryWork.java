@@ -100,6 +100,15 @@ public final class ApiaryWork {
         var work=IndustrialWork.area(level,station);
         if(FLOWER_SWINGS.getOrDefault(worker,0L)<=level.getGameTime())show(worker,collectionItem(station));
         var hives=registeredHives(level,station,work);
+        var roster=station.industry.getCompound(BEES);
+        for(var id:roster.getAllKeys()){
+            if(!roster.contains(id,Tag.TAG_LONG))continue;
+            var home=BlockPos.of(roster.getLong(id));
+            if(!work.contains(Vec3.atCenterOf(home))||level.hasChunkAt(home)&&!(level.getBlockEntity(home) instanceof BeehiveBlockEntity)){
+                roster.putBoolean(id,true);
+                station.setChanged();
+            }
+        }
         var bees=level.getEntitiesOfClass(Bee.class,work,bee->work.contains(bee.position())&&bee.isAlive());
         for(var bee:bees)syncBond(level,bee);
         if(mobGriefing)for(var pos:hives){
@@ -166,29 +175,20 @@ public final class ApiaryWork {
     }
 
     private static List<BlockPos> registeredHives(ServerLevel level,EmploymentData.Station station,AABB area){
-        int limit=IndustrialRules.level(level,station);
+        int limit=hiveCapacity(level,station);
         var stored=station.industry.getList(HIVES,Tag.TAG_LONG);
-        var result=new ArrayList<BlockPos>();
+        var candidates=new java.util.HashSet<BlockPos>();
         for(Tag tag:stored){
             var pos=BlockPos.of(((LongTag)tag).getAsLong());
-            if(result.size()>=limit)break;
-            if(area.contains(Vec3.atCenterOf(pos))&&(!level.hasChunkAt(pos)
-                ||level.getBlockEntity(pos) instanceof BeehiveBlockEntity&&!claimed(level,station,pos)))
-                result.add(pos);
+            if(area.contains(Vec3.atCenterOf(pos))&&!level.hasChunkAt(pos))candidates.add(pos);
         }
-        if(result.size()<limit){
-            var candidates=new ArrayList<BlockPos>();
-            for(var pos:BlockPos.betweenClosed(new BlockPos(area.minX,area.minY,area.minZ),
+        for(var pos:BlockPos.betweenClosed(new BlockPos(area.minX,area.minY,area.minZ),
                 new BlockPos(area.maxX-1,area.maxY-1,area.maxZ-1))){
-                if(level.hasChunkAt(pos)&&level.getBlockEntity(pos) instanceof BeehiveBlockEntity
-                    &&!result.contains(pos)&&!claimed(level,station,pos))candidates.add(pos.immutable());
-            }
-            candidates.sort(Comparator.comparingDouble(station.pos::distSqr));
-            for(var pos:candidates){
-                if(result.size()>=limit)break;
-                result.add(pos);
-            }
+            if(level.hasChunkAt(pos)&&level.getBlockEntity(pos) instanceof BeehiveBlockEntity
+                    &&ApiaryHiveStock.belongsHere(level,station,pos))candidates.add(pos.immutable());
         }
+        var result=candidates.stream().sorted(Comparator.comparingDouble((BlockPos pos)->station.pos.distSqr(pos))
+            .thenComparingLong(BlockPos::asLong)).limit(limit).toList();
         var next=new ListTag();
         for(var pos:result)next.add(LongTag.valueOf(pos.asLong()));
         if(!next.equals(stored)){
@@ -200,8 +200,8 @@ public final class ApiaryWork {
 
     static boolean claimed(ServerLevel level,EmploymentData.Station station,BlockPos pos){
         for(var other:EmploymentData.get(level).stations()){
-            if(other==station||!other.active||other.profession!=Profession.BEEKEEPER||!station.dimension.equals(other.dimension))continue;
-            if(other.industry.getList(HIVES,Tag.TAG_LONG).contains(LongTag.valueOf(pos.asLong())))return true;
+            if(other==station||!other.active||other.worker==null||other.profession!=Profession.BEEKEEPER||!station.dimension.equals(other.dimension))continue;
+            if(IndustrialWork.area(level,other).contains(Vec3.atCenterOf(pos))&&other.industry.getList(HIVES,Tag.TAG_LONG).contains(LongTag.valueOf(pos.asLong())))return true;
         }
         return false;
     }
@@ -334,7 +334,7 @@ public final class ApiaryWork {
         worker.swing(InteractionHand.MAIN_HAND);
         if(remaining<=0){
             ApiaryBeeFlight.finishLure(bee);
-            bind(station,bee);
+            bind(level,station,bee);
             clearWorkerAnger(bee,worker);
             data.remove(ATTEMPT);
             IndustrialRules.progress(level,station);
@@ -401,7 +401,67 @@ public final class ApiaryWork {
         return station.industry.getLong("apiary_breed_until")>level.getGameTime()?1:0;
     }
 
-    private static int capacity(ServerLevel level,EmploymentData.Station station){return 3*IndustrialRules.level(level,station);}
+    static int hiveCapacity(ServerLevel level,EmploymentData.Station station){
+        return Math.min(IndustrialRules.level(level,station),1+(IndustrialRules.size(level,station)-7)/2);
+    }
+
+    private static int capacity(ServerLevel level,EmploymentData.Station station){return 3*hiveCapacity(level,station);}
+
+    // Legacy registry entries are booleans. A long in the same entry records a known habitual hive.
+    public static void recordHive(ServerLevel level,CompoundTag data,BlockPos pos){
+        if(pos==null||!data.hasUUID(OWNER))return;
+        var station=EmploymentData.get(level).station(data.getUUID(OWNER));
+        if(!owned(data,station)||!station.dimension.equals(level.dimension()))return;
+        var roster=station.industry.getCompound(BEES);
+        String id=data.getUUID(ID).toString();
+        if(!IndustrialWork.area(level,station).contains(Vec3.atCenterOf(pos))
+                ||level.hasChunkAt(pos)&&!(level.getBlockEntity(pos) instanceof BeehiveBlockEntity)){
+            if(roster.contains(id,Tag.TAG_LONG)&&roster.getLong(id)==pos.asLong()){
+                roster.putBoolean(id,true);
+                station.setChanged();
+            }
+        }else if(!roster.contains(id,Tag.TAG_LONG)||roster.getLong(id)!=pos.asLong()){
+            roster.putLong(id,pos.asLong());
+            station.setChanged();
+        }
+    }
+
+    static boolean allHome(ServerLevel level,EmploymentData.Station station,BeehiveBlockEntity hive){
+        var present=new java.util.HashSet<String>();
+        for(var occupant:hive.writeBees()){
+            var data=((CompoundTag)occupant).getCompound(BeehiveBlockEntity.ENTITY_DATA).getCompound("ForgeData");
+            if(owned(data,station))present.add(data.getUUID(ID).toString());
+        }
+        var roster=station.industry.getCompound(BEES);
+        long pos=hive.getBlockPos().asLong();
+        for(var id:roster.getAllKeys()){
+            if(roster.contains(id,Tag.TAG_LONG)&&roster.getLong(id)==pos&&!present.contains(id))return false;
+        }
+        return level.getEntitiesOfClass(Bee.class,new AABB(hive.getBlockPos()).inflate(48),
+            bee->bee.isAlive()&&hive.getBlockPos().equals(bee.getHivePos())&&owned(bee.getPersistentData(),station)).isEmpty();
+    }
+
+    public static boolean canKeepHive(ServerLevel level,Bee bee,BlockPos pos){
+        var area=territory(level,bee);
+        return area==null||area.contains(Vec3.atCenterOf(pos));
+    }
+
+    public static boolean canDiscoverHive(ServerLevel level,Bee bee,BlockPos pos){
+        var station=owner(level,bee);
+        if(!owned(bee.getPersistentData(),station))return true;
+        return station.dimension.equals(level.dimension())&&IndustrialWork.area(level,station).contains(Vec3.atCenterOf(pos))
+            &&station.industry.getList(HIVES,Tag.TAG_LONG).contains(LongTag.valueOf(pos.asLong()));
+    }
+
+    public static boolean holdHiveOccupant(ServerLevel level,BlockPos pos,CompoundTag data){
+        if(!data.hasUUID(OWNER))return false;
+        var station=EmploymentData.get(level).station(data.getUUID(OWNER));
+        if(!owned(data,station)||!station.dimension.equals(level.dimension())||!ApiaryHiveStock.hasVacancy(station)
+                ||!IndustrialWork.area(level,station).contains(Vec3.atCenterOf(pos)))return false;
+        var registered=station.industry.getList(HIVES,Tag.TAG_LONG);
+        return registered.size()>=hiveCapacity(level,station)&&!registered.contains(LongTag.valueOf(pos.asLong()))
+            &&ApiaryHiveStock.belongsHere(level,station,pos);
+    }
     private static int beeCount(EmploymentData.Station station){return station.industry.getCompound(BEES).size();}
     private static void prepareColony(EmploymentData.Station station){
         if(station.industry.hasUUID(COLONY)&&station.industry.getUUID(COLONY).equals(station.worker))return;
@@ -467,10 +527,11 @@ public final class ApiaryWork {
     private static void syncBond(ServerLevel level,Bee bee){
         var data=bee.getPersistentData();
         boolean bonded=reconcileStoredBond(level,data);
+        if(bonded)recordHive(level,data,bee.getHivePos());
         ((ApiaryBeeAppearance)bee).kraftcity$setBonded(bonded);
     }
 
-    private static void bind(EmploymentData.Station station,Bee bee){
+    private static void bind(ServerLevel level,EmploymentData.Station station,Bee bee){
         var data=bee.getPersistentData();
         if(!data.hasUUID(ID))data.putUUID(ID,UUID.randomUUID());
         prepareColony(station);
@@ -480,6 +541,7 @@ public final class ApiaryWork {
         bees.putBoolean(data.getUUID(ID).toString(),true);
         ((ApiaryBeeAppearance)bee).kraftcity$setBonded(true);
         station.industry.put(BEES,bees);
+        recordHive(level,data,bee.getHivePos());
         station.setChanged();
     }
 
@@ -522,7 +584,7 @@ public final class ApiaryWork {
             &&beeCount(station)<capacity(level,station)){
             station.industry.remove("apiary_breed_until");
             station.industry.remove("apiary_breed_pair");
-            bind(station,bee);
+            bind(level,station,bee);
             IndustrialRules.progress(level,station);
         }
     }
@@ -535,7 +597,7 @@ public final class ApiaryWork {
         var id=data.getUUID(ID).toString();
         if(!archived.contains(id)||beeCount(station)+reservedBirth(level,station)>=capacity(level,station))return;
         archived.remove(id);
-        bind(station,bee);
+        bind(level,station,bee);
     }
 
     @SubscribeEvent(priority=EventPriority.LOWEST)
