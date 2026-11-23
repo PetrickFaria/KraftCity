@@ -525,15 +525,14 @@ public final class IndustryGameTests {
         f.v.setPos(start);
         var bee=EntityType.BEE.create(f.l);
         bee.setPos(start.add(distance,.25,0));
-        if(obstacle)bee.setNoAi(true);
+        bee.setNoAi(true);
         f.l.addFreshEntity(bee);
         check(!obstacle||!f.v.hasLineOfSight(bee),"Wall failed to hide the bee");
         h.startSequence().thenIdle(45).thenExecute(()->{
             check(!f.v.getMainHandItem().is(flower)&&!bee.getPersistentData().contains("KCApiaryAttempt"),"Taming began with an empty flower slot");
             f.s.setItem(29,new ItemStack(flower,64));
-            f.v.setNoAi(false);
         }).thenWaitUntil(()->check(f.v.getMainHandItem().is(flower),"Waiting for visible flower"))
-            .thenExecute(()->bee.setNoAi(false))
+            .thenExecute(()->{bee.setNoAi(false);f.v.setNoAi(false);})
             .thenWaitUntil(()->{
                 check(((ApiaryBeeAppearance)bee).kraftcity$isBonded(),"Waiting for scheduled taming: "+bee.position()+" worker="+f.v.position());
                 check(IndustrialWork.area(f.l,f.s).contains(bee.position()),"Bee bonded outside");
