@@ -1,10 +1,15 @@
 package br.com.residenciasaldeoes.mixin;
 
+import br.com.kraftcity.employment.client.WorkerPose;
+import br.com.kraftcity.military.client.SoldierArmorLayer;
 import br.com.residenciasaldeoes.client.ResidentAppearanceModels;
+import br.com.residenciasaldeoes.client.SteveWorkerToolLayer;
 import br.com.residenciasaldeoes.client.VillagerSkinLayer;
 import br.com.residenciasaldeoes.client.render.ResidentSteveRenderState;
 import net.minecraft.client.model.EntityModel;
+import net.minecraft.client.model.VillagerModel;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
+import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.npc.Villager;
@@ -22,59 +27,54 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 
-/**
- * Swaps only the visual model for a Steve resident. Villager-specific renderer layers
- * are temporarily excluded because they cast the renderer model to VillagerModel.
- */
 @Mixin(LivingEntityRenderer.class)
-public abstract class ResidentSteveModelMixin {
-    @Shadow @Final @Mutable protected EntityModel model;
-    @Shadow @Final @Mutable protected List<RenderLayer> layers;
+public abstract class ResidentSteveModelMixin implements RenderLayerParent<Villager,EntityModel<Villager>> {
+    @Shadow protected EntityModel<Villager> model;
+    @Shadow @Final @Mutable protected List<? extends RenderLayer<?,?>> layers;
 
-    @Unique private static final ThreadLocal<Deque<ResidentSteveRenderState>> RESIDENCIAS$renderStates =
-            ThreadLocal.withInitial(ArrayDeque::new);
-
-    @Unique private RenderLayer<?,?> kraftcity$steveTool;
+    @Unique private Deque<ResidentSteveRenderState> kraftcity$villagerRenderFrames;
+    @Unique private SteveWorkerToolLayer kraftcity$steveTool;
 
     @Inject(method = "render", at = @At("HEAD"))
     private void residenciasaldeoes$useSteveModel(LivingEntity entity, float yaw, float partialTick,
             com.mojang.blaze3d.vertex.PoseStack poses, net.minecraft.client.renderer.MultiBufferSource buffers,
             int packedLight, CallbackInfo ci) {
-        if (!(entity instanceof Villager villager) || !ResidentAppearanceModels.usesSteve(villager)) return;
+        if (!(entity instanceof Villager villager)) return;
+        var outer=kraftcity$villagerRenderFrames==null?null:kraftcity$villagerRenderFrames.peekLast();
+        var originalModel=outer==null?model:outer.model();
+        var originalLayers=outer==null?layers:outer.layers();
+        boolean useSteve=originalModel instanceof VillagerModel<?> && ResidentAppearanceModels.usesSteve(villager);
+        if(outer==null&&!useSteve)return;
 
-        RESIDENCIAS$renderStates.get().push(new ResidentSteveRenderState(model, layers));
-        model = ResidentAppearanceModels.steveModel();
+        if(kraftcity$villagerRenderFrames==null)kraftcity$villagerRenderFrames=new ArrayDeque<>();
+        kraftcity$villagerRenderFrames.push(new ResidentSteveRenderState(model,layers));
 
-        // PlayerModel renders the player's hat/jacket/sleeve/pants skin layers itself.
-        // Keep only this mod's skin overlay pass; profession, guard, and other
-        // VillagerModel-dependent layers must not receive a PlayerModel instance.
-        List<RenderLayer> compatibleLayers = new ArrayList<>();
-        for (RenderLayer layer : layers) {
-            if (layer instanceof VillagerSkinLayer || layer instanceof br.com.kraftcity.military.client.SoldierArmorLayer) compatibleLayers.add(layer);
+        if(!useSteve){
+            model=originalModel;
+            layers=originalLayers;
+            return;
         }
-        if(br.com.kraftcity.employment.client.WorkerPose.active(villager)
-            ||!br.com.kraftcity.employment.client.WorkerPose.stowed(villager).isEmpty()){
-            if(kraftcity$steveTool==null)kraftcity$steveTool=new br.com.residenciasaldeoes.client.SteveWorkerToolLayer(
-                (net.minecraft.client.renderer.entity.RenderLayerParent)(Object)this);
+
+        model=ResidentAppearanceModels.steveModel();
+        List<RenderLayer<?,?>> compatibleLayers=new ArrayList<>();
+        for (var layer : originalLayers) {
+            if(layer instanceof VillagerSkinLayer || layer instanceof SoldierArmorLayer)compatibleLayers.add(layer);
+        }
+        if(WorkerPose.active(villager)||!WorkerPose.stowed(villager).isEmpty()){
+            if(kraftcity$steveTool==null)kraftcity$steveTool=new SteveWorkerToolLayer(this);
             compatibleLayers.add(kraftcity$steveTool);
         }
-        layers = compatibleLayers;
+        layers=compatibleLayers;
     }
 
     @Inject(method = "render", at = @At("RETURN"))
     private void residenciasaldeoes$restoreVillagerRenderer(LivingEntity entity, float yaw, float partialTick,
             com.mojang.blaze3d.vertex.PoseStack poses, net.minecraft.client.renderer.MultiBufferSource buffers,
             int packedLight, CallbackInfo ci) {
-        if (!(entity instanceof Villager villager) || !ResidentAppearanceModels.usesSteve(villager)) return;
-
-        Deque<ResidentSteveRenderState> states = RESIDENCIAS$renderStates.get();
-        if (states.isEmpty()) {
-            RESIDENCIAS$renderStates.remove();
-            return;
-        }
-        ResidentSteveRenderState previous = states.pop();
-        model = previous.model();
-        layers = previous.layers();
-        if (states.isEmpty()) RESIDENCIAS$renderStates.remove();
+        if (!(entity instanceof Villager) || kraftcity$villagerRenderFrames==null
+                || kraftcity$villagerRenderFrames.isEmpty()) return;
+        var previous=kraftcity$villagerRenderFrames.pop();
+        model=previous.model();
+        layers=previous.layers();
     }
 }

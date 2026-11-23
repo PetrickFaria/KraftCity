@@ -89,6 +89,8 @@ public final class ToolVisualCheck extends Screen {
             screen.workers[i]=worker;
         }
         screen.verifyMountedGeometry();
+        screen.verifySteveToolLayer();
+        screen.verifySharedRenderer();
         mc.setScreen(screen);
     }
 
@@ -122,6 +124,99 @@ public final class ToolVisualCheck extends Screen {
             }
         }
         System.out.println("WORKER_BACK_TOOL_GEOMETRY_PASSED");
+    }
+
+    private void verifySteveToolLayer(){
+        var worker=workers[1];
+        var minecraft=Minecraft.getInstance();
+        var vanilla=new net.minecraft.client.model.VillagerModel<Villager>(
+            minecraft.getEntityModels().bakeLayer(net.minecraft.client.model.geom.ModelLayers.VILLAGER));
+        var steve=ResidentAppearanceModels.steveModel();
+        class Parent implements net.minecraft.client.renderer.entity.RenderLayerParent<Villager,
+                net.minecraft.client.model.EntityModel<Villager>> {
+            net.minecraft.client.model.EntityModel<Villager> model=vanilla;
+            @Override public net.minecraft.client.model.EntityModel<Villager> getModel(){return model;}
+            @Override public ResourceLocation getTextureLocation(Villager entity){
+                return new ResourceLocation("textures/entity/villager/villager.png");
+            }
+        }
+        var parent=new Parent();
+        var layer=new br.com.residenciasaldeoes.client.SteveWorkerToolLayer(parent);
+        var traditional=new BuilderArmsLayer(new net.minecraft.client.renderer.entity.RenderLayerParent<>() {
+            @Override public net.minecraft.client.model.VillagerModel<Villager> getModel(){return vanilla;}
+            @Override public ResourceLocation getTextureLocation(Villager entity){return parent.getTextureLocation(entity);}
+        });
+        var beekeeper=br.com.kraftcity.employment.Profession.BEEKEEPER;
+        WorkerPose.receive(worker.getId(),worker.getUUID(),beekeeper,true,ItemStack.EMPTY);
+        var emptyHand=new Geometry();
+        traditional.render(new PoseStack(),type->emptyHand,LightTexture.FULL_BRIGHT,worker,0,0,0,0,0,0);
+        check(!emptyHand.vertices.isEmpty(),"Traditional beekeeper arms missing");
+        parent.model=steve;
+        var emptySteveHand=new Geometry();
+        layer.render(new PoseStack(),type->emptySteveHand,LightTexture.FULL_BRIGHT,worker,0,0,0,0,0,0);
+        check(emptySteveHand.vertices.isEmpty(),"Steve beekeeper drew equipment with an empty hand");
+        for(Item item:new Item[]{Items.SHEARS,Items.GLASS_BOTTLE,Items.POPPY}){
+            var stack=new ItemStack(item);
+            worker.setItemSlot(EquipmentSlot.MAINHAND,stack);
+            WorkerPose.receive(worker.getId(),worker.getUUID(),beekeeper,true,ItemStack.EMPTY);
+            var wrongModel=new Geometry();
+            parent.model=vanilla;
+            layer.render(new PoseStack(),type->wrongModel,LightTexture.FULL_BRIGHT,worker,0,0,0,0,0,0);
+            check(wrongModel.vertices.isEmpty(),"Steve layer drew on VillagerModel");
+            var held=new Geometry();
+            parent.model=steve;
+            layer.render(new PoseStack(),type->held,LightTexture.FULL_BRIGHT,worker,0,0,0,0,0,0);
+            check(!held.vertices.isEmpty(),"Steve held item missing: "+item);
+            var traditionalHeld=new Geometry();
+            traditional.render(new PoseStack(),type->traditionalHeld,LightTexture.FULL_BRIGHT,worker,0,0,0,0,0,0);
+            check(traditionalHeld.vertices.size()>emptyHand.vertices.size(),"Traditional held item missing: "+item);
+        }
+        worker.setItemSlot(EquipmentSlot.MAINHAND,ItemStack.EMPTY);
+        WorkerPose.receive(worker.getId(),worker.getUUID(),true,false,new ItemStack(Items.SHEARS));
+        var stowed=new Geometry();
+        layer.render(new PoseStack(),type->stowed,LightTexture.FULL_BRIGHT,worker,0,0,0,0,0,0);
+        check(!stowed.vertices.isEmpty(),"Steve back-mounted shears missing");
+        WorkerPose.receive(worker.getId(),worker.getUUID(),true,false,ItemStack.EMPTY);
+        System.out.println("STEVE_TOOL_LAYER_MODEL_SWAP_PASSED");
+    }
+
+    private void verifySharedRenderer(){
+        var steve=workers[2];
+        var traditional=workers[3];
+        var renderer=(net.minecraft.client.renderer.entity.VillagerRenderer)
+            Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(steve);
+        net.minecraft.client.renderer.entity.LivingEntityRenderer<?,?> shared=renderer;
+        var initial=shared.getModel();
+        var seen=new boolean[2];
+        var geometry=new Geometry();
+        java.util.function.Consumer<net.minecraftforge.client.event.RenderLivingEvent.Pre> listener=event->{
+            if(event.getEntity()==steve){
+                check(shared.getModel() instanceof br.com.residenciasaldeoes.client.SteveVillagerModel,
+                    "Selected Steve resident received the traditional model");
+                renderer.render(traditional,0,0,new PoseStack(),type->geometry,LightTexture.FULL_BRIGHT);
+                check(seen[1]&&shared.getModel() instanceof br.com.residenciasaldeoes.client.SteveVillagerModel,
+                    "Nested traditional render did not restore the outer Steve model");
+                ResidentAppearanceModels.set(steve.getUUID(),ResidentModelType.VILLAGER);
+                seen[0]=true;
+                event.setCanceled(true);
+            }else if(event.getEntity()==traditional){
+                check(shared.getModel()==initial,"Traditional villager inherited a Steve model");
+                seen[1]=true;
+                event.setCanceled(true);
+            }
+        };
+        var bus=net.minecraftforge.common.MinecraftForge.EVENT_BUS;
+        ResidentAppearanceModels.set(steve.getUUID(),ResidentModelType.STEVE);
+        bus.addListener(net.minecraftforge.eventbus.api.EventPriority.HIGHEST,false,
+            net.minecraftforge.client.event.RenderLivingEvent.Pre.class,listener);
+        try{
+            renderer.render(steve,0,0,new PoseStack(),type->geometry,LightTexture.FULL_BRIGHT);
+            check(seen[0]&&shared.getModel()==initial,"Canceled render retained a Steve model after profile changed");
+        }finally{
+            bus.unregister(listener);
+            ResidentAppearanceModels.clear(steve.getUUID());
+        }
+        System.out.println("VILLAGER_SHARED_RENDERER_STATE_PASSED");
     }
 
     private static final class Geometry implements VertexConsumer {
