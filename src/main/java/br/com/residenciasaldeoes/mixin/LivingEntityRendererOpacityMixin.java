@@ -1,6 +1,8 @@
 package br.com.residenciasaldeoes.mixin;
 
 import br.com.residenciasaldeoes.client.ResidentOpacity;
+import br.com.residenciasaldeoes.client.ResidentSkinRenderType;
+import br.com.residenciasaldeoes.client.VillagerSkinTextures;
 import br.com.residenciasaldeoes.client.ResidentAppearanceModels;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -17,21 +19,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** Scopes the render override to the current resident villager only. */
 @Mixin(LivingEntityRenderer.class)
 public abstract class LivingEntityRendererOpacityMixin {
-    /**
-     * Steve uses PlayerModel inside the villager renderer. Select a blended base
-     * pass explicitly for that resident so its world render follows the same
-     * opacity path as the customizer preview. The resident's vertex consumer
-     * applies the selected alpha to this pass and to the PlayerModel skin layers.
-     */
+    /** Selects the PNG blend pass without changing the resident's model or opacity scope. */
     @SuppressWarnings("unchecked")
     @Inject(method = "getRenderType", at = @At("HEAD"), cancellable = true)
-    private void residenciasaldeoes$translucentSteveBase(LivingEntity entity, boolean bodyVisible,
+    private void residenciasaldeoes$selectResidentBase(LivingEntity entity, boolean bodyVisible,
             boolean translucent, boolean glowing, CallbackInfoReturnable<RenderType> cir) {
-        if (bodyVisible && !translucent && !glowing && entity instanceof Villager villager
-                && ResidentAppearanceModels.usesSteve(villager)
-                && ResidentOpacity.renderingPercent() < 100) {
-            // EntityRenderer declares this abstract method; LivingEntityRenderer
-            // inherits it, so it cannot be attached as a Shadow on this target.
+        if (!bodyVisible || translucent || !(entity instanceof Villager villager)) return;
+        if (VillagerSkinTextures.isComplete(villager.getUUID())) {
+            var texture = VillagerSkinTextures.get(villager.getUUID());
+            if (VillagerSkinTextures.hasFractionalAlpha(texture)) {
+                cir.setReturnValue(ResidentSkinRenderType.blended(texture));
+                return;
+            }
+        }
+        if (!glowing && ResidentAppearanceModels.usesSteve(villager) && ResidentOpacity.renderingPercent() < 100) {
+            // EntityRenderer declares this abstract method; the mixin target inherits it.
             ResourceLocation texture = ((EntityRenderer<LivingEntity>) (Object) this).getTextureLocation(entity);
             cir.setReturnValue(RenderType.entityTranslucent(texture));
         }

@@ -21,6 +21,7 @@ public final class VillagerSkinTextures {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Set<Integer> SUPPORTED_SIZES = Set.of(64, 128, 256, 512, 1024);
     private static final Map<UUID, ResourceLocation> TEXTURES = new HashMap<>();
+    private static final Set<ResourceLocation> FRACTIONAL_ALPHA = new HashSet<>();
     private static final Map<UUID, byte[]> PNGS = new HashMap<>();
     private static final Map<UUID, SkinApplicationMode> MODES = new HashMap<>();
     private static final Map<UUID, WardrobePackage> WARDROBES = new HashMap<>();
@@ -61,10 +62,12 @@ public final class VillagerSkinTextures {
             // VillagerModel uses normalized UVs based on a 64x64 atlas. The adapter,
             // when applicable, only fills Fresh Animations' otherwise-empty facial UVs.
             ResourceLocation location = textureLocation(resident);
+            boolean fractional = containsFractionalAlpha(image);
             dynamic = new DynamicTexture(image);
             image = null; // DynamicTexture owns the rendered RGBA image from here.
             dynamic.setFilter(false, false); // nearest-neighbor and no mipmaps
             minecraft.getTextureManager().register(location, dynamic);
+            if (fractional) FRACTIONAL_ALPHA.add(location); else FRACTIONAL_ALPHA.remove(location);
             dynamic = null; // TextureManager owns and replaces a texture at the same ID.
             TEXTURES.put(resident, location);
             PNGS.put(resident, png.clone());
@@ -119,6 +122,20 @@ public final class VillagerSkinTextures {
         }
     }
 
+    private static boolean containsFractionalAlpha(NativeImage image) {
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                int alpha = image.getPixelRGBA(x, y) >>> 24;
+                if (alpha > 0 && alpha < 255) return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean hasFractionalAlpha(ResourceLocation texture) {
+        return FRACTIONAL_ALPHA.contains(texture);
+    }
+
     private static Set<String> allTexturePaths(WardrobePackage pack) {
         Set<String> paths = new HashSet<>();
         if (pack.outerTexture() != null) paths.add(pack.outerTexture());
@@ -141,11 +158,13 @@ public final class VillagerSkinTextures {
                 image.close();
                 image = renderImage;
             }
+            boolean fractional = containsFractionalAlpha(image);
             dynamic = new DynamicTexture(image);
             image = null; // DynamicTexture owns the image.
             dynamic.setFilter(false, false);
             ResourceLocation location = textureLocation(id, path);
             Minecraft.getInstance().getTextureManager().register(location, dynamic);
+            if (fractional) FRACTIONAL_ALPHA.add(location); else FRACTIONAL_ALPHA.remove(location);
             dynamic = null; // TextureManager owns the texture.
             return new RegisteredTexture(location, scale);
         } finally {
@@ -190,6 +209,7 @@ public final class VillagerSkinTextures {
         Map<String, ResourceLocation> textures = EXTRA_TEXTURES.remove(id);
         if (textures != null) {
             for (ResourceLocation location : textures.values()) {
+                FRACTIONAL_ALPHA.remove(location);
                 Minecraft.getInstance().getTextureManager().release(location);
             }
         }
@@ -216,7 +236,10 @@ public final class VillagerSkinTextures {
     public static void clear(UUID resident) {
         Minecraft minecraft = Minecraft.getInstance();
         ResourceLocation texture = TEXTURES.remove(resident);
-        if (texture != null) minecraft.getTextureManager().release(texture);
+        if (texture != null) {
+            FRACTIONAL_ALPHA.remove(texture);
+            minecraft.getTextureManager().release(texture);
+        }
         releaseExtras(resident);
         PNGS.remove(resident);
         MODES.remove(resident);
@@ -236,6 +259,7 @@ public final class VillagerSkinTextures {
         PNGS.clear();
         MODES.clear();
         EXTRA_TEXTURE_SCALES.clear();
+        FRACTIONAL_ALPHA.clear();
     }
 
     private static ResourceLocation textureLocation(UUID id) { return textureLocation(id, "base"); }
