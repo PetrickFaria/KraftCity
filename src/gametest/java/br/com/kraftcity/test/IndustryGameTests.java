@@ -617,6 +617,131 @@ public final class IndustryGameTests {
         }).thenSucceed();
     }
 
+    @GameTest(template="empty",timeoutTicks=350,batch="kc130_idle")
+    public static void idle_industrial_worker_walks_and_stops_for_work(GameTestHelper h){
+        var f=fixture(h,Profession.FARMER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var start=Vec3.atBottomCenterOf(f.p.above());
+        f.v.setPos(start);
+        f.v.setNoAi(false);
+        f.s.setItem(27,new ItemStack(Items.IRON_HOE));
+        var area=IndustrialWork.area(f.l,f.s);
+        h.startSequence().thenWaitUntil(()->{
+            check(area.contains(f.v.position()),"Idle walk escaped professional area");
+            check(f.v.distanceToSqr(start)>1,"Waiting for a spontaneous industrial walk");
+        }).thenExecute(()->{
+            var crop=f.p.east(2).above();
+            f.l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);
+            f.l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);
+        }).thenWaitUntil(()->check(count(f,Items.WHEAT)>0||
+            !f.l.getBlockState(f.p.east(2).above()).is(Blocks.WHEAT),"Idle path blocked a ripe crop"))
+          .thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=90,batch="kc130_bond")
+    public static void apiary_worker_death_releases_colony_and_replacement_tames_same_bees(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        var start=Vec3.atBottomCenterOf(f.p.above());
+        f.v.setPos(start);
+        var colony=new ArrayList<Bee>();
+        for(int i=0;i<3;i++){
+            var bee=apiaryBee(f,1);
+            f.s.setItem(29,new ItemStack(Items.POPPY));
+            step(f,1);
+            check(((ApiaryBeeAppearance)bee).kraftcity$isBonded(),"Initial colony failed");
+            colony.add(bee);
+        }
+        var hivePos=f.p.north().above();
+        f.l.setBlock(hivePos,Blocks.BEEHIVE.defaultBlockState().setValue(BeehiveBlock.FACING,Direction.SOUTH),3);
+        var hive=(BeehiveBlockEntity)f.l.getBlockEntity(hivePos);
+        hive.addOccupant(colony.get(2),false);
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        f.v.hurt(net.minecraft.world.damagesource.DamageSource.OUT_OF_WORLD,200);
+        check(f.s.worker==null&&f.s.industry.getCompound("apiary_bees").isEmpty(),"Death retained a colony");
+        for(int i=0;i<2;i++)check(colony.get(i).isAlive()&&!((ApiaryBeeAppearance)colony.get(i)).kraftcity$isBonded(),
+            "Living bee was lost or kept its owner's bond");
+        check(hive.getOccupantCount()==1,"Death expelled a resident bee");
+        var replacement=EntityType.VILLAGER.create(f.l);
+        replacement.setNoAi(true);replacement.setPos(start);f.l.addFreshEntity(replacement);
+        check(ResidenceData.get(f.l).link(f.l,home,replacement).equals("ok"),"Replacement home");
+        var player=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"ApiaryReplacement"));
+        player.setPos(start);f.s.setItem(31,new ItemStack(Items.EMERALD,64));
+        check(Employment.hire(player,f.s,replacement.getUUID(),Profession.BEEKEEPER).equals("ok"),"Replacement hire");
+        hive.emptyAllLivingFromHive(null,hive.getBlockState(),BeehiveBlockEntity.BeeReleaseStatus.EMERGENCY);
+        var released=f.l.getEntitiesOfClass(Bee.class,new AABB(hivePos).inflate(2),bee->!colony.contains(bee));
+        check(released.size()==1&&!((ApiaryBeeAppearance)released.get(0)).kraftcity$isBonded(),"Stored bee did not return wild");
+        f.s.setItem(29,new ItemStack(Items.POPPY,16));
+        for(int i=0;i<15;i++)IndustrialWork.tick(f.l,f.s);
+        check(f.s.industry.getCompound("apiary_bees").size()==3&&released.get(0).getPersistentData()
+            .getUUID("KCApiaryWorker").equals(replacement.getUUID()),"Replacement failed to tame the former colony");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=270,batch="kc130_hive_stock")
+    public static void apiary_saves_occupied_nest_and_replaces_it_on_an_isolated_fence(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var start=Vec3.atBottomCenterOf(f.p.above());
+        f.v.setPos(start);
+        var active=f.p.east().above();
+        var extra=f.p.east(2).above();
+        var fence=f.p.south(2).above();
+        f.l.setBlock(active,Blocks.BEEHIVE.defaultBlockState(),3);
+        f.l.setBlock(extra,Blocks.BEE_NEST.defaultBlockState().setValue(BeehiveBlock.HONEY_LEVEL,3),3);
+        var honey=(BeehiveBlockEntity)f.l.getBlockEntity(extra);
+        honey.addOccupant(EntityType.BEE.create(f.l),false);
+        step(f,1);
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->{
+            check(f.l.isEmptyBlock(extra)&&count(f,Items.BEE_NEST)==1,"Waiting for occupied nest to reach stock");
+            check(f.l.getBlockState(active).is(Blocks.BEEHIVE),"The active hive was removed");
+        }).thenExecute(()->{
+            var saved=f.s.getItem(0);
+            check(saved.getTagElement("BlockEntityTag").getList("Bees",Tag.TAG_COMPOUND).size()==1,"Nest occupant lost");
+            check(saved.getTagElement("BlockStateTag").getString("honey_level").equals("3"),"Nest honey lost");
+            level(f,2,25);
+            f.l.setBlock(fence,Blocks.OAK_FENCE.defaultBlockState(),3);
+            f.l.setBlock(fence.east(),Blocks.OAK_FENCE.defaultBlockState(),3);
+        }).thenIdle(30).thenExecute(()->{
+            check(f.l.isEmptyBlock(fence.above())&&f.l.isEmptyBlock(fence.east().above()),"A connected fence was used");
+            f.l.removeBlock(fence.east(),false);
+        }).thenWaitUntil(()->{
+            check(f.l.getBlockState(fence.above()).is(Blocks.BEE_NEST),"Waiting for an isolated fence placement");
+            check(count(f,Items.BEE_NEST)==0&&f.l.getBlockState(fence.above()).getValue(BeehiveBlock.HONEY_LEVEL)==3
+                &&((BeehiveBlockEntity)f.l.getBlockEntity(fence.above())).getOccupantCount()==1,"Placement lost data or duplicated stock");
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=200,batch="kc130_hive_cycle")
+    public static void apiary_nectar_visit_shortens_only_for_a_bound_bee(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        f.l.setRainLevel(0);f.l.setThunderLevel(0);f.l.setDayTime(1000);
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.above()));
+        var tame=apiaryBee(f,1);
+        f.s.setItem(29,new ItemStack(Items.POPPY));
+        step(f,1);
+        var id=tame.getPersistentData().getUUID("KCApiaryBee");
+        var hivePos=f.p.east().above();
+        var control=hivePos.east(4);
+        for(var pos:List.of(hivePos,control))f.l.setBlock(pos,Blocks.BEEHIVE.defaultBlockState().setValue(BeehiveBlock.FACING,Direction.SOUTH),3);
+        var hive=(BeehiveBlockEntity)f.l.getBlockEntity(hivePos);
+        var vanilla=(BeehiveBlockEntity)f.l.getBlockEntity(control);
+        var tagged=tame.saveWithoutId(new CompoundTag());tagged.putString("id","minecraft:bee");tagged.putBoolean("HasNectar",true);
+        hive.storeBee(tagged,0,true);tame.discard();
+        var wild=EntityType.BEE.create(f.l).saveWithoutId(new CompoundTag());wild.putString("id","minecraft:bee");wild.putBoolean("HasNectar",true);
+        vanilla.storeBee(wild,0,true);
+        h.runAfterDelay(90,()->check(hive.getOccupantCount()==1,"Bonded bee left too early"));
+        h.succeedWhen(()->{
+            check(hive.isEmpty()&&vanilla.getOccupantCount()==1,"Normal visit or wild control");
+            check(f.l.getBlockState(hivePos).getValue(BeehiveBlock.HONEY_LEVEL)>0
+                &&f.l.getBlockState(control).getValue(BeehiveBlock.HONEY_LEVEL)==0,"Vanilla nectar release not preserved");
+            var bee=f.l.getEntitiesOfClass(Bee.class,new AABB(hivePos).inflate(4),b->b.getPersistentData().hasUUID("KCApiaryBee")
+                &&b.getPersistentData().getUUID("KCApiaryBee").equals(id)).stream().findFirst().orElseThrow();
+            long outdoors=bee.getPersistentData().getLong(ApiaryWork.POLLINATE_AFTER)-f.l.getGameTime();
+            check(outdoors>=2290&&outdoors<=2300,"Missing outdoor balance: "+outdoors);
+        });
+    }
+
     @GameTest(template="empty",timeoutTicks=80,batch="apiary_boundaries")
     public static void apiary_bonded_movement_is_bounded_on_all_six_faces(GameTestHelper h){
         var f=fixture(h,Profession.BEEKEEPER);

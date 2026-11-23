@@ -8,7 +8,7 @@ public final class EmploymentConfig {
     public static final ForgeConfigSpec.BooleanValue COMMERCIAL_ENABLED;
     public enum CookingFuel { PENDING, VANILLA_FUEL }
     public static final ForgeConfigSpec.EnumValue<CookingFuel> COOKING_FUEL;
-    public static final ForgeConfigSpec.IntValue COMMERCIAL_COST, ACTION_TICKS, FISH_TICKS, BREED_TICKS, OTHER_LEVEL_ACTIONS, CARE_TICKS, COMMERCIAL_RULESET;
+    public static final ForgeConfigSpec.IntValue APIARY_HIVE_TICKS, COMMERCIAL_COST, ACTION_TICKS, FISH_TICKS, BREED_TICKS, OTHER_LEVEL_ACTIONS, CARE_TICKS, COMMERCIAL_RULESET;
     static {
         var b=new ForgeConfigSpec.Builder();
         b.comment("Etapa 04 aprovada: comercial habilitado por 10 esmeraldas. Opcoes administrativas explicitas.").push("contratacao");
@@ -19,6 +19,7 @@ public final class EmploymentConfig {
         COOKING_FUEL=b.comment("Aprovado pelo usuario: credito de combustivel vanilla por receita de forno, independente do tempo comercial.").defineEnum("combustivelChurrasqueiro",CookingFuel.VANILLA_FUEL);
         b.pop();b.push("industria");
         ACTION_TICKS=b.comment("Intervalo operacional provisorio, nao altera tempos vanilla de crescimento.").defineInRange("intervaloAcoesTicks",20,1,1200);
+        APIARY_HIVE_TICKS=b.comment("Tempo minimo de deposito das abelhas domesticadas dentro da colmeia.").defineInRange("apiarioDepositoTicks",100,20,2400);
         FISH_TICKS=b.comment("Tempo-base configuravel Lv3; Lv1..5 = 1.5/1.25/1/0.75/0.5 vezes este tempo.").defineInRange("pescaBaseTicks",600,20,24000);
         BREED_TICKS=b.comment("Intervalo minimo para tentativas de reproducao; cooldown dos animais tambem respeitado.").defineInRange("reproducaoTicks",6000,20,24000);
         OTHER_LEVEL_ACTIONS=b.comment("Provisorio: acoes por nivel para Acougueiro/Pescador/Criador/Apicultor; Fazendeiro/Pastoreiro usam 25 fixos.").defineInRange("acoesPorNivelOutrasProfissoes",25,1,10000);

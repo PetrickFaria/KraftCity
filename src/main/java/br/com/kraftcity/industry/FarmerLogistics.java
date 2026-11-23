@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.StemBlock;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.ForgeEventFactory;
@@ -189,7 +190,10 @@ public final class FarmerLogistics {
     }
 
     static void stayInField(ServerLevel l,EmploymentData.Station s,Villager v){
-        var area=IndustrialWork.area(l,s);
+        stayInField(l,s,v,IndustrialWork.area(l,s));
+    }
+
+    static void stayInField(ServerLevel l,EmploymentData.Station s,Villager v,AABB area){
         if(area.contains(v.position().add(0,.125,0))){
             if(ROUTES.remove(v)!=null)v.getNavigation().stop();
             return;
@@ -202,7 +206,7 @@ public final class FarmerLogistics {
         var cells=FarmerWork.zigzag(s.pos,size);
         var candidates=new ArrayList<BlockPos>();
         for(var base:cells)for(int y=0;y<(int)area.getYsize();y++){
-            var pos=base.above(y);
+            var pos=new BlockPos(base.getX(),(int)area.minY+y,base.getZ());
             if(l.hasChunkAt(pos)&&l.getBlockState(pos).getCollisionShape(l,pos).isEmpty()
                 &&l.getBlockState(pos.above()).getCollisionShape(l,pos.above()).isEmpty()
                 &&!l.getBlockState(pos.below()).getCollisionShape(l,pos.below()).isEmpty())candidates.add(pos);
@@ -449,6 +453,7 @@ public final class FarmerLogistics {
     private static ItemStack excess(EmploymentData.Station s,int slot,Map<Item,Integer> remaining){
         var stack=s.getItem(slot);
         if(s.profession==Profession.BEEKEEPER){
+            if(ApiaryHiveStock.reserved(stack))return ItemStack.EMPTY;
             for(int input=0;input<3;input++)if(ApiaryWork.validInput(input,stack))return ItemStack.EMPTY;
             return stack;
         }

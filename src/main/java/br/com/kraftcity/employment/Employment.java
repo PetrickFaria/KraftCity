@@ -226,6 +226,7 @@ public final class Employment {
         var data=EmploymentData.get(level);
         for(ServerLevel world:level.getServer().getAllLevels())if(world.getEntity(worker) instanceof Villager v)br.com.kraftcity.industry.IndustrialWork.restoreHand(v);
         for(var s:data.stations())if(worker.equals(s.worker)){
+            if(s.profession==Profession.BEEKEEPER)br.com.kraftcity.industry.ApiaryWork.releaseColony(level,s);
             if(s.profession==Profession.FARMER){
                 br.com.kraftcity.industry.IndustrialRules.size(level,s);
                 s.industry.putUUID("farmer_area_owner",worker);

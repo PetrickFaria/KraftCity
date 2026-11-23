@@ -45,11 +45,13 @@ public final class IndustrialWork {
     public static void tick(ServerLevel l,EmploymentData.Station s){
         if(!industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
         if(l.isThundering()||Employment.fleeing(v)){
+            IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER){restoreHand(v);ApiaryWork.blocked(l,s,v,"storm_or_danger");}
             s.industry.remove("fish_elapsed");
             return;
         }
         if(!day(l)||v.isSleeping()){
+            IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER){restoreHand(v);ApiaryWork.blocked(l,s,v,"rest");}
             s.industry.remove("fish_elapsed");
             if(!day(l)&&FarmerLogistics.fieldWorker(s))return;
@@ -61,6 +63,7 @@ public final class IndustrialWork {
             return;
         }
         if(!ownsNavigation(v)||br.com.kraftcity.employment.WorkplaceVisits.leaving(v)){
+            IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER)ApiaryWork.blocked(l,s,v,"residential_or_safety_route");
             return;
         }
@@ -70,21 +73,25 @@ public final class IndustrialWork {
         }
         replenish(s);showTool(v,s);
         boolean mobGriefing=ForgeEventFactory.getMobGriefingEvent(l,v);
-        if(!mobGriefing&&s.profession!=Profession.BEEKEEPER){alert(l,s,"protection","Trabalho bloqueado pela proteção/mobGriefing.");return;}
-        switch(s.profession){
-            case FARMER->{
-                if(!FarmerLogistics.isJumping(v)&&!FarmerLogistics.leaveWater(l,v)&&!FarmerLogistics.collect(l,s,v)){
-                    if(v.distanceToSqr(area(l,s).getCenter())>400)FarmerLogistics.stayInField(l,s,v);
-                    else FarmerWork.tick(l,s,v);
-                }
-            }
-            case BUTCHER->animals(l,s,v,Profession.BUTCHER);
-            case SHEPHERD->animals(l,s,v,Profession.SHEPHERD);
-            case FISHERMAN->fish(l,s,v);
-            case BREEDER->animals(l,s,v,Profession.BREEDER);
-            case BEEKEEPER->ApiaryWork.tick(l,s,v,mobGriefing);
-            default->{}
+        if(!mobGriefing&&s.profession!=Profession.BEEKEEPER){
+            alert(l,s,"protection","Trabalho bloqueado pela proteção/mobGriefing.");
+            IndustrialIdle.tick(l,s,v);
+            return;
         }
+        boolean busy=switch(s.profession){
+            case FARMER->{
+                if(FarmerLogistics.isJumping(v)||FarmerLogistics.leaveWater(l,v)||FarmerLogistics.collect(l,s,v))yield true;
+                if(v.distanceToSqr(area(l,s).getCenter())<=400)yield FarmerWork.tick(l,s,v);
+                FarmerLogistics.stayInField(l,s,v);
+                yield true;
+            }
+            case BUTCHER,SHEPHERD,BREEDER->animals(l,s,v,s.profession);
+            case FISHERMAN->fish(l,s,v);
+            case BEEKEEPER->ApiaryWork.tick(l,s,v,mobGriefing);
+            default->false;
+        };
+        if(busy)IndustrialIdle.interrupt(v);
+        else IndustrialIdle.tick(l,s,v);
     }
     public static void alert(ServerLevel l,EmploymentData.Station s,String cause,String message){
         CompoundTag alerts=s.industry.getCompound("alerts");long now=l.getGameTime();
@@ -243,7 +250,7 @@ public final class IndustrialWork {
     }
 
     private static boolean livestock(Animal a){return a instanceof Cow||a instanceof Pig||a instanceof Sheep||a instanceof Chicken||a instanceof Rabbit;}
-    private static void animals(ServerLevel l,EmploymentData.Station s,Villager v,Profession profession){
+    private static boolean animals(ServerLevel l,EmploymentData.Station s,Villager v,Profession profession){
         List<Animal> animals=l.getEntitiesOfClass(Animal.class,area(l,s),a->a.isAlive()&&(profession==Profession.SHEPHERD?a instanceof Sheep:profession==Profession.BREEDER?a instanceof Wolf:livestock(a)&&s.id.equals(a.getPersistentData().hasUUID("KCIndustryStation")?a.getPersistentData().getUUID("KCIndustryStation"):null)));
         for(var a:animals)if(!a.getPersistentData().contains("KCIndustryBorn"))a.getPersistentData().putLong("KCIndustryBorn",l.getGameTime()-a.tickCount-(a.isBaby()?24000+a.getAge():24000));
         int adults=(int)animals.stream().filter(a->!a.isBaby()).count(),capacity=IndustrialRules.capacity(IndustrialRules.level(l,s));
@@ -252,62 +259,62 @@ public final class IndustrialWork {
             int cared=(int)animals.stream().filter(a->a.getPersistentData().hasUUID("KraftCityCaretaker")&&s.worker.equals(a.getPersistentData().getUUID("KraftCityCaretaker"))).count();
             for(var a:animals)if(cared<capacity&&a instanceof Wolf wolf&&!wolf.isTame()&&!wolf.isAngry()&&!wolf.getPersistentData().hasUUID("KraftCityCaretaker")){
                 if(!s.getItem(28).is(Items.BONE)){alert(l,s,"bones","Faltam ossos para cuidar dos lobos sem dono.");break;}
-                if(!reach(v,wolf.blockPosition()))return;
+                if(!reach(v,wolf.blockPosition()))return true;
                 if(!allowed(l,s,v,wolf.blockPosition(),wolf,"tame"))continue;
                 s.getItem(28).shrink(1);s.setChanged();
                 if(l.random.nextInt(3)==0){wolf.getPersistentData().putUUID("KraftCityCaretaker",s.worker);wolf.setTame(true);wolf.setPersistenceRequired();IndustrialRules.progress(l,s);}
-                return;
+                return true;
             }
         }
         if(profession==Profession.SHEPHERD){
-            var tool=s.getItem(27);if(!(tool.getItem() instanceof ShearsItem)){alert(l,s,"tool","Faltam tesouras utilizáveis.");return;}
+            var tool=s.getItem(27);if(!(tool.getItem() instanceof ShearsItem)){alert(l,s,"tool","Faltam tesouras utilizáveis.");return false;}
             for(var animal:animals)if(animal instanceof Sheep sheep&&sheep.readyForShearing()){
-                if(!reach(v,sheep.blockPosition()))return;if(!allowed(l,s,v,sheep.blockPosition(),sheep,"shear"))continue;
+                if(!reach(v,sheep.blockPosition()))return true;if(!allowed(l,s,v,sheep.blockPosition(),sheep,"shear"))continue;
                 Item wool=net.minecraft.core.Registry.BLOCK.get(new net.minecraft.resources.ResourceLocation(sheep.getColor().getName()+"_wool")).asItem();
                 var result=new ItemStack(wool,1+l.random.nextInt(3));
-                if(!insert(s,result,false)){alert(l,s,"space","Sem espaço para lã.");return;}
-                sheep.setSheared(true);insert(s,result,true);IndustrialRules.wear(l,s,tool);IndustrialRules.progress(l,s);return;
+                if(!insert(s,result,false)){alert(l,s,"space","Sem espaço para lã.");return false;}
+                sheep.setSheared(true);insert(s,result,true);IndustrialRules.wear(l,s,tool);IndustrialRules.progress(l,s);return true;
             }
         }
         if(profession==Profession.BUTCHER){
-            var tool=s.getItem(27);if(!(tool.getItem() instanceof AxeItem)){alert(l,s,"tool","Falta machado utilizável.");return;}
+            var tool=s.getItem(27);if(!(tool.getItem() instanceof AxeItem)){alert(l,s,"tool","Falta machado utilizável.");return false;}
             if(adults>capacity){
                 var chosen=animals.stream().filter(a->!a.isBaby()&&animals.stream().filter(b->!b.isBaby()&&b.getType()==a.getType()).count()>=3)
                     .min(Comparator.comparingLong(a->a.getPersistentData().getLong("KCIndustryBorn"))).orElse(null);
                 if(chosen!=null){
-                    if(!reach(v,chosen.blockPosition()))return;if(!allowed(l,s,v,chosen.blockPosition(),chosen,"slaughter")||MinecraftForge.EVENT_BUS.post(new AttackEntityEvent(actor(l,s,v),chosen)))return;
+                    if(!reach(v,chosen.blockPosition()))return true;if(!allowed(l,s,v,chosen.blockPosition(),chosen,"slaughter")||MinecraftForge.EVENT_BUS.post(new AttackEntityEvent(actor(l,s,v),chosen)))return true;
                     // Calculate the real entity loot table once, without world drops. Then apply the explicit meat tier rule.
                     var ctx=new LootContext.Builder(l).withParameter(LootContextParams.THIS_ENTITY,chosen).withParameter(LootContextParams.ORIGIN,chosen.position())
                         .withParameter(LootContextParams.DAMAGE_SOURCE,net.minecraft.world.damagesource.DamageSource.mobAttack(v)).withOptionalParameter(LootContextParams.KILLER_ENTITY,v);
                     var drops=new ArrayList<>(l.getServer().getLootTables().get(chosen.getLootTable()).getRandomItems(ctx.create(LootContextParamSets.ENTITY)));
                     for(var out:drops)if(out.getItem().isEdible()&&out.getItem().getFoodProperties().isMeat())out.setCount(1+l.random.nextInt(IndustrialTools.tier(tool)+1));
-                    if(!outputs(s,drops,false)){alert(l,s,"space","Sem espaço para o abate; animal preservado.");return;}
+                    if(!outputs(s,drops,false)){alert(l,s,"space","Sem espaço para o abate; animal preservado.");return false;}
                     // Forge death cancellation is respected; discard avoids invoking vanilla loot a second time.
-                    if(MinecraftForge.EVENT_BUS.post(new net.minecraftforge.event.entity.living.LivingDeathEvent(chosen,net.minecraft.world.damagesource.DamageSource.mobAttack(v))))return;
-                    outputs(s,drops,true);chosen.discard();IndustrialRules.wear(l,s,tool);IndustrialRules.progress(l,s);return;
+                    if(MinecraftForge.EVENT_BUS.post(new net.minecraftforge.event.entity.living.LivingDeathEvent(chosen,net.minecraft.world.damagesource.DamageSource.mobAttack(v))))return true;
+                    outputs(s,drops,true);chosen.discard();IndustrialRules.wear(l,s,tool);IndustrialRules.progress(l,s);return true;
                 }
             }
             int bucket=s.industry.contains("milk")&&l.getGameTime()-s.industry.getLong("milk")<1200?-1:find(s,x->x.is(Items.BUCKET),0,27);
             if(bucket>=0)for(var a:animals)if(a instanceof Cow&&!a.isBaby()&&(!a.getPersistentData().contains("KCIndustryMilk")||l.getGameTime()-a.getPersistentData().getLong("KCIndustryMilk")>=1200)){
-                if(!reach(v,a.blockPosition()))return;
+                if(!reach(v,a.blockPosition()))return true;
                 if(!exchange(s,bucket,1,List.of(new ItemStack(Items.MILK_BUCKET)),false)||!allowed(l,s,v,a.blockPosition(),a,"milk"))continue;
-                exchange(s,bucket,1,List.of(new ItemStack(Items.MILK_BUCKET)),true);a.getPersistentData().putLong("KCIndustryMilk",l.getGameTime());s.industry.putLong("milk",l.getGameTime());s.setChanged();return;
+                exchange(s,bucket,1,List.of(new ItemStack(Items.MILK_BUCKET)),true);a.getPersistentData().putLong("KCIndustryMilk",l.getGameTime());s.industry.putLong("milk",l.getGameTime());s.setChanged();return true;
             }
         }
         boolean breed=profession==Profession.BUTCHER?adults<=capacity&&animals.size()-adults<2:animals.size()<capacity;
-        long before=s.industry.contains("bred")?s.industry.getLong("bred"):Long.MIN_VALUE;
-        if(breed)breed(l,s,v,animals,profession);
-        if(profession==Profession.BREEDER&&before==(s.industry.contains("bred")?s.industry.getLong("bred"):Long.MIN_VALUE)){
+        if(breed&&breed(l,s,v,animals,profession))return true;
+        if(profession==Profession.BREEDER){
             for(var a:animals)if(a instanceof Wolf w&&w.getOwnerUUID()==null&&w.getPersistentData().hasUUID("KraftCityCaretaker")&&s.worker.equals(w.getPersistentData().getUUID("KraftCityCaretaker"))
                     &&(!w.getPersistentData().contains("KCCareAt")||l.getGameTime()-w.getPersistentData().getLong("KCCareAt")>=EmploymentConfig.CARE_TICKS.get())){
-                if(!s.getItem(28).is(Items.BONE)){alert(l,s,"bones","Faltam ossos para o cuidado dos lobos.");return;}
-                if(!reach(v,w.blockPosition()))return;if(!allowed(l,s,v,w.blockPosition(),w,"care"))return;
-                s.removeItem(28,1);w.getPersistentData().putLong("KCCareAt",l.getGameTime());IndustrialRules.progress(l,s);return;
+                if(!s.getItem(28).is(Items.BONE)){alert(l,s,"bones","Faltam ossos para o cuidado dos lobos.");return false;}
+                if(!reach(v,w.blockPosition()))return true;if(!allowed(l,s,v,w.blockPosition(),w,"care"))return true;
+                s.removeItem(28,1);w.getPersistentData().putLong("KCCareAt",l.getGameTime());IndustrialRules.progress(l,s);return true;
             }
         }
+        return false;
     }
-    private static void breed(ServerLevel l,EmploymentData.Station s,Villager v,List<Animal> animals,Profession profession){
-        if(s.industry.contains("bred")&&l.getGameTime()-s.industry.getLong("bred")<EmploymentConfig.BREED_TICKS.get())return;
+    private static boolean breed(ServerLevel l,EmploymentData.Station s,Villager v,List<Animal> animals,Profession profession){
+        if(s.industry.contains("bred")&&l.getGameTime()-s.industry.getLong("bred")<EmploymentConfig.BREED_TICKS.get())return false;
         for(Animal a:animals){
             if(a.isBaby()||a.getAge()!=0||a.isInLove())continue;
             if(a instanceof Wolf w&&(w.getOwnerUUID()!=null||!w.getPersistentData().hasUUID("KraftCityCaretaker")||!s.worker.equals(w.getPersistentData().getUUID("KraftCityCaretaker"))))continue;
@@ -315,22 +322,23 @@ public final class IndustrialWork {
                 if(b==a||b.getType()!=a.getType()||b.isBaby()||b.getAge()!=0||b.isInLove()||a.distanceToSqr(b)>64)continue;
                 if(b instanceof Wolf w&&(w.getOwnerUUID()!=null||!w.getPersistentData().hasUUID("KraftCityCaretaker")||!s.worker.equals(w.getPersistentData().getUUID("KraftCityCaretaker"))))continue;
                 int available=0;for(int slot=0;slot<31;slot++)if(slot!=27&&a.isFood(s.getItem(slot))&&b.isFood(s.getItem(slot)))available+=s.getItem(slot).getCount();
-                if(available<2){alert(l,s,"food","Faltam dois alimentos adequados à mesma espécie para reprodução.");return;}
-                if(!reach(v,a.blockPosition()))return;
-                if(!allowed(l,s,v,a.blockPosition(),a,"breed")||!allowed(l,s,v,b.blockPosition(),b,"breed"))return;
-                AgeableMob baby=a.getBreedOffspring(l,b);if(baby==null)return;
+                if(available<2){alert(l,s,"food","Faltam dois alimentos adequados à mesma espécie para reprodução.");return false;}
+                if(!reach(v,a.blockPosition()))return true;
+                if(!allowed(l,s,v,a.blockPosition(),a,"breed")||!allowed(l,s,v,b.blockPosition(),b,"breed"))return true;
+                AgeableMob baby=a.getBreedOffspring(l,b);if(baby==null)return true;
                 var event=new net.minecraftforge.event.entity.living.BabyEntitySpawnEvent(a,b,baby);
-                if(MinecraftForge.EVENT_BUS.post(event)||event.getChild()==null)return;baby=event.getChild();
+                if(MinecraftForge.EVENT_BUS.post(event)||event.getChild()==null)return true;baby=event.getChild();
                 baby.setBaby(true);baby.moveTo(a.getX(),a.getY(),a.getZ(),0,0);
                 baby.getPersistentData().putLong("KCIndustryBorn",l.getGameTime());baby.getPersistentData().putUUID("KCIndustryStation",s.id);
                 if(profession==Profession.BREEDER)baby.getPersistentData().putUUID("KraftCityCaretaker",s.worker);
-                if(!l.addFreshEntity(baby))return;
+                if(!l.addFreshEntity(baby))return true;
                 a.setAge(6000);b.setAge(6000);a.resetLove();b.resetLove();
                 int needed=2;for(int pass=0;pass<2&&needed>0;pass++)for(int slot=pass==0?28:0;slot<(pass==0?31:27)&&needed>0;slot++)if(a.isFood(s.getItem(slot))&&b.isFood(s.getItem(slot))){int n=Math.min(needed,s.getItem(slot).getCount());s.removeItem(slot,n);needed-=n;}
                 s.industry.putLong("bred",l.getGameTime());s.setChanged();
-                if(profession==Profession.BREEDER)IndustrialRules.progress(l,s);return;
+                if(profession==Profession.BREEDER)IndustrialRules.progress(l,s);return true;
             }
         }
+        return false;
     }
     public static boolean validWater(ServerLevel l,BlockPos center){
         for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++)for(int z=-1;z<=1;z++){
@@ -350,18 +358,19 @@ public final class IndustrialWork {
         }
         s.industry.putInt("water_cursor",(c+16)%total);s.setChanged();return null;
     }
-    private static void fish(ServerLevel l,EmploymentData.Station s,Villager v){
-        ItemStack rod=s.getItem(27);if(!(rod.getItem() instanceof FishingRodItem)){alert(l,s,"tool","Falta vara de pesca utilizável.");s.industry.remove("fish_elapsed");return;}
-        BlockPos water=water(l,s);if(water==null){alert(l,s,"water","Falta volume de água livre de pelo menos 3×3×3, abaixo ou na altura do posto.");return;}
-        if(!reach(v,s.pos)){s.industry.remove("fish_elapsed");return;}
-        if(!allowed(l,s,v,water,null,"fish")){s.industry.remove("fish_elapsed");return;}
+    private static boolean fish(ServerLevel l,EmploymentData.Station s,Villager v){
+        ItemStack rod=s.getItem(27);if(!(rod.getItem() instanceof FishingRodItem)){alert(l,s,"tool","Falta vara de pesca utilizável.");s.industry.remove("fish_elapsed");return false;}
+        BlockPos water=water(l,s);if(water==null){alert(l,s,"water","Falta volume de água livre de pelo menos 3×3×3, abaixo ou na altura do posto.");return false;}
+        if(!reach(v,s.pos)){s.industry.remove("fish_elapsed");return true;}
+        if(!allowed(l,s,v,water,null,"fish")){s.industry.remove("fish_elapsed");return true;}
         int elapsed=s.industry.getInt("fish_elapsed")+Math.max(1,EmploymentConfig.ACTION_TICKS.get());s.industry.putInt("fish_elapsed",elapsed);s.setChanged();
-        if(elapsed<IndustrialRules.fishingTicks(EmploymentConfig.FISH_TICKS.get(),IndustrialRules.level(l,s)))return;
+        if(elapsed<IndustrialRules.fishingTicks(EmploymentConfig.FISH_TICKS.get(),IndustrialRules.level(l,s)))return true;
         // Real vanilla fish table, no treasure or pretend bobber/open-water loot.
         var ctx=new LootContext.Builder(l).withParameter(LootContextParams.ORIGIN,Vec3.atCenterOf(water)).withParameter(LootContextParams.TOOL,rod).withParameter(LootContextParams.THIS_ENTITY,v);
         var drops=l.getServer().getLootTables().get(new net.minecraft.resources.ResourceLocation("gameplay/fishing/fish")).getRandomItems(ctx.create(LootContextParamSets.FISHING));
-        if(!outputs(s,drops,false)){alert(l,s,"space","Sem espaço para pescado.");return;}
+        if(!outputs(s,drops,false)){alert(l,s,"space","Sem espaço para pescado.");return false;}
         outputs(s,drops,true);IndustrialRules.wear(l,s,rod);IndustrialRules.progress(l,s);s.industry.putInt("fish_elapsed",0);s.setChanged();
+        return true;
     }
     private IndustrialWork(){}
 }

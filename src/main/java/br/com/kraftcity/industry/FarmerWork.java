@@ -48,12 +48,12 @@ public final class FarmerWork {
         return planted!=null&&planted.getBlock()==state.getBlock()?stack.getItem():Items.AIR;
     }
 
-    static void tick(ServerLevel l,EmploymentData.Station s,Villager v){
+    static boolean tick(ServerLevel l,EmploymentData.Station s,Villager v){
         var tool=s.getItem(27);
         if(!(tool.getItem() instanceof HoeItem)){
             IndustrialWork.alert(l,s,"tool","Falta enxada/arador utilizável.");
             FarmerLogistics.stayInField(l,s,v);
-            return;
+            return false;
         }
         int size=IndustrialRules.size(l,s);
         if(s.industry.getInt("zigzag_size")!=size||s.industry.contains("zigzag_corner")){
@@ -64,10 +64,10 @@ public final class FarmerWork {
             s.setChanged();
         }
         var path=zigzag(s.pos,size);
-        if(plantCane(l,s,v,size,path,tool))return;
-        if(harvest(l,s,v,size,path,tool))return;
-        if(clearFruitSpace(l,s,v,size,path))return;
-        if(sow(l,s,v,size,path,tool))return;
+        if(plantCane(l,s,v,size,path,tool))return true;
+        if(harvest(l,s,v,size,path,tool))return true;
+        if(clearFruitSpace(l,s,v,size,path))return true;
+        if(sow(l,s,v,size,path,tool))return true;
         if(s.getItem(28).is(Items.BONE_MEAL)){
             for(var base:path)for(int y=0;y<HEIGHT;y++){
                 var pos=base.above(y);
@@ -77,10 +77,10 @@ public final class FarmerWork {
                 int travel=FarmerLogistics.approachCell(l,v,pos,false);
                 if(travel<0)continue;
                 if(travel>0)harvestCrop(l,s,v,pos,state,crop,tool);
-                return;
+                return true;
             }
         }
-        FarmerLogistics.stayInField(l,s,v);
+        return false;
     }
 
     private static boolean harvest(ServerLevel l,EmploymentData.Station s,Villager v,int size,List<BlockPos> path,ItemStack tool){

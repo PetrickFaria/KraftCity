@@ -101,12 +101,30 @@ public final class WorkerConversionGameTests {
             if(profession==Profession.SOLDIER)continue; // The specialized soldier conversion has its own GameTests.
             var f=fixture(h,profession,0);
             var id=f.worker.getUUID();
+            br.com.kraftcity.industry.ApiaryBeeAppearance apiaryBee=null;
+            if(profession==Profession.BEEKEEPER){
+                f.level.setDayTime(1000);f.level.setRainLevel(0);f.level.setThunderLevel(0);
+                var start=Vec3.atBottomCenterOf(f.station.pos.above());
+                f.worker.setPos(start);
+                var bee=EntityType.BEE.create(f.level);
+                bee.setNoAi(true);bee.setPos(start.add(.8,.25,0));
+                var attempt=new CompoundTag();
+                attempt.putUUID("station",f.station.id);attempt.putInt("remaining",1);
+                bee.getPersistentData().put("KCApiaryAttempt",attempt);
+                f.level.addFreshEntity(bee);
+                f.station.setItem(29,new ItemStack(Items.POPPY));
+                br.com.kraftcity.industry.IndustrialWork.tick(f.level,f.station);
+                apiaryBee=(br.com.kraftcity.industry.ApiaryBeeAppearance)bee;
+                check(apiaryBee.kraftcity$isBonded(),"Bee bound before conversion");
+            }
             var workforce=WorkforceData.get(f.level);
             workforce.setProgress(id,profession.id(),4,89);
             if(profession==Profession.FARMER)
                 check(IndustrialRules.selectSize(f.level,f.station,11),"Level 4 selects 11×11");
             f.station.setItem(0,new ItemStack(Items.BREAD,7));
             var zombie=infect(f);
+            if(apiaryBee!=null)check(apiaryBee.kraftcity$isBonded()&&f.station.industry.getCompound("apiary_bees").size()==1,
+                "Infection revoked bee ownership");
             check(id.equals(f.station.worker)&&f.level.getEntity(id)==null,"Infection preserves assignment for "+profession);
             var saved=EmploymentData.load(EmploymentData.get(f.level).save(new CompoundTag()));
             check(saved.awaitingCure(id),"Infection maps to original identity in SavedData");
@@ -121,6 +139,8 @@ public final class WorkerConversionGameTests {
             check(f.level.addFreshEntity(loaded),"Zombie chunk reload");
             cure(f,loaded);
             check(f.level.getEntity(id) instanceof Villager&&f.station.worker.equals(id),"Cure restores original worker for "+profession);
+            if(apiaryBee!=null)check(apiaryBee.kraftcity$isBonded()&&f.station.industry.getCompound("apiary_bees").size()==1,
+                "Cure lost or duplicated bee ownership");
             check(ResidenceData.get(f.level).owner(id)!=null&&f.station.getItem(0).getCount()==7,"Cure preserved residence and inventory");
             var progress=workforce.progress(id,profession.id());
             check(progress.level()==4&&progress.xp()==89,"Cure preserved level and partial XP for "+profession);

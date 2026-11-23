@@ -51,6 +51,8 @@ public final class ApiaryWork {
     private static final String HIVES="apiary_hives";
     static final String BEES="apiary_bees", ARCHIVED_BEES="apiary_retired_bees";
     static final String OWNER="KCApiary", ID="KCApiaryBee";
+    private static final String WORKER="KCApiaryWorker", COLONY="apiary_colony_worker";
+    public static final String POLLINATE_AFTER="KCApiaryPollinateAfter";
     private static final String ATTEMPT="KCApiaryAttempt", BREED="KCApiaryBreed";
     private static final TagKey<net.minecraft.world.item.Item> EMPTY_BOTTLES=
         TagKey.create(Registry.ITEM_REGISTRY,new ResourceLocation("residenciasaldeoes","apiary_bottles"));
@@ -93,18 +95,21 @@ public final class ApiaryWork {
             station.setItem(EmploymentData.EQUIPMENT,ItemStack.EMPTY);
     }
 
-    static void tick(ServerLevel level,EmploymentData.Station station,Villager worker,boolean mobGriefing){
+    static boolean tick(ServerLevel level,EmploymentData.Station station,Villager worker,boolean mobGriefing){
+        prepareColony(station);
         var work=IndustrialWork.area(level,station);
         if(FLOWER_SWINGS.getOrDefault(worker,0L)<=level.getGameTime())show(worker,collectionItem(station));
         var hives=registeredHives(level,station,work);
         var bees=level.getEntitiesOfClass(Bee.class,work,bee->work.contains(bee.position())&&bee.isAlive());
+        for(var bee:bees)syncBond(level,bee);
         if(mobGriefing)for(var pos:hives){
             if(!level.hasChunkAt(pos)||!(level.getBlockEntity(pos) instanceof BeehiveBlockEntity hive))continue;
             if(hive.getBlockState().getValue(BeehiveBlock.HONEY_LEVEL)!=5)continue;
             if(hive.isEmpty()&&bees.stream().noneMatch(bee->pos.equals(bee.getHivePos())))continue;
-            if(harvest(level,station,worker,hive))return;
+            if(harvest(level,station,worker,hive))return true;
         }
-        if(mobGriefing&&FarmerLogistics.collect(level,station,worker))return;
+        if(mobGriefing&&FarmerLogistics.collect(level,station,worker))return true;
+        if(mobGriefing&&ApiaryHiveStock.work(level,station,worker,work,hives))return true;
         var flowers=station.getItem(FLOWERS);
         int population=beeCount(station)+reservedBirth(level,station);
         int capacity=capacity(level,station);
@@ -119,6 +124,7 @@ public final class ApiaryWork {
         }else{
             var nearby=level.getEntitiesOfClass(Bee.class,worker.getBoundingBox().inflate(12),
                 bee->bee.distanceToSqr(worker)<=100||ApiaryBeeFlight.luredBy(bee,worker));
+            for(var bee:nearby)syncBond(level,bee);
             var eligible=nearby.stream().filter(bee->wildCandidate(bee)&&ApiaryBeeFlight.available(bee,worker)).toList();
             var candidates=eligible.stream()
                 .map(bee->new Candidate(bee,canFeed(level,worker,bee,work),
@@ -137,12 +143,12 @@ public final class ApiaryWork {
                     for(var candidate:candidates)ApiaryBeeFlight.lure(candidate,worker,work);
                 }
                 domesticate(level,station,worker,wild,flowers,work);
-                return;
+                return true;
             }
             scan(worker,level.isRaining()?"rain":"no_eligible_bee",nearby.size(),eligible.size(),flowers,population,capacity,null);
-            if(mobGriefing&&breed(level,station,worker,bees,flowers))return;
+            if(mobGriefing&&breed(level,station,worker,bees,flowers))return true;
         }
-        FarmerLogistics.stayInField(level,station,worker);
+        return false;
     }
 
     static void blocked(ServerLevel level,EmploymentData.Station station,Villager worker,String reason){
@@ -192,7 +198,7 @@ public final class ApiaryWork {
         return result;
     }
 
-    private static boolean claimed(ServerLevel level,EmploymentData.Station station,BlockPos pos){
+    static boolean claimed(ServerLevel level,EmploymentData.Station station,BlockPos pos){
         for(var other:EmploymentData.get(level).stations()){
             if(other==station||!other.active||other.profession!=Profession.BEEKEEPER||!station.dimension.equals(other.dimension))continue;
             if(other.industry.getList(HIVES,Tag.TAG_LONG).contains(LongTag.valueOf(pos.asLong())))return true;
@@ -217,7 +223,7 @@ public final class ApiaryWork {
         var resource=bottling?station.getItem(bottleSlot):station.getItem(SHEARS);
         if(!validInput(bottling?1:0,resource)){
             IndustrialWork.alert(level,station,"apiary_tool","Faltam frascos vazios ou tesoura.");
-            return true;
+            return false;
         }
         show(worker,resource);
         if(!visible(level,worker,Vec3.atCenterOf(pos),pos))return approachHive(level,station,worker,pos);
@@ -228,7 +234,7 @@ public final class ApiaryWork {
         var products=List.of(new ItemStack(bottling?Items.HONEY_BOTTLE:Items.HONEYCOMB,bottling?1:3));
         if(!IndustrialWork.exchange(station,bottleSlot,1,products,false)){
             IndustrialWork.alert(level,station,"apiary_space","Sem espaço para a produção da colmeia.");
-            return true;
+            return false;
         }
         long previousProtection=station.industry.getLong("apiary_protected_until");
         station.industry.putLong("apiary_protected_until",level.getGameTime()+200);
@@ -250,7 +256,7 @@ public final class ApiaryWork {
         return true;
     }
 
-    private static boolean approachHive(ServerLevel level,EmploymentData.Station station,Villager worker,BlockPos hive){
+    static boolean approachHive(ServerLevel level,EmploymentData.Station station,Villager worker,BlockPos hive){
         var bounds=IndustrialWork.area(level,station).expandTowards(0,-1,0);
         var destination=Vec3.atCenterOf(hive);
         var options=new ArrayList<BlockPos>();
@@ -373,7 +379,7 @@ public final class ApiaryWork {
         return true;
     }
 
-    private static boolean visible(ServerLevel level,Villager worker,Vec3 target,BlockPos block){
+    static boolean visible(ServerLevel level,Villager worker,Vec3 target,BlockPos block){
         return hasView(level,worker,worker.getEyePosition(),target,block);
     }
 
@@ -397,15 +403,79 @@ public final class ApiaryWork {
 
     private static int capacity(ServerLevel level,EmploymentData.Station station){return 3*IndustrialRules.level(level,station);}
     private static int beeCount(EmploymentData.Station station){return station.industry.getCompound(BEES).size();}
+    private static void prepareColony(EmploymentData.Station station){
+        if(station.industry.hasUUID(COLONY)&&station.industry.getUUID(COLONY).equals(station.worker))return;
+        boolean knownLegacyOwner=!station.industry.hasUUID(COLONY)&&station.worker!=null
+            &&station.industry.hasUUID("apiary_worker")&&station.worker.equals(station.industry.getUUID("apiary_worker"))
+            &&br.com.kraftcity.employment.Employment.epoch(station)==1;
+        if(!knownLegacyOwner)clearColony(station);
+        if(station.worker!=null)station.industry.putUUID(COLONY,station.worker);
+        station.setChanged();
+    }
+
+    private static void clearColony(EmploymentData.Station station){
+        station.industry.remove(COLONY);
+        station.industry.remove(BEES);
+        station.industry.remove(ARCHIVED_BEES);
+        station.industry.remove("apiary_protected_until");
+        station.industry.remove("apiary_breed_until");
+        station.industry.remove("apiary_breed_pair");
+        station.setChanged();
+    }
+
+    /** A release ends this contract. Vanilla zombification retains the assigned worker UUID. */
+    public static void releaseColony(ServerLevel level,EmploymentData.Station station){
+        clearColony(station);
+        for(var world:level.getServer().getAllLevels()){
+            for(var entity:world.getAllEntities()){
+                if(entity instanceof Bee bee&&bee.getPersistentData().hasUUID(OWNER)
+                        &&station.id.equals(bee.getPersistentData().getUUID(OWNER))){
+                    clearBond(bee.getPersistentData());
+                    ((ApiaryBeeAppearance)bee).kraftcity$setBonded(false);
+                }
+            }
+        }
+    }
+
+    private static void clearBond(CompoundTag data){
+        for(var key:List.of(OWNER,ID,WORKER,BREED,POLLINATE_AFTER))data.remove(key);
+    }
+
     private static boolean owned(CompoundTag data,EmploymentData.Station station){
-        return data.hasUUID(OWNER)&&station.id.equals(data.getUUID(OWNER))&&data.hasUUID(ID)
+        return station!=null&&station.active&&station.worker!=null&&data.hasUUID(OWNER)
+            &&station.id.equals(data.getUUID(OWNER))&&data.hasUUID(ID)
+            &&(!data.hasUUID(WORKER)||station.worker.equals(data.getUUID(WORKER)))
             &&station.industry.getCompound(BEES).contains(data.getUUID(ID).toString());
+    }
+
+    /** Also normalizes legacy or ended contracts when they are encountered inside a hive. */
+    public static boolean reconcileStoredBond(ServerLevel level,CompoundTag data){
+        if(!data.hasUUID(OWNER)||!data.hasUUID(ID))return false;
+        var station=EmploymentData.get(level).station(data.getUUID(OWNER));
+        if(station!=null&&station.worker!=null)prepareColony(station);
+        if(owned(data,station)){
+            data.putUUID(WORKER,station.worker);
+            return true;
+        }
+        if(station==null||!station.active||station.worker==null
+                ||data.hasUUID(WORKER)&&!station.worker.equals(data.getUUID(WORKER))
+                ||!station.industry.getCompound(ARCHIVED_BEES).contains(data.getUUID(ID).toString()))
+            clearBond(data);
+        return false;
+    }
+
+    private static void syncBond(ServerLevel level,Bee bee){
+        var data=bee.getPersistentData();
+        boolean bonded=reconcileStoredBond(level,data);
+        ((ApiaryBeeAppearance)bee).kraftcity$setBonded(bonded);
     }
 
     private static void bind(EmploymentData.Station station,Bee bee){
         var data=bee.getPersistentData();
         if(!data.hasUUID(ID))data.putUUID(ID,UUID.randomUUID());
+        prepareColony(station);
         data.putUUID(OWNER,station.id);
+        data.putUUID(WORKER,station.worker);
         var bees=station.industry.getCompound(BEES);
         bees.putBoolean(data.getUUID(ID).toString(),true);
         ((ApiaryBeeAppearance)bee).kraftcity$setBonded(true);
@@ -442,9 +512,8 @@ public final class ApiaryWork {
     public static void onJoin(EntityJoinLevelEvent event){
         if(!(event.getEntity() instanceof Bee bee)||!(event.getLevel() instanceof ServerLevel level))return;
         ApiaryBeeFlight.install(bee);
-        var existing=owner(level,bee);
-        restoreArchivedBond(level,existing,bee);
-        ((ApiaryBeeAppearance)bee).kraftcity$setBonded(existing!=null&&owned(bee.getPersistentData(),existing));
+        syncBond(level,bee);
+        restoreArchivedBond(level,owner(level,bee),bee);
         var data=bee.getPersistentData();
         if(!data.hasUUID("KCApiaryNewborn"))return;
         var station=EmploymentData.get(level).station(data.getUUID("KCApiaryNewborn"));
@@ -460,8 +529,8 @@ public final class ApiaryWork {
 
     private static void restoreArchivedBond(ServerLevel level,EmploymentData.Station station,Bee bee){
         var data=bee.getPersistentData();
-        if(station==null||!station.active||!station.dimension.equals(level.dimension())
-                ||!data.hasUUID(ID))return;
+        if(station==null||!station.active||station.worker==null||!station.dimension.equals(level.dimension())
+                ||!data.hasUUID(ID)||data.hasUUID(WORKER)&&!station.worker.equals(data.getUUID(WORKER)))return;
         var archived=station.industry.getCompound(ARCHIVED_BEES);
         var id=data.getUUID(ID).toString();
         if(!archived.contains(id)||beeCount(station)+reservedBirth(level,station)>=capacity(level,station))return;
@@ -517,7 +586,10 @@ public final class ApiaryWork {
         var anger=bee.getPersistentAngerTarget();
         var target=anger!=null&&level.getEntity(anger) instanceof Villager worker?worker:bee.getTarget();
         if(protectedWorker(bee,target))clearWorkerAnger(bee,(Villager)target);
-        if(bee.tickCount%20==0)restoreArchivedBond(level,owner(level,bee),bee);
+        if(bee.tickCount%20==0&&bee.getPersistentData().hasUUID(OWNER)){
+            syncBond(level,bee);
+            restoreArchivedBond(level,owner(level,bee),bee);
+        }
         var area=territory(level,bee);
         if(area==null)return;
         ApiaryBeeFlight.guide(level,bee,area);
