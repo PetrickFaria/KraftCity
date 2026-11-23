@@ -41,6 +41,12 @@ assert "ResidentOpacity.renderingNameTag()" in buffer_source_opacity
 assert "ResidentBufferSourceOpacityMixin" not in mixins["client"]
 assert "BufferBuilderOpacityMixin" not in mixins["client"]
 assert "ModelPartOpacityMixin" in mixins["client"]
+# EMF model parts can bypass ModelPart.compile and emit vanilla cubes directly.
+assert "@Mixin(ModelPart.Cube.class)" in model_part_opacity
+shader = read("src/main/resources/assets/residenciasaldeoes/shaders/core/resident_skin_alpha.fsh")
+assert "texture(Sampler0, texCoord0)" in shader and "color.a <= 0.0" in shader
+assert shader.count("color *= vertexColor * ColorModulator") == 1
+
 assert 'method = "compile(Lcom/mojang/blaze3d/vertex/PoseStack$Pose;Lcom/mojang/blaze3d/vertex/VertexConsumer;IIFFFF)V"' in model_part_opacity
 assert "ResidentOpacity.renderingPercent() / 100.0F" in model_part_opacity
 assert "ResidentOpacity.isPreviewRendering()" in model_part_opacity

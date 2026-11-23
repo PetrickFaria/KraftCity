@@ -6,8 +6,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
-/** Applies alpha to each compiled model part while a resident is rendered. */
-@Mixin(ModelPart.class)
+/** Scales each resident cube once, including cubes emitted by EMF model parts. */
+@Mixin(ModelPart.Cube.class)
 public abstract class ModelPartOpacityMixin {
     @ModifyVariable(
             method = "compile(Lcom/mojang/blaze3d/vertex/PoseStack$Pose;Lcom/mojang/blaze3d/vertex/VertexConsumer;IIFFFF)V",
