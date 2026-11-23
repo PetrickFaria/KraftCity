@@ -354,7 +354,9 @@ public final class MilitaryGameTests {
 
     @GameTest(template="empty",batch="military_loot_range")
     public static void guard_and_patrol_scan_distinct_radii_and_skip_residences(GameTestHelper h){
-        var f=fixture(h,20);
+        // The 30-block loot corridor extends into neighboring GameTest plots.
+        // Keep it above their terrain so the loot and line of sight stay unobstructed.
+        var f=fixture(h,80);
         clearTestHostiles(f);
         for(var pos:BlockPos.betweenClosed(f.p.offset(0,-1,-2),f.p.offset(30,-1,2)))
             f.l.setBlock(pos,Blocks.STONE.defaultBlockState(),3);
