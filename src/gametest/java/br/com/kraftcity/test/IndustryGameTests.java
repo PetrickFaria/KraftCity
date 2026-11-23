@@ -472,6 +472,77 @@ public final class IndustryGameTests {
             "Waiting for the bee to fly into the apiary for one flower: "+bee.position()));
     }
 
+    @GameTest(template="empty",timeoutTicks=1000,batch="apiary_scheduled_no_hive")
+    public static void apiary_scheduled_taming_without_hive_around_obstacle(GameTestHelper h){
+        scheduledTaming(h,Items.POPPY,5,false,true);
+    }
+
+    @GameTest(template="empty",timeoutTicks=1000,batch="apiary_scheduled_hive")
+    public static void apiary_scheduled_taming_with_hive(GameTestHelper h){
+        scheduledTaming(h,Items.DANDELION,9,true,false);
+    }
+
+    @GameTest(template="empty",timeoutTicks=1000,batch="apiary_scheduled_close")
+    public static void apiary_scheduled_taming_at_two_blocks(GameTestHelper h){
+        scheduledTaming(h,Items.CORNFLOWER,2,false,false);
+    }
+
+    @GameTest(template="empty",timeoutTicks=160,batch="apiary_scheduled_protection")
+    public static void apiary_taming_uses_flower_in_forge_interaction(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        var start=Vec3.atBottomCenterOf(f.p.above());
+        f.v.setPos(start);
+        var bee=apiaryBee(f,1);
+        f.s.setItem(27,new ItemStack(Items.SHEARS));
+        f.s.setItem(29,new ItemStack(Items.POPPY));
+        var actualItem=new boolean[1];
+        java.util.function.Consumer<net.minecraftforge.event.entity.player.PlayerInteractEvent.EntityInteract> protection=event->{
+            if(event.getTarget()!=bee)return;
+            actualItem[0]=event.getItemStack().is(Items.POPPY);
+            if(!actualItem[0])event.setCanceled(true);
+        };
+        MinecraftForge.EVENT_BUS.addListener(net.minecraftforge.eventbus.api.EventPriority.NORMAL,false,
+            net.minecraftforge.event.entity.player.PlayerInteractEvent.EntityInteract.class,protection);
+        try{
+            step(f,1);
+            check(actualItem[0]&&((ApiaryBeeAppearance)bee).kraftcity$isBonded(),"Forge did not see the offered flower");
+        }finally{
+            MinecraftForge.EVENT_BUS.unregister(protection);
+        }
+        h.succeed();
+    }
+
+    private static void scheduledTaming(GameTestHelper h,Item flower,int distance,boolean withHive,boolean obstacle){
+        var f=fixture(h,Profession.BEEKEEPER);
+        f.l.setRainLevel(0);
+        f.l.setThunderLevel(0);
+        check(IndustrialRules.selectSize(f.l,f.s,7),"Could not select the initial apiary");
+        for(var floor:BlockPos.betweenClosed(f.p.offset(-4,-1,-5),f.p.offset(12,-1,5)))
+            f.l.setBlock(floor,Blocks.STONE.defaultBlockState(),3);
+        if(withHive)f.l.setBlock(f.p.north(2).above(),Blocks.BEEHIVE.defaultBlockState(),3);
+        if(obstacle)for(int y=0;y<=2;y++)f.l.setBlock(f.p.offset(2,y,1),Blocks.STONE.defaultBlockState(),3);
+        var start=Vec3.atBottomCenterOf(f.p.south());
+        f.v.setPos(start);
+        var bee=EntityType.BEE.create(f.l);
+        bee.setPos(start.add(distance,.25,0));
+        if(obstacle)bee.setNoAi(true);
+        f.l.addFreshEntity(bee);
+        check(!obstacle||!f.v.hasLineOfSight(bee),"Wall failed to hide the bee");
+        h.startSequence().thenIdle(45).thenExecute(()->{
+            check(!f.v.getMainHandItem().is(flower)&&!bee.getPersistentData().contains("KCApiaryAttempt"),"Taming began with an empty flower slot");
+            f.s.setItem(29,new ItemStack(flower,64));
+            f.v.setNoAi(false);
+        }).thenWaitUntil(()->check(f.v.getMainHandItem().is(flower),"Waiting for visible flower"))
+            .thenExecute(()->bee.setNoAi(false))
+            .thenWaitUntil(()->{
+                check(((ApiaryBeeAppearance)bee).kraftcity$isBonded(),"Waiting for scheduled taming: "+bee.position()+" worker="+f.v.position());
+                check(IndustrialWork.area(f.l,f.s).contains(bee.position()),"Bee bonded outside");
+                int remaining=f.s.getItem(29).getCount();
+                check(remaining>=59&&remaining<=63&&f.s.industry.getCompound("apiary_bees").size()==1,
+                    "Expected 1–5 flowers and one recorded bee");
+            }).thenSucceed();
+    }
+
     @GameTest(template="empty",timeoutTicks=80,batch="apiary_boundaries")
     public static void apiary_bonded_movement_is_bounded_on_all_six_faces(GameTestHelper h){
         var f=fixture(h,Profession.BEEKEEPER);

@@ -52,6 +52,9 @@ public final class ApiaryWork {
     private static final String OWNER="KCApiary", ID="KCApiaryBee", ATTEMPT="KCApiaryAttempt", BREED="KCApiaryBreed";
     private static final TagKey<net.minecraft.world.item.Item> EMPTY_BOTTLES=
         TagKey.create(Registry.ITEM_REGISTRY,new ResourceLocation("residenciasaldeoes","apiary_bottles"));
+    private static final boolean TRACE = Boolean.getBoolean("kraftcity.debugApiaryTaming");
+    private record Scan(String task,int found,int eligible,int flowers,int population,int capacity,UUID target){}
+    private static final Map<Villager,Scan> LAST_SCAN=new WeakHashMap<>();
     private static final Map<Villager,Long> FLOWER_SWINGS=new WeakHashMap<>();
     private static final int SHEARS=EmploymentData.TOOL, BOTTLES=EmploymentData.INPUT_A, FLOWERS=EmploymentData.INPUT_B;
 
@@ -86,41 +89,54 @@ public final class ApiaryWork {
             station.setItem(EmploymentData.EQUIPMENT,ItemStack.EMPTY);
     }
 
-    static void tick(ServerLevel level,EmploymentData.Station station,Villager worker){
+    static void tick(ServerLevel level,EmploymentData.Station station,Villager worker,boolean mobGriefing){
         var work=IndustrialWork.area(level,station);
         if(FLOWER_SWINGS.getOrDefault(worker,0L)<=level.getGameTime())show(worker,collectionItem(station));
         var hives=registeredHives(level,station,work);
         var bees=level.getEntitiesOfClass(Bee.class,work,bee->work.contains(bee.position())&&bee.isAlive());
-        for(var pos:hives){
+        if(mobGriefing)for(var pos:hives){
             if(!level.hasChunkAt(pos)||!(level.getBlockEntity(pos) instanceof BeehiveBlockEntity hive))continue;
             if(hive.getBlockState().getValue(BeehiveBlock.HONEY_LEVEL)!=5)continue;
             if(hive.isEmpty()&&bees.stream().noneMatch(bee->pos.equals(bee.getHivePos())))continue;
             if(harvest(level,station,worker,hive))return;
         }
-        if(FarmerLogistics.collect(level,station,worker))return;
+        if(mobGriefing&&FarmerLogistics.collect(level,station,worker))return;
         var flowers=station.getItem(FLOWERS);
-        if(validInput(2,flowers)&&beeCount(station)+reservedBirth(level,station)<capacity(level,station)){
-            var inside=bees.stream().filter(bee->wildCandidate(bee)&&bee.distanceToSqr(worker)<=100).filter(worker::hasLineOfSight)
-                .min(Comparator.comparingDouble(worker::distanceToSqr)).orElse(null);
-            if(inside!=null){
-                domesticate(level,station,worker,inside,flowers,work);
-                return;
-            }
-            if(breed(level,station,worker,bees,flowers))return;
-            if(!work.expandTowards(0,-1,0).contains(worker.position())){
-                FarmerLogistics.stayInField(level,station,worker);
-                return;
-            }
-            var wild=level.getEntitiesOfClass(Bee.class,worker.getBoundingBox().inflate(12),
-                bee->wildCandidate(bee)&&(bee.distanceToSqr(worker)<=100||ApiaryBeeFlight.luredBy(bee,worker)))
-                .stream().filter(worker::hasLineOfSight)
-                .min(Comparator.comparingDouble(worker::distanceToSqr)).orElse(null);
+        int population=beeCount(station)+reservedBirth(level,station);
+        int capacity=capacity(level,station);
+        if(!validInput(2,flowers)||population>=capacity){
+            scan(worker,population>=capacity?"capacity":"no_flowers",
+                0,0,flowers,population,capacity,null);
+        }else{
+            var nearby=level.getEntitiesOfClass(Bee.class,worker.getBoundingBox().inflate(12),
+                bee->bee.distanceToSqr(worker)<=100||ApiaryBeeFlight.luredBy(bee,worker));
+            var eligible=nearby.stream().filter(bee->wildCandidate(bee)&&ApiaryBeeFlight.available(bee,worker)).toList();
+            var wild=eligible.stream()
+                .filter(bee->!level.isRaining()||work.contains(bee.position())&&visible(level,worker,bee.getEyePosition(),null))
+                .min(Comparator
+                .comparing((Bee bee)->!ApiaryBeeFlight.luredBy(bee,worker))
+                .thenComparing(bee->!worker.hasLineOfSight(bee))
+                .thenComparingDouble(worker::distanceToSqr)).orElse(null);
             if(wild!=null){
+                scan(worker,"taming",nearby.size(),eligible.size(),flowers,population,capacity,wild);
                 domesticate(level,station,worker,wild,flowers,work);
                 return;
             }
+            scan(worker,level.isRaining()?"rain":"no_eligible_bee",nearby.size(),eligible.size(),flowers,population,capacity,null);
+            if(mobGriefing&&breed(level,station,worker,bees,flowers))return;
         }
         FarmerLogistics.stayInField(level,station,worker);
+    }
+
+    static void blocked(ServerLevel level,EmploymentData.Station station,Villager worker,String reason){
+        if(TRACE)scan(worker,reason,0,0,station.getItem(FLOWERS),beeCount(station)+reservedBirth(level,station),capacity(level,station),null);
+    }
+
+    private static void scan(Villager worker,String task,int found,int eligible,ItemStack flowers,int population,int capacity,Bee target){
+        if(!TRACE)return;
+        var state=new Scan(task,found,eligible,flowers.getCount(),population,capacity,target==null?null:target.getUUID());
+        if(!state.equals(LAST_SCAN.put(worker,state)))
+            com.mojang.logging.LogUtils.getLogger().info("Apiary taming worker={} {}",worker.getUUID(),state);
     }
 
     private static List<BlockPos> registeredHives(ServerLevel level,EmploymentData.Station station,AABB area){
@@ -258,20 +274,24 @@ public final class ApiaryWork {
     }
 
     private static void domesticate(ServerLevel level,EmploymentData.Station station,Villager worker,Bee bee,ItemStack flowers,AABB area){
+        show(worker,flowers);
+        worker.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,bee.getEyePosition());
         if(!area.expandTowards(0,-1,0).contains(worker.position())){
             FarmerLogistics.stayInField(level,station,worker);
             return;
         }
-        show(worker,flowers);
+        worker.getNavigation().stop();
         if(!area.contains(bee.position())||!visible(level,worker,bee.getEyePosition(),null)){
-            worker.getNavigation().stop();
-            if(!level.isRaining()&&!level.isNight())ApiaryBeeFlight.lure(bee,worker);
+            ApiaryBeeFlight.lure(bee,worker,area);
             return;
         }
         ApiaryBeeFlight.finishLure(bee);
         var data=bee.getPersistentData();
-        if(!IndustrialWork.allowed(level,station,worker,bee.blockPosition(),bee,"apiary_tame")
-            ||data.hasUUID(OWNER)||beeCount(station)>=capacity(level,station))return;
+        if(data.hasUUID(OWNER)||beeCount(station)>=capacity(level,station))return;
+        if(!IndustrialWork.allowed(level,station,worker,bee.blockPosition(),bee,"apiary_tame")){
+            blocked(level,station,worker,"interaction_protected");
+            return;
+        }
         var attempt=data.getCompound(ATTEMPT);
         if(!attempt.hasUUID("station")||!station.id.equals(attempt.getUUID("station"))){
             attempt=new CompoundTag();
@@ -279,6 +299,8 @@ public final class ApiaryWork {
             attempt.putInt("remaining",1+bee.getRandom().nextInt(5));
         }
         flowers.shrink(1);
+        if(TRACE)com.mojang.logging.LogUtils.getLogger().info("Apiary worker={} fed bee={} remaining={} bound={}",
+            worker.getUUID(),bee.getUUID(),attempt.getInt("remaining")-1,attempt.getInt("remaining")<=1);
         FLOWER_SWINGS.put(worker,level.getGameTime()+8);
         int remaining=attempt.getInt("remaining")-1;
         worker.getNavigation().stop();

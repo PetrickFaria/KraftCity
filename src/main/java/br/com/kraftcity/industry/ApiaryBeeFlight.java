@@ -14,7 +14,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 public final class ApiaryBeeFlight {
-    private record Lure(Villager worker,long expires){}
+    private record Lure(Villager worker,Vec3 destination,long expires){}
     private static final Map<Bee,Lure> LURES=new WeakHashMap<>();
     private static final Map<Bee,Boolean> INSTALLED=new WeakHashMap<>();
 
@@ -30,26 +30,42 @@ public final class ApiaryBeeFlight {
                     &&ApiaryWork.validInput(2,lure.worker.getMainHandItem())
                     &&!bee.isAngry()&&!bee.isInLove()&&!bee.level.isRaining()&&!bee.level.isNight();
             }
+            @Override public boolean canContinueToUse(){return canUse();}
             @Override public boolean requiresUpdateEveryTick(){return true;}
             @Override public void start(){follow();}
             @Override public void tick(){if(bee.tickCount%5==0)follow();}
             private void follow(){
                 var active=LURES.get(bee);
                 if(active==null)return;
-                var worker=active.worker;
-                var eye=worker.getEyePosition();
-                if(bee.position().distanceToSqr(eye)>.49){
-                    var navigation=bee.getNavigation();
-                    if(!navigation.moveTo(eye.x,eye.y,eye.z,1.05)&&bee.hasLineOfSight(worker))
-                        bee.getMoveControl().setWantedPosition(eye.x,eye.y,eye.z,1.0);
+                var destination=active.destination;
+                var navigation=bee.getNavigation();
+                if(bee.position().distanceToSqr(destination)<=.16)return;
+                var hit=bee.level.clip(new net.minecraft.world.level.ClipContext(
+                    bee.position().add(0,bee.getBbHeight()/2,0),destination.add(0,bee.getBbHeight()/2,0),
+                    net.minecraft.world.level.ClipContext.Block.COLLIDER,net.minecraft.world.level.ClipContext.Fluid.NONE,bee));
+                if(hit.getType()==net.minecraft.world.phys.HitResult.Type.MISS){
+                    navigation.stop();
+                    bee.getMoveControl().setWantedPosition(destination.x,destination.y,destination.z,1);
+                }else if(navigation.isDone()){
+                    navigation.moveTo(destination.x,destination.y,destination.z,1.05);
                 }
             }
             @Override public void stop(){bee.getNavigation().stop();}
         });
     }
 
-    static void lure(Bee bee,Villager worker){
-        LURES.put(bee,new Lure(worker,bee.level.getGameTime()+30));
+    static void lure(Bee bee,Villager worker,AABB area){
+        var destination=nearest(feetBounds(bee,area).deflate(.3),worker.getEyePosition().add(0,-.25,0));
+        if(!luredBy(bee,worker)&&Boolean.getBoolean("kraftcity.debugApiaryTaming"))
+            com.mojang.logging.LogUtils.getLogger().info("Apiary lure worker={} bee={} destination={}",
+                worker.getUUID(),bee.getUUID(),destination);
+        LURES.put(bee,new Lure(worker,destination,bee.level.getGameTime()
+            +Math.max(30,br.com.kraftcity.employment.EmploymentConfig.ACTION_TICKS.get()+20)));
+    }
+
+    static boolean available(Bee bee,Villager worker){
+        var lure=LURES.get(bee);
+        return lure==null||lure.worker==worker||!luredBy(bee,lure.worker);
     }
 
     static boolean luredBy(Bee bee,Villager worker){

@@ -45,12 +45,12 @@ public final class IndustrialWork {
     public static void tick(ServerLevel l,EmploymentData.Station s){
         if(!industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
         if(l.isThundering()||Employment.fleeing(v)){
-            if(s.profession==Profession.BEEKEEPER)restoreHand(v);
+            if(s.profession==Profession.BEEKEEPER){restoreHand(v);ApiaryWork.blocked(l,s,v,"storm_or_danger");}
             s.industry.remove("fish_elapsed");
             return;
         }
         if(!day(l)||v.isSleeping()){
-            if(s.profession==Profession.BEEKEEPER)restoreHand(v);
+            if(s.profession==Profession.BEEKEEPER){restoreHand(v);ApiaryWork.blocked(l,s,v,"rest");}
             s.industry.remove("fish_elapsed");
             if(!day(l)&&FarmerLogistics.fieldWorker(s))return;
             if(!day(l)){
@@ -60,13 +60,17 @@ public final class IndustrialWork {
             }
             return;
         }
-        if(!ownsNavigation(v)||br.com.kraftcity.employment.WorkplaceVisits.leaving(v))return;
+        if(!ownsNavigation(v)||br.com.kraftcity.employment.WorkplaceVisits.leaving(v)){
+            if(s.profession==Profession.BEEKEEPER)ApiaryWork.blocked(l,s,v,"residential_or_safety_route");
+            return;
+        }
         long day=Math.floorDiv(l.getDayTime()+1000,24000);
         if((s.profession==Profession.BUTCHER||s.profession==Profession.SHEPHERD)&&s.industry.getLong("supplied_day")!=day+1){
             dawnSupply(l,s,v);s.industry.putLong("supplied_day",day+1);s.setChanged();
         }
         replenish(s);showTool(v,s);
-        if(!ForgeEventFactory.getMobGriefingEvent(l,v)){alert(l,s,"protection","Trabalho bloqueado pela proteção/mobGriefing.");return;}
+        boolean mobGriefing=ForgeEventFactory.getMobGriefingEvent(l,v);
+        if(!mobGriefing&&s.profession!=Profession.BEEKEEPER){alert(l,s,"protection","Trabalho bloqueado pela proteção/mobGriefing.");return;}
         switch(s.profession){
             case FARMER->{
                 if(!FarmerLogistics.isJumping(v)&&!FarmerLogistics.leaveWater(l,v)&&!FarmerLogistics.collect(l,s,v)){
@@ -78,7 +82,7 @@ public final class IndustrialWork {
             case SHEPHERD->animals(l,s,v,Profession.SHEPHERD);
             case FISHERMAN->fish(l,s,v);
             case BREEDER->animals(l,s,v,Profession.BREEDER);
-            case BEEKEEPER->ApiaryWork.tick(l,s,v);
+            case BEEKEEPER->ApiaryWork.tick(l,s,v,mobGriefing);
             default->{}
         }
     }
@@ -95,6 +99,7 @@ public final class IndustrialWork {
     public static boolean allowed(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos pos,Entity target,String action){
         if(!l.hasChunkAt(pos)||!l.getWorldBorder().isWithinBounds(pos))return false;
         var p=actor(l,s,v);
+        if(action.equals("apiary_tame"))p.setItemInHand(InteractionHand.MAIN_HAND,v.getMainHandItem().copy());
         boolean denied=!br.com.kraftcity.logistics.DiscardChests.canOpen(l,pos,p);
         denied|=MinecraftForge.EVENT_BUS.post(new WorkActionEvent(l,s,v,pos,target,action));
         if(target!=null)denied|=MinecraftForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(p,InteractionHand.MAIN_HAND,target));
