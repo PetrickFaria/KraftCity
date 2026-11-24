@@ -11,6 +11,7 @@
     "ResidentSteveModelMixin",
     "RenderTypeOpacityMixin",
     "ModelPartOpacityMixin",
+    "ResidentPartOpacityMixin",
     "SoldierModelPartAccessor",
     "SoldierLegCaptureMixin",
     "SoldierLegCubeMixin",

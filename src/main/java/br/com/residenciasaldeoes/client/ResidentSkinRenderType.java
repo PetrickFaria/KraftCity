@@ -4,6 +4,7 @@ import br.com.residenciasaldeoes.ResidenciasDosAldeoes;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import java.io.IOException;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import net.minecraft.Util;
 import net.minecraft.client.renderer.RenderType;
@@ -12,6 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RegisterShadersEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
 
 /** A blend pass only for imported resident textures containing fractional alpha. */
@@ -46,6 +48,33 @@ public final class ResidentSkinRenderType extends RenderType {
     }
 
     public static RenderType blended(ResourceLocation texture) {
-        return shader == null ? RenderType.entityTranslucent(texture) : ALPHA.apply(texture);
+        // Iris/Oculus hooks Minecraft's entity shader suppliers when composing
+        // the world. The standalone Forge shader bypasses those hooks.
+        if (shader == null || (!ResidentOpacity.isPreviewRendering() && ShaderPack.ACTIVE.getAsBoolean())) {
+            return RenderType.entityTranslucent(texture);
+        }
+        return ALPHA.apply(texture);
+    }
+
+    private static final class ShaderPack {
+        private static final BooleanSupplier ACTIVE = connect();
+
+        private static BooleanSupplier connect() {
+            if (!ModList.get().isLoaded("oculus") && !ModList.get().isLoaded("iris")) return () -> false;
+            try {
+                var api = Class.forName("net.irisshaders.iris.api.v0.IrisApi");
+                var instance = api.getMethod("getInstance").invoke(null);
+                var active = api.getMethod("isShaderPackInUse");
+                return () -> {
+                    try {
+                        return Boolean.TRUE.equals(active.invoke(instance));
+                    } catch (ReflectiveOperationException | LinkageError unavailable) {
+                        return false;
+                    }
+                };
+            } catch (ReflectiveOperationException | LinkageError unavailable) {
+                return () -> false;
+            }
+        }
     }
 }

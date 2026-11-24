@@ -14,7 +14,8 @@ public abstract class ModelPartOpacityMixin {
             at = @At("HEAD"), argsOnly = true, ordinal = 3)
     private float residenciasaldeoes$applyResidentOpacity(float alpha) {
         // The preview has its own buffer wrapper; only change in-world model geometry here.
-        if (ResidentOpacity.isPreviewRendering() || ResidentOpacity.renderingNameTag()) return alpha;
+        if (ResidentOpacity.isPreviewRendering() || ResidentOpacity.renderingNameTag()
+                || ResidentOpacity.hasPartAlpha()) return alpha;
         return alpha * (ResidentOpacity.renderingPercent() / 100.0F);
     }
 }
