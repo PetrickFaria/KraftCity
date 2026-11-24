@@ -2,6 +2,7 @@ package br.com.kraftcity.industry;
 
 import br.com.kraftcity.employment.EmploymentData;
 import br.com.kraftcity.employment.Profession;
+import com.mojang.logging.LogUtils;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -24,18 +25,26 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.Tiers;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FlowerBlock;
+import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.TallFlowerBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import org.slf4j.Logger;
 
 public final class LumberjackWork {
+    static final boolean TRACE = Boolean.getBoolean("kraftcity.lumberjackDebug");
+    static final Logger LOGGER = LogUtils.getLogger();
+    private static final Map<Villager, String> LAST_STATE = new WeakHashMap<>();
     private static final String JOB = "lumberjack_tree";
     private static final int SEARCH_INTERVAL = 60;
     private static final double WORK_REACH = 3;
@@ -87,6 +96,12 @@ public final class LumberjackWork {
         return item.getItem() instanceof BlockItem && (item.is(ItemTags.SAPLINGS) || item.is(Items.MANGROVE_PROPAGULE));
     }
 
+    static void trace(Villager worker, String state) {
+        if (TRACE && !state.equals(LAST_STATE.put(worker, state))) {
+            LOGGER.info("Lumberjack worker={} {}", worker.getUUID(), state);
+        }
+    }
+
     public static void pause(Villager worker) {
         var session = SESSIONS.remove(worker);
         if (session != null) stop(worker, session);
@@ -95,6 +110,7 @@ public final class LumberjackWork {
 
     static boolean tick(ServerLevel level, EmploymentData.Station station, Villager worker) {
         if (worker.isNoAi() || worker.isTrading() || worker.isPassenger() || worker.isInWater()) {
+            trace(worker, "blocked: no AI, trading, riding or in water");
             pause(worker);
             return false;
         }
@@ -127,6 +143,8 @@ public final class LumberjackWork {
         if (!job.isEmpty() && cutTicks(axe) > 0) return chop(level, station, worker, session, area, job, axe);
         session.resetCut();
         if (level.getGameTime() >= session.scanAfter) {
+            if (TRACE) LOGGER.info("Lumberjack worker={} on duty, axe={}, cut ticks={}, bounds={}",
+                    worker.getUUID(), axe, cutTicks(axe), area);
             session.scanAfter = level.getGameTime() + SEARCH_INTERVAL;
             if (cutTicks(axe)==0 && (!job.isEmpty() || IndustrialWork.find(station,LumberjackWork::sapling,0,EmploymentData.INPUT_A+1)<0)) {
                 IndustrialWork.alert(level,station,"lumberjack_axe","Falta um machado válido para cortar árvores.");
@@ -165,12 +183,16 @@ public final class LumberjackWork {
         }
         bases.sort(Comparator.<BlockPos>comparingDouble(pos -> Vec3.atBottomCenterOf(pos).distanceToSqr(worker.position())).thenComparingInt(BlockPos::getY));
         for (var base : bases) {
-            var tree = LumberjackTrees.identify(level, base, area);
-            if (tree == null || overlapsJob(level, station, tree)) continue;
+            var tree = LumberjackTrees.identify(level, base, area, station.pos);
+            if (tree == null) continue;
+            if (TRACE) LOGGER.info("Lumberjack worker={} found tree at {} with {} logs",
+                    worker.getUUID(), base, tree.logs().size());
+            if (overlapsJob(level, station, tree)) continue;
             var first = tree.logs().get(0).pos();
             if (!IndustrialWork.allowed(level, station, worker, first, null, "lumberjack_select")) continue;
             session.routeAfter = 0;
-            if (reachable(level, worker, area, first, base) || route(level, worker, session, area, first, base)) return tree;
+            if (reachable(level, worker, area, first, base, true) || route(level, worker, session, area, first, base, true)) return tree;
+            if (TRACE) LOGGER.info("Lumberjack worker={} cannot reach tree at {}", worker.getUUID(), base);
         }
         return null;
     }
@@ -244,9 +266,13 @@ public final class LumberjackWork {
             clear(station,worker,session);
             return false;
         }
-        if (!reachable(level, worker, area, target, base)) {
+        if (!reachable(level, worker, area, target, base, true)) {
             session.resetCut();
-            if (route(level, worker, session, area, target, base)) return true;
+            if (route(level, worker, session, area, target, base, true)) {
+                if (TRACE) trace(worker, "walking to log " + target);
+                return true;
+            }
+            if (TRACE) trace(worker, "no clear path to log " + target);
             clear(station, worker, session);
             return false;
         }
@@ -256,6 +282,7 @@ public final class LumberjackWork {
             session.chopping = target;
             session.axe = axe.copy();
             session.elapsed = 0;
+            if (TRACE) trace(worker, "cutting log " + target + " for " + cutTicks(axe) + " ticks");
             worker.swing(InteractionHand.MAIN_HAND,true);
             return true;
         }
@@ -297,37 +324,65 @@ public final class LumberjackWork {
         stop(worker,session);
     }
 
-    private static boolean reachable(ServerLevel level, Villager worker, AABB area, BlockPos target, BlockPos base) {
+    private static boolean reachable(ServerLevel level, Villager worker, AABB area, BlockPos target, BlockPos base, boolean choppingTree) {
         if (!area.contains(worker.position())) return false;
         if (Math.abs(worker.getY()-base.getY()) > 2) return false;
-        var face = Vec3.atCenterOf(target);
-        double dx = worker.getX()-face.x, dz = worker.getZ()-face.z;
-        if (dx*dx + dz*dz > WORK_REACH*WORK_REACH) return false;
         // Upper strokes extend only along the saved tree, with clear access from its base.
-        return clearStroke(level,worker,worker.getEyePosition(),target);
+        return withinReach(worker.getX(), worker.getZ(), target, choppingTree)
+                && clearStroke(level, worker, worker.getEyePosition(), target, choppingTree);
     }
 
-    private static boolean clearStroke(ServerLevel level,Villager worker,Vec3 eyes,BlockPos target) {
-        var hit = level.clip(new ClipContext(eyes,Vec3.atCenterOf(target),ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,worker));
-        return hit.getType()==HitResult.Type.MISS || hit.getBlockPos().equals(target);
+    private static boolean withinReach(double x, double z, BlockPos target, boolean choppingTree) {
+        double dx = Math.abs(x - target.getX() - .5), dz = Math.abs(z - target.getZ() - .5);
+        if (choppingTree) {
+            // Measure to the trunk face so a path ending slightly off its cell center can still work.
+            dx = Math.max(0, dx - .5);
+            dz = Math.max(0, dz - .5);
+        }
+        return dx * dx + dz * dz <= WORK_REACH * WORK_REACH;
     }
 
-    private static boolean route(ServerLevel level, Villager worker, Session session, AABB area, BlockPos target, BlockPos base) {
+    private static boolean clearStroke(ServerLevel level, Villager worker, Vec3 eyes, BlockPos target, boolean choppingTree) {
+        var center = Vec3.atCenterOf(target);
+        return clearTo(level, worker, eyes, target, center, choppingTree)
+                || choppingTree && clearTo(level, worker, eyes, target, center.add(0, .4375, 0), true);
+    }
+
+    private static boolean clearTo(ServerLevel level, Villager worker, Vec3 eyes, BlockPos target, Vec3 end, boolean choppingTree) {
+        var hit = level.clip(new ClipContext(eyes, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, worker) {
+            @Override
+            public VoxelShape getBlockShape(BlockState state, BlockGetter world, BlockPos pos) {
+                // A strike can reach through natural foliage; the navigation still uses its solid collision shape.
+                if (choppingTree && state.getBlock() instanceof LeavesBlock && !state.getValue(LeavesBlock.PERSISTENT)) {
+                    return Shapes.empty();
+                }
+                return super.getBlockShape(state, world, pos);
+            }
+        });
+        return hit.getType() == HitResult.Type.MISS || hit.getBlockPos().equals(target);
+    }
+
+    private static boolean route(ServerLevel level, Villager worker, Session session, AABB area, BlockPos target, BlockPos base, boolean choppingTree) {
         if (session.path != null && worker.getNavigation().getPath() == session.path && !worker.getNavigation().isDone()
                 && session.path.getTarget().distSqr(new BlockPos(target.getX(),base.getY(),target.getZ())) <= 12) return true;
         if (level.getGameTime() < session.routeAfter) return false;
         var candidates = new ArrayList<BlockPos>();
-        for (var cell : BlockPos.betweenClosed(new BlockPos(target.getX()-2,base.getY()-1,target.getZ()-2),
-                new BlockPos(target.getX()+2,base.getY()+1,target.getZ()+2))) {
-            if (walkable(level,cell,area)
-                    && (cell.getX()!=target.getX() || cell.getZ()!=target.getZ())
-                    && clearStroke(level,worker,Vec3.atBottomCenterOf(cell).add(0,worker.getEyeHeight(),0),target)) candidates.add(cell.immutable());
+        int radius = choppingTree ? (int) WORK_REACH : 2;
+        for (var cell : BlockPos.betweenClosed(new BlockPos(target.getX()-radius,base.getY()-1,target.getZ()-radius),
+                new BlockPos(target.getX()+radius,base.getY()+1,target.getZ()+radius))) {
+            int dx = cell.getX() - target.getX(), dz = cell.getZ() - target.getZ();
+            if ((dx != 0 || dz != 0) && withinReach(cell.getX() + .5, cell.getZ() + .5, target, choppingTree)
+                    && walkable(level,cell,area)
+                    && clearStroke(level, worker, Vec3.atBottomCenterOf(cell).add(0,worker.getEyeHeight(),0), target, choppingTree)) {
+                candidates.add(cell.immutable());
+            }
         }
         candidates.sort(Comparator.comparingDouble(cell -> Vec3.atBottomCenterOf(cell).distanceToSqr(worker.position())));
         for (var cell : candidates) {
             if (cell.distSqr(worker.blockPosition()) == 0) continue;
             var path = worker.getNavigation().createPath(cell,0);
             if (path == null || !path.canReach() || !insidePath(path,area,worker)) continue;
+            if (choppingTree) IndustrialIdle.interrupt(worker);
             if (worker.getNavigation().moveTo(path,.7)) {
                 session.path = path;
                 return true;
@@ -381,8 +436,8 @@ public final class LumberjackWork {
         if (level.getEntity(session.collecting) instanceof ItemEntity drop && drop.isAlive() && !drop.hasPickUpDelay()
                 && drop.getOwner()==null && area.contains(drop.position()) && IndustrialWork.insert(station,drop.getItem(),false)) {
             var target = drop.blockPosition();
-            if (!reachable(level,worker,area,target,target)) {
-                if (route(level,worker,session,area,target,target)) return true;
+            if (!reachable(level,worker,area,target,target,false)) {
+                if (route(level,worker,session,area,target,target,false)) return true;
             } else if (IndustrialWork.allowed(level,station,worker,target,drop,"lumberjack_collect")) {
                 if (drop.isAlive() && IndustrialWork.insert(station,drop.getItem(),true)) drop.discard();
             }
@@ -414,7 +469,7 @@ public final class LumberjackWork {
             for (var pos : candidates) {
                 if (!plantable(level,area,pos,stack)) continue;
                 session.routeAfter=0;
-                if (reachable(level,worker,area,pos,pos) || route(level,worker,session,area,pos,pos))
+                if (reachable(level,worker,area,pos,pos,false) || route(level,worker,session,area,pos,pos,false))
                     return new Planting(pos,slot);
             }
         }
@@ -467,7 +522,7 @@ public final class LumberjackWork {
     private static boolean plant(ServerLevel level, EmploymentData.Station station, Villager worker, Session session, AABB area) {
         var seed = station.getItem(session.seed);
         var pos = session.planting;
-        boolean inReach=reachable(level,worker,area,pos,pos);
+        boolean inReach=reachable(level,worker,area,pos,pos,false);
         if (!inReach && level.getGameTime()<session.plantCheckAfter && session.path!=null
                 && worker.getNavigation().getPath()==session.path && !worker.getNavigation().isDone()) return true;
         session.plantCheckAfter=level.getGameTime()+10;
@@ -476,11 +531,11 @@ public final class LumberjackWork {
             display.setCount(1);
             IndustrialWork.displayTool(worker,display);
             if (!inReach) {
-                if (route(level,worker,session,area,pos,pos)) return true;
+                if (route(level,worker,session,area,pos,pos,false)) return true;
             } else {
                 var block = ((BlockItem)seed.getItem()).getBlock().defaultBlockState();
                 var cells = plantingCells(pos,seed);
-                if (cells.stream().allMatch(cell -> reachable(level,worker,area,cell,pos)
+                if (cells.stream().allMatch(cell -> reachable(level,worker,area,cell,pos,false)
                         && level.mayInteract(IndustrialWork.actor(level,station,worker),cell)
                         && IndustrialWork.placeAllowed(level,station,worker,cell,block)) && plantable(level,area,pos,seed)) {
                     var old = cells.stream().map(level::getBlockState).toList();

@@ -45,14 +45,20 @@ public final class IndustrialWork {
     public static void tick(ServerLevel l,EmploymentData.Station s){
         if(!industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
         if(l.isThundering()||Employment.fleeing(v)){
-            if(s.profession==Profession.LUMBERJACK)LumberjackWork.pause(v);
+            if(s.profession==Profession.LUMBERJACK){
+                LumberjackWork.trace(v,"blocked: storm or danger");
+                LumberjackWork.pause(v);
+            }
             IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER){restoreHand(v);ApiaryWork.blocked(l,s,v,"storm_or_danger");}
             s.industry.remove("fish_elapsed");
             return;
         }
         if(!day(l)||v.isSleeping()){
-            if(s.profession==Profession.LUMBERJACK)LumberjackWork.pause(v);
+            if(s.profession==Profession.LUMBERJACK){
+                LumberjackWork.trace(v,"blocked: off duty or sleeping");
+                LumberjackWork.pause(v);
+            }
             IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER){restoreHand(v);ApiaryWork.blocked(l,s,v,"rest");}
             s.industry.remove("fish_elapsed");
@@ -65,7 +71,10 @@ public final class IndustrialWork {
             return;
         }
         if(!ownsNavigation(v)||br.com.kraftcity.employment.WorkplaceVisits.leaving(v)){
-            if(s.profession==Profession.LUMBERJACK)LumberjackWork.pause(v);
+            if(s.profession==Profession.LUMBERJACK){
+                LumberjackWork.trace(v,"blocked: residential or safety route");
+                LumberjackWork.pause(v);
+            }
             IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER)ApiaryWork.blocked(l,s,v,"residential_or_safety_route");
             return;
@@ -77,7 +86,10 @@ public final class IndustrialWork {
         replenish(s);showTool(v,s);
         boolean mobGriefing=ForgeEventFactory.getMobGriefingEvent(l,v);
         if(!mobGriefing&&s.profession!=Profession.BEEKEEPER){
-            if(s.profession==Profession.LUMBERJACK)LumberjackWork.pause(v);
+            if(s.profession==Profession.LUMBERJACK){
+                LumberjackWork.trace(v,"blocked: mob griefing disabled");
+                LumberjackWork.pause(v);
+            }
             alert(l,s,"protection","Trabalho bloqueado pela proteção/mobGriefing.");
             IndustrialIdle.tick(l,s,v);
             return;

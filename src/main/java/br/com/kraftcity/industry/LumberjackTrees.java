@@ -64,12 +64,13 @@ final class LumberjackTrees extends SavedData {
         return get(level).constructed.contains(pos.asLong());
     }
 
-    static Tree identify(ServerLevel level, BlockPos base, AABB area) {
+    static Tree identify(ServerLevel level, BlockPos base, AABB area, BlockPos workPost) {
         if (!area.contains(Vec3.atBottomCenterOf(base)) || !loaded(level, base)) return null;
         var trunk = level.getBlockState(base);
-        if (!trunk.is(BlockTags.LOGS) || !grounded(level, base, trunk) || placed(level, base)) return null;
+        if (!trunk.is(BlockTags.LOGS) || !grounded(level, base, trunk)) return null;
+        if (placed(level, base)) return rejected(base, "player-placed root", base);
         if (!loaded(level, base.above(2)) || !level.getBlockState(base.above()).is(trunk.getBlock())
-                || !level.getBlockState(base.above(2)).is(trunk.getBlock())) return null;
+                || !level.getBlockState(base.above(2)).is(trunk.getBlock())) return rejected(base, "short trunk", base);
 
         var pending = new ArrayDeque<BlockPos>();
         var seen = new HashSet<BlockPos>();
@@ -81,9 +82,9 @@ final class LumberjackTrees extends SavedData {
         while (!pending.isEmpty()) {
             BlockPos pos = pending.remove();
             if (logs.size() >= MAX_LOGS || !loaded(level, pos) || placed(level, pos)
-                    || !level.getWorldBorder().isWithinBounds(pos)) return null;
+                    || !level.getWorldBorder().isWithinBounds(pos)) return rejected(base, "unsafe or player-placed log", pos);
             if (pos.getY() == base.getY()) {
-                if (!grounded(level, pos, trunk) || !area.contains(Vec3.atBottomCenterOf(pos))) return null;
+                if (!grounded(level, pos, trunk) || !area.contains(Vec3.atBottomCenterOf(pos))) return rejected(base, "invalid root", pos);
                 roots.add(pos);
             }
             logs.add(new Log(pos, NbtUtils.writeBlockState(level.getBlockState(pos))));
@@ -93,10 +94,12 @@ final class LumberjackTrees extends SavedData {
                 var state = level.getBlockState(neighbor);
                 if (state.getBlock() instanceof LeavesBlock && !state.getValue(LeavesBlock.PERSISTENT)
                         && state.getValue(LeavesBlock.DISTANCE) <= 6 && pos.getY() >= base.getY() + 2) leaves.add(neighbor);
-                if (state.is(BlockTags.LOGS) && !state.is(trunk.getBlock())) return null;
-                if (state.isCollisionShapeFullBlock(level, neighbor) && !state.is(BlockTags.LOGS)
+                if (state.is(BlockTags.LOGS) && !state.is(trunk.getBlock())) return rejected(base, "touching other log species", neighbor);
+                // A sapling can grow alongside the assigned work block at ground level.
+                boolean besidePost = pos.getY() == base.getY() && neighbor.equals(workPost);
+                if (!besidePost && state.isCollisionShapeFullBlock(level, neighbor) && !state.is(BlockTags.LOGS)
                         && !state.is(BlockTags.DIRT) && !state.is(Blocks.MANGROVE_ROOTS)
-                        && !state.is(Blocks.MUDDY_MANGROVE_ROOTS) && !state.is(BlockTags.LEAVES)) return null;
+                        && !state.is(Blocks.MUDDY_MANGROVE_ROOTS) && !state.is(BlockTags.LEAVES)) return rejected(base, "adjoining solid block", neighbor);
             }
             // Vanilla branches can touch the leader at an edge or a corner.
             for (BlockPos cell : BlockPos.betweenClosed(pos.offset(-1,-1,-1), pos.offset(1,1,1))) {
@@ -104,16 +107,22 @@ final class LumberjackTrees extends SavedData {
                 if (!level.getBlockState(cell).is(trunk.getBlock()) || seen.contains(cell)) continue;
                 if (cell.getY() < base.getY() || cell.getY() - base.getY() >= HEIGHT
                         || Math.abs(cell.getX() - base.getX()) > RADIUS
-                        || Math.abs(cell.getZ() - base.getZ()) > RADIUS) return null;
+                        || Math.abs(cell.getZ() - base.getZ()) > RADIUS) return rejected(base, "trunk crossed tree envelope", cell);
                 BlockPos next = cell.immutable();
                 seen.add(next);
                 pending.add(next);
             }
         }
-        if (leaves.size() < 5 || !validRoots(roots)) return null;
+        if (leaves.size() < 5) return rejected(base, "insufficient natural foliage", base);
+        if (!validRoots(roots)) return rejected(base, "multiple unrelated roots", base);
         logs.sort(Comparator.comparingInt((Log log) -> log.pos().getY())
                 .thenComparingInt(log -> log.pos().getX()).thenComparingInt(log -> log.pos().getZ()));
         return new Tree(base.immutable(), List.copyOf(logs));
+    }
+
+    private static Tree rejected(BlockPos base, String reason, BlockPos pos) {
+        if (LumberjackWork.TRACE) LumberjackWork.LOGGER.info("Lumberjack tree {} rejected: {} at {}", base, reason, pos);
+        return null;
     }
 
     private static boolean validRoots(List<BlockPos> roots) {

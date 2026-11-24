@@ -30,6 +30,9 @@ public final class IndustryGameTests {
     private record F(ServerLevel l,EmploymentData.Station s,Villager v,BlockPos p){}
     private static void check(boolean v,String m){if(!v)throw new GameTestAssertException(m);}
     private static F fixture(GameTestHelper h,Profession profession){
+        return fixture(h, profession, post -> {});
+    }
+    private static F fixture(GameTestHelper h, Profession profession, java.util.function.Consumer<BlockPos> beforeHire){
         var l=h.getLevel();l.setDayTime(1000);l.setWeatherParameters(10000,0,false,false);
         BlockPos home=h.absolutePos(new BlockPos(2,2,2)),p=h.absolutePos(new BlockPos(8,2,8));
         l.setBlock(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);
@@ -39,6 +42,7 @@ public final class IndustryGameTests {
         check(ResidenceData.get(l).link(l,home,v).equals("ok"),"residence link");v.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
         var player=FakePlayerFactory.get(l,new GameProfile(UUID.randomUUID(),"IndustryTest"));player.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
         var s=((WorkBlockEntity)l.getBlockEntity(p)).station();s.setItem(31,new ItemStack(Items.EMERALD,EmploymentConfig.cost(profession.sector)));
+        beforeHire.accept(p);
         check(Employment.hire(player,s,v.getUUID(),profession).equals("ok"),"hire "+profession);
         return new F(l,s,v,p);
     }
@@ -2672,6 +2676,85 @@ public final class IndustryGameTests {
         for (var direction:Direction.Plane.HORIZONTAL) f.l.setBlockAndUpdate(crown.relative(direction),foliage);
         f.l.setBlockAndUpdate(crown.above(),foliage);
         return root;
+    }
+
+    @GameTest(template="empty",timeoutTicks=650,batch="lumberjack_vanilla_growth")
+    public static void lumberjack_finishes_an_oak_grown_after_hiring_beside_its_post(GameTestHelper h){
+        assertLumberjackFellsVanillaOak(h, false);
+    }
+
+    @GameTest(template="empty",timeoutTicks=650,batch="lumberjack_vanilla_growth")
+    public static void lumberjack_finishes_bonemealed_oak_at_area_edge(GameTestHelper h){
+        assertLumberjackFellsVanillaOak(h, true);
+    }
+
+    @GameTest(template="empty",timeoutTicks=850,batch="lumberjack_vanilla_branched")
+    public static void lumberjack_waits_for_shift_and_axe_then_cuts_preexisting_branched_oak(GameTestHelper h){
+        var level = h.getLevel();
+        var logs = new ArrayList<BlockPos>();
+        var f = fixture(h, Profession.LUMBERJACK, post -> {
+            for (var floor : BlockPos.betweenClosed(post.offset(-2,-1,-2),post.offset(2,-1,2))) {
+                level.setBlockAndUpdate(floor, Blocks.DIRT.defaultBlockState());
+            }
+            var root = post.east(2);
+            var feature = net.minecraft.data.worldgen.features.TreeFeatures.FANCY_OAK.value();
+            check(feature.place(level, level.getChunkSource().getGenerator(), net.minecraft.util.RandomSource.create(19), root),
+                    "Could not generate a vanilla fancy oak");
+            for (var pos : BlockPos.betweenClosed(root.offset(-4,0,-4),root.offset(4,20,4))) {
+                if (level.getBlockState(pos).is(Blocks.OAK_LOG)) logs.add(pos.immutable());
+            }
+            check(logs.stream().anyMatch(pos -> pos.getY() > post.getY() + 4
+                    && (pos.getX() != root.getX() || pos.getZ() != root.getZ())), "Generated oak did not have a high branch");
+        });
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.west(2).north(2)));
+        f.s.setItem(EmploymentData.TOOL, new ItemStack(Items.NETHERITE_AXE));
+        level.setDayTime(13000);
+        f.v.setNoAi(false);
+        h.startSequence().thenExecuteAfter(90, () -> {
+            check(logs.stream().allMatch(pos -> level.getBlockState(pos).is(Blocks.OAK_LOG)), "Cut started at night");
+            f.s.setItem(EmploymentData.TOOL, ItemStack.EMPTY);
+            level.setDayTime(1000);
+        }).thenExecuteAfter(90, () -> {
+            check(logs.stream().allMatch(pos -> level.getBlockState(pos).is(Blocks.OAK_LOG)), "Cut started without an axe");
+            f.s.setItem(EmploymentData.TOOL, new ItemStack(Items.NETHERITE_AXE));
+        }).thenWaitUntil(() -> {
+            check(logs.stream().noneMatch(pos -> level.getBlockState(pos).is(Blocks.OAK_LOG)), "Vanilla fancy oak left uncut logs");
+            check(count(f, Items.OAK_LOG) == logs.size(), "Logs missing from a mature tree");
+        }).thenExecute(() -> f.v.setNoAi(true)).thenSucceed();
+    }
+
+    private static void assertLumberjackFellsVanillaOak(GameTestHelper h, boolean boneMeal) {
+        var f = fixture(h, Profession.LUMBERJACK);
+        for (var floor : BlockPos.betweenClosed(f.p.offset(-2,-1,-2),f.p.offset(2,-1,2))) {
+            f.l.setBlockAndUpdate(floor, Blocks.DIRT.defaultBlockState());
+        }
+        var root = f.p.east(boneMeal ? 2 : 1);
+        var start = Vec3.atBottomCenterOf(f.p.west(2).north(2));
+        f.v.setPos(start);
+        f.s.setItem(EmploymentData.TOOL, new ItemStack(Items.NETHERITE_AXE));
+        f.v.setNoAi(false);
+        f.l.setBlockAndUpdate(root, Blocks.OAK_SAPLING.defaultBlockState());
+        var sapling = (SaplingBlock) Blocks.OAK_SAPLING;
+        var random = net.minecraft.util.RandomSource.create(9);
+        var logs = new ArrayList<BlockPos>();
+        h.startSequence().thenExecuteAfter(100, () -> {
+            for (int attempt = 0; attempt < 100 && f.l.getBlockState(root).is(sapling); attempt++) {
+                var state = f.l.getBlockState(root);
+                if (boneMeal) sapling.performBonemeal(f.l, random, root, state);
+                else sapling.randomTick(state, f.l, root, random);
+            }
+            check(f.l.getBlockState(root).is(Blocks.OAK_LOG), "Vanilla sapling did not grow");
+            for (var pos : BlockPos.betweenClosed(root.offset(-4,0,-4),root.offset(4,16,4))) {
+                if (f.l.getBlockState(pos).is(Blocks.OAK_LOG)) logs.add(pos.immutable());
+            }
+            check(logs.size() >= 4, "Vanilla tree had fewer than four logs");
+        }).thenWaitUntil(() -> {
+            check(logs.stream().noneMatch(pos -> f.l.getBlockState(pos).is(Blocks.OAK_LOG)), "Vanilla oak left uncut logs");
+            check(f.v.position().distanceToSqr(start) > 1, "Worker never approached the trunk");
+            check(count(f, Items.OAK_LOG) == logs.size(), "Some generated logs were not collected");
+            check(f.s.getItem(EmploymentData.TOOL).getDamageValue() == logs.size(), "Durability did not match actual cuts");
+            check(f.l.getBlockState(f.p).is(WorkModule.PROFESSIONAL.get(Profession.LUMBERJACK).get()), "Tree cut affected the work post");
+        }).thenExecute(() -> f.v.setNoAi(true)).thenSucceed();
     }
 
     @GameTest(template="empty",timeoutTicks=60,batch="lumberjack_bounds")
