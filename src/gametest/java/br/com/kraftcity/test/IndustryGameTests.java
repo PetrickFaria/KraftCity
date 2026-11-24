@@ -2723,6 +2723,30 @@ public final class IndustryGameTests {
         }).thenExecute(() -> f.v.setNoAi(true)).thenSucceed();
     }
 
+    @GameTest(template="empty",timeoutTicks=650,batch="lumberjack_vanilla_short_oak")
+    public static void lumberjack_reaches_down_from_its_own_post_when_oak_grows_beside_it(GameTestHelper h){
+        var f = fixture(h, Profession.LUMBERJACK);
+        var root = f.p.east();
+        f.l.setBlockAndUpdate(root.below(), Blocks.DIRT.defaultBlockState());
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.above()).add(0, 0, .1));
+        f.s.setItem(EmploymentData.TOOL, new ItemStack(Items.NETHERITE_AXE));
+        var feature = net.minecraft.data.worldgen.features.TreeFeatures.OAK.value();
+        check(feature.place(f.l, f.l.getChunkSource().getGenerator(), net.minecraft.util.RandomSource.create(0), root),
+                "Could not generate short vanilla oak");
+        var logs = new ArrayList<BlockPos>();
+        for (var pos : BlockPos.betweenClosed(root, root.above(8))) {
+            if (f.l.getBlockState(pos).is(Blocks.OAK_LOG)) logs.add(pos.immutable());
+        }
+        check(logs.size() == 4, "Expected a four-log oak");
+        f.v.setNoAi(false);
+        h.succeedWhen(() -> {
+            check(logs.stream().noneMatch(pos -> f.l.getBlockState(pos).is(Blocks.OAK_LOG)), "Short oak had uncut logs");
+            check(count(f, Items.OAK_LOG) == logs.size(), "Missing short oak logs");
+            check(f.l.getBlockState(f.p).is(WorkModule.PROFESSIONAL.get(Profession.LUMBERJACK).get()), "Worker cut its own post");
+            f.v.setNoAi(true);
+        });
+    }
+
     private static void assertLumberjackFellsVanillaOak(GameTestHelper h, boolean boneMeal) {
         var f = fixture(h, Profession.LUMBERJACK);
         for (var floor : BlockPos.betweenClosed(f.p.offset(-2,-1,-2),f.p.offset(2,-1,2))) {

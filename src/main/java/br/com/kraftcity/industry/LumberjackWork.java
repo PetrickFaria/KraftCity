@@ -191,7 +191,7 @@ public final class LumberjackWork {
             var first = tree.logs().get(0).pos();
             if (!IndustrialWork.allowed(level, station, worker, first, null, "lumberjack_select")) continue;
             session.routeAfter = 0;
-            if (reachable(level, worker, area, first, base, true) || route(level, worker, session, area, first, base, true)) return tree;
+            if (chopReachable(level, worker, area, first, base, station.pos) || route(level, worker, session, area, first, base, true)) return tree;
             if (TRACE) LOGGER.info("Lumberjack worker={} cannot reach tree at {}", worker.getUUID(), base);
         }
         return null;
@@ -266,7 +266,7 @@ public final class LumberjackWork {
             clear(station,worker,session);
             return false;
         }
-        if (!reachable(level, worker, area, target, base, true)) {
+        if (!chopReachable(level, worker, area, target, base, station.pos)) {
             session.resetCut();
             if (route(level, worker, session, area, target, base, true)) {
                 if (TRACE) trace(worker, "walking to log " + target);
@@ -322,6 +322,15 @@ public final class LumberjackWork {
         session.resetCut();
         session.scanAfter = Math.max(session.scanAfter, worker.level.getGameTime()+10);
         stop(worker,session);
+    }
+
+    private static boolean chopReachable(ServerLevel level, Villager worker, AABB area,
+                                         BlockPos target, BlockPos base, BlockPos post) {
+        if (reachable(level, worker, area, target, base, true)) return true;
+        // A short oak may grow around a worker whose idle walk ended on its own work post.
+        // From the top of that block the worker can reach down to the adjoining root.
+        return target.equals(base) && base.getY() == post.getY() && base.distManhattan(post) == 1
+                && worker.isOnGround() && worker.blockPosition().equals(post.above()) && area.contains(worker.position());
     }
 
     private static boolean reachable(ServerLevel level, Villager worker, AABB area, BlockPos target, BlockPos base, boolean choppingTree) {
