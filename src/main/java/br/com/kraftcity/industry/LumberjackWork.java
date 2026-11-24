@@ -345,7 +345,8 @@ public final class LumberjackWork {
     private static boolean clearStroke(ServerLevel level, Villager worker, Vec3 eyes, BlockPos target, boolean choppingTree) {
         var center = Vec3.atCenterOf(target);
         return clearTo(level, worker, eyes, target, center, choppingTree)
-                || choppingTree && clearTo(level, worker, eyes, target, center.add(0, .4375, 0), true);
+                || choppingTree && (clearTo(level, worker, eyes, target, center.add(0, -.4375, 0), true)
+                    || clearTo(level, worker, eyes, target, center.add(0, .4375, 0), true));
     }
 
     private static boolean clearTo(ServerLevel level, Villager worker, Vec3 eyes, BlockPos target, Vec3 end, boolean choppingTree) {

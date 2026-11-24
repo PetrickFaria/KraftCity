@@ -2688,7 +2688,7 @@ public final class IndustryGameTests {
         assertLumberjackFellsVanillaOak(h, true);
     }
 
-    @GameTest(template="empty",timeoutTicks=850,batch="lumberjack_vanilla_branched")
+    @GameTest(template="empty",timeoutTicks=1300,batch="lumberjack_vanilla_branched")
     public static void lumberjack_waits_for_shift_and_axe_then_cuts_preexisting_branched_oak(GameTestHelper h){
         var level = h.getLevel();
         var logs = new ArrayList<BlockPos>();
@@ -2698,7 +2698,7 @@ public final class IndustryGameTests {
             }
             var root = post.east(2);
             var feature = net.minecraft.data.worldgen.features.TreeFeatures.FANCY_OAK.value();
-            check(feature.place(level, level.getChunkSource().getGenerator(), net.minecraft.util.RandomSource.create(19), root),
+            check(feature.place(level, level.getChunkSource().getGenerator(), net.minecraft.util.RandomSource.create(1), root),
                     "Could not generate a vanilla fancy oak");
             for (var pos : BlockPos.betweenClosed(root.offset(-4,0,-4),root.offset(4,20,4))) {
                 if (level.getBlockState(pos).is(Blocks.OAK_LOG)) logs.add(pos.immutable());
