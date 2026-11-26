@@ -2749,11 +2749,16 @@ public final class IndustryGameTests {
 
     private static void assertLumberjackFellsVanillaOak(GameTestHelper h, boolean boneMeal) {
         var f = fixture(h, Profession.LUMBERJACK);
-        for (var floor : BlockPos.betweenClosed(f.p.offset(-2,-1,-2),f.p.offset(2,-1,2))) {
-            f.l.setBlockAndUpdate(floor, Blocks.DIRT.defaultBlockState());
+        // The full suite reuses space for multiple batches. Keep this approach and canopy clear.
+        for (var cell : BlockPos.betweenClosed(f.p.offset(-4,-1,-4),f.p.offset(4,12,4))) {
+            if (cell.getY() == f.p.getY() - 1) {
+                f.l.setBlockAndUpdate(cell, Blocks.DIRT.defaultBlockState());
+            } else if (!cell.equals(f.p) && !f.l.isEmptyBlock(cell)) {
+                f.l.removeBlock(cell, false);
+            }
         }
         var root = f.p.east(boneMeal ? 2 : 1);
-        var start = Vec3.atBottomCenterOf(f.p.west(2).north(2));
+        var start = Vec3.atBottomCenterOf(f.p.west(2).north(2)).add(-.4, 0, -.4);
         f.v.setPos(start);
         f.s.setItem(EmploymentData.TOOL, new ItemStack(Items.NETHERITE_AXE));
         f.v.setNoAi(false);
@@ -2762,6 +2767,9 @@ public final class IndustryGameTests {
         var random = net.minecraft.util.RandomSource.create(9);
         var logs = new ArrayList<BlockPos>();
         h.startSequence().thenExecuteAfter(100, () -> {
+            // Exercise detection during the shift from a known approach rather than a random idle position.
+            f.v.getNavigation().stop();
+            f.v.setPos(start);
             for (int attempt = 0; attempt < 100 && f.l.getBlockState(root).is(sapling); attempt++) {
                 var state = f.l.getBlockState(root);
                 if (boneMeal) sapling.performBonemeal(f.l, random, root, state);
@@ -2773,7 +2781,9 @@ public final class IndustryGameTests {
             }
             check(logs.size() >= 4, "Vanilla tree had fewer than four logs");
         }).thenWaitUntil(() -> {
-            check(logs.stream().noneMatch(pos -> f.l.getBlockState(pos).is(Blocks.OAK_LOG)), "Vanilla oak left uncut logs");
+            var remaining = logs.stream().filter(pos -> f.l.getBlockState(pos).is(Blocks.OAK_LOG)).toList();
+            check(remaining.isEmpty(), "Vanilla oak left uncut logs " + remaining + " at post " + f.p
+                    + " with worker at " + f.v.position() + " and axe damage " + f.s.getItem(EmploymentData.TOOL).getDamageValue());
             check(f.v.position().distanceToSqr(start) > 1, "Worker never approached the trunk");
             check(count(f, Items.OAK_LOG) == logs.size(), "Some generated logs were not collected");
             check(f.s.getItem(EmploymentData.TOOL).getDamageValue() == logs.size(), "Durability did not match actual cuts");
