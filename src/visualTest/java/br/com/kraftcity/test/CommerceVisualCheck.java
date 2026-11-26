@@ -95,7 +95,7 @@ public final class CommerceVisualCheck {
             check(source.hasAnyOf(java.util.Set.of(Items.WHEAT)),"Farmer discard did not receive harvested wheat");
             for(int slot=0;slot<source.getContainerSize();slot++)
                 if(source.getItem(slot).is(Items.WHEAT))source.setItem(slot,ItemStack.EMPTY);
-            check(source.addItem(new ItemStack(Items.WHEAT,9)).isEmpty(),"Could not provision the first bakery round");
+            check(IndustrialWork.transfer(source,new ItemStack(Items.WHEAT,9)).isEmpty(),"Could not provision the first bakery round");
             var drop=p.west(2).south(2);
             l.setBlock(drop,Blocks.BARREL.defaultBlockState(),3);
             bind(s,(BarrelBlockEntity)l.getBlockEntity(drop));
