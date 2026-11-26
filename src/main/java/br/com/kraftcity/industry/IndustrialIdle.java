@@ -16,19 +16,19 @@ import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-final class IndustrialIdle {
+public final class IndustrialIdle {
     private record Walk(Path path,long resumeAfter){}
     private static final Map<Villager,Walk> WALKS=new WeakHashMap<>();
 
     private IndustrialIdle(){}
 
-    static void interrupt(Villager worker){
+    public static void interrupt(Villager worker){
         var walk=WALKS.remove(worker);
         if(walk!=null&&walk.path()!=null&&worker.getNavigation().getPath()==walk.path())
             worker.getNavigation().stop();
     }
 
-    static void tick(ServerLevel level,EmploymentData.Station station,Villager worker){
+    public static void tick(ServerLevel level,EmploymentData.Station station,Villager worker){
         if(worker.isNoAi()||worker.isTrading()||worker.isPassenger()||worker.isInWater())return;
         var area=IndustrialWork.area(level,station);
         if(station.profession==Profession.BEEKEEPER)area=area.expandTowards(0,-1,0);

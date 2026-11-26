@@ -6,6 +6,7 @@ import br.com.kraftcity.employment.Profession;
 import br.com.kraftcity.employment.WorkBlockEntity;
 import br.com.kraftcity.employment.WorkplaceVisits;
 import br.com.kraftcity.industry.FarmerLogistics;
+import br.com.kraftcity.industry.IndustrialIdle;
 import br.com.kraftcity.industry.IndustrialWork;
 import br.com.kraftcity.logistics.DiscardBinding;
 import br.com.kraftcity.logistics.DiscardChests;
@@ -82,6 +83,7 @@ public final class BakerWork {
         if (!DiscardChests.hasOffers(offers)) return false;
         var target = DiscardBinding.boundPosition(level, station);
         if (target == null || !DiscardChests.accepts(level, station, worker, target, offers)) return false;
+        IndustrialIdle.interrupt(worker);
         WorkplaceVisits.allowSupplyVisit(worker);
         int travel = FarmerLogistics.approachDiscard(level, worker, target);
         if (travel < 0) return false;
@@ -114,6 +116,7 @@ public final class BakerWork {
         }
         if (!station.commerce.getBoolean(BATCH) && deposit(level, station, worker)) return true;
         if (canBake) {
+            IndustrialIdle.interrupt(worker);
             if (!station.commerce.getBoolean(BATCH)) {
                 station.commerce.putBoolean(BATCH, true);
                 station.setChanged();
@@ -132,7 +135,10 @@ public final class BakerWork {
             return true;
         }
         var route = ROUTE.remove(worker);
-        if (route != null && posStillBound(level, station, route) && visit(level, station, worker, route)) return true;
+        if (route != null) {
+            if (posStillBound(level, station, route) && visit(level, station, worker, route)) return true;
+            worker.getNavigation().stop();
+        }
         long now = level.getGameTime();
         if (now >= NEXT_SCAN.getOrDefault(worker, Long.MIN_VALUE)) {
             var farmers = EmploymentData.get(level).stations().stream()
@@ -146,7 +152,7 @@ public final class BakerWork {
             }
             NEXT_SCAN.put(worker, now + RETRY_TICKS);
         }
-        atPost(level, station, worker);
+        IndustrialIdle.tick(level, station, worker);
         CommercialWork.state(station, "Aguardando trigo no descarte dos Fazendeiros.");
         return true;
     }
@@ -155,6 +161,7 @@ public final class BakerWork {
         var container = DiscardChests.at(level, source.pos);
         if (container == null || !container.hasAnyOf(java.util.Set.of(Items.WHEAT))
                 || !DiscardChests.canOpen(level, source.pos, IndustrialWork.actor(level, station, worker))) return false;
+        IndustrialIdle.interrupt(worker);
         WorkplaceVisits.allowSupplyVisit(worker);
         int travel = FarmerLogistics.approachDiscard(level, worker, source.pos);
         if (travel < 0) return false;

@@ -50,11 +50,11 @@ public final class CommercialWork {
         }
         if(WorkplaceVisits.leaving(v))return;
         if(!ownsNavigation(v)){state(s,v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")?"Pausa para transporte residencial; progresso preservado.":"Pausa por clima/rotina residencial; progresso preservado.");return;}
-        if(s.profession==Profession.BAKER&&BakerWork.handleLogistics(l,s,v))return;
         var plans=CommercialRecipes.plans(l,s.profession);
         if(plans.isEmpty()){state(s,"Receita aprovada indisponível.");IndustrialWork.alert(l,s,"recipe","Receita apropriada não encontrada no jogo/datapack.");return;}
         String id=s.commerce.getString("recipe");var plan=id.isEmpty()?null:plans.stream().filter(p->p.id().toString().equals(id)).findFirst().orElse(null);
         if(!id.isEmpty()&&plan==null){state(s,"Receita removida; operação pausada.");return;}
+        if(s.profession==Profession.BAKER&&BakerWork.handleLogistics(l,s,v))return;
         if(plan==null){
             plan=plans.stream().filter(p->count(s,p.input())>=p.count()).findFirst().orElse(null);
             if(plan==null&&s.profession!=Profession.GRILL_COOK)plan=plans.get(0);

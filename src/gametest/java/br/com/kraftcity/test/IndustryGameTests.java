@@ -43,7 +43,8 @@ public final class IndustryGameTests {
         var player=FakePlayerFactory.get(l,new GameProfile(UUID.randomUUID(),"IndustryTest"));player.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
         var s=((WorkBlockEntity)l.getBlockEntity(p)).station();s.setItem(31,new ItemStack(Items.EMERALD,EmploymentConfig.cost(profession.sector)));
         beforeHire.accept(p);
-        check(Employment.hire(player,s,v.getUUID(),profession).equals("ok"),"hire "+profession);
+        String result=Employment.hire(player,s,v.getUUID(),profession);
+        check(result.equals("ok"),"hire "+profession+": "+result+" at "+p+"; worker loaded="+(l.getEntity(v.getUUID())==v));
         return new F(l,s,v,p);
     }
     private static void step(F f,int n){for(int i=0;i<n;i++)IndustrialWork.tick(f.l,f.s);}
