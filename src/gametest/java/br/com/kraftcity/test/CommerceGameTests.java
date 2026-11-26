@@ -37,12 +37,21 @@ public final class CommerceGameTests {
         var v=h.spawn(EntityType.VILLAGER,new BlockPos(3,2,2));v.setAge(0);v.setNoAi(true);check(ResidenceData.get(l).link(l,home,v).equals("ok"),"home fixture");v.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
         l.setBlock(p.below(),Blocks.STONE.defaultBlockState(),3);l.setBlock(p,WorkModule.COMMERCIAL.get().defaultBlockState(),3);var s=((WorkBlockEntity)l.getBlockEntity(p)).station();
         var player=FakePlayerFactory.get(l,new GameProfile(UUID.randomUUID(),"CommerceTest"));player.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);s.setItem(31,new ItemStack(Items.EMERALD,30));
-        String result=Employment.hire(player,s,v.getUUID(),prof);check(result.equals("ok"),"commercial hire "+prof+" result="+result+" cost="+EmploymentConfig.cost(Profession.Sector.COMMERCIAL)+" eligible="+Employment.eligible(l,v));return new F(l,s,v,player,home,p);
+        String result=Employment.hire(player,s,v.getUUID(),prof);
+        if(prof==Profession.BAKER)v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(p.above()));
+        check(result.equals("ok"),"commercial hire "+prof+" result="+result+" cost="+EmploymentConfig.cost(Profession.Sector.COMMERCIAL)+" eligible="+Employment.eligible(l,v));return new F(l,s,v,player,home,p);
     }
     private static int count(F f,Item item){int n=0;for(int i=0;i<27;i++)if(f.s.getItem(i).is(item))n+=f.s.getItem(i).getCount();return n;}
     private static void work(F f,int ticks){while(ticks>0){int n=Math.min(ticks,20);CommercialWork.step(f.l,f.s,n);ticks-=n;}}
     private static void level(F f,int n,long xp){WorkforceData.get(f.l).setProgress(f.v.getUUID(),f.s.profession.id(),n,xp);}
     private static BarrelBlockEntity barrel(F f,BlockPos p){f.l.setBlock(p,Blocks.BARREL.defaultBlockState(),3);DiscardChests.invalidate(f.l);return (BarrelBlockEntity)f.l.getBlockEntity(p);}
+    private static void bind(EmploymentData.Station station, BarrelBlockEntity chest) {
+        var identity = UUID.randomUUID();
+        chest.getPersistentData().putUUID("KraftCityDiscardIdentity", identity);
+        station.industry.putUUID("discard_binding_id", identity);
+        station.industry.putLong("discard_binding_pos", chest.getBlockPos().asLong());
+        station.setChanged();
+    }
     private static EmploymentData.Station source(F f,Profession prof,BlockPos p){f.l.setBlock(p,WorkModule.PROFESSIONAL.get(prof).get().defaultBlockState(),3);return ((WorkBlockEntity)f.l.getBlockEntity(p)).station();}
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void approved_commercial_hiring_all_three_cost_ten_and_have_real_blocks(GameTestHelper h){
@@ -96,7 +105,7 @@ public final class CommerceGameTests {
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void commercial_levels_derive_from_completed_recipes_at_25_50_75_100(GameTestHelper h){
         var f=fixture(h,Profession.BAKER);for(int i=1;i<=100;i++){
-            f.s.setItem(0,new ItemStack(Items.WHEAT,3));int before=CommercialWork.level(f.l,f.s);work(f,CommercialWork.duration(before));
+            f.l.setDayTime(24000L*i+1000);f.s.setItem(0,new ItemStack(Items.WHEAT,3));int before=CommercialWork.level(f.l,f.s);work(f,CommercialWork.duration(before));
             var progress=WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.BAKER.id());check(progress.xp()==i&&progress.level()==Math.min(5,1+i/25),"commercial threshold "+i);
         }
         int[] times={1200,1000,800,600,300};for(int i=1;i<=5;i++)check(CommercialWork.duration(i)==times[i-1],"commercial seconds Lv"+i);h.succeed();
@@ -143,24 +152,31 @@ public final class CommerceGameTests {
         var area=IndustrialWork.area(f.l,f.s);check(DiscardChests.inRange(area,f.p.east(7))&&!DiscardChests.inRange(area,f.p.east(8)),"five-block border range");
         var list=DiscardChests.around(f.l,f.s,area);check(list.get(0).pos().equals(near)&&list.stream().anyMatch(a->a.pos().equals(f.p.east(7)))&&list.stream().noneMatch(a->a.pos().equals(f.p.east(8))),"nearest deterministic/range");h.succeed();
     }
-    @GameTest(template="empty",timeoutTicks=40,batch="commerce")
+    @GameTest(template="empty",timeoutTicks=120,batch="baker_withdrawal")
     public static void no_remote_extraction_before_worker_reaches_industrial_chest(GameTestHelper h){
-        var f=fixture(h,Profession.BAKER);source(f,Profession.FARMER,f.p.east(6));var pos=f.p.east(5);var chest=barrel(f,pos);chest.setItem(0,new ItemStack(Items.WHEAT,10));
-        work(f,20);check(count(f,Items.WHEAT)==0&&chest.getItem(0).getCount()==10,"teleported industrial input");f.v.setPos(pos.getX()+.5,pos.getY(),pos.getZ()+.5);work(f,20);
-        check(count(f,Items.WHEAT)==3&&chest.getItem(0).getCount()==7,"withdrawal exceeded one needed recipe");f.v.setPos(f.p.getX()+.5,f.p.getY(),f.p.getZ()+1.5);work(f,1200);check(count(f,Items.BREAD)==1,"upstream chain");h.succeed();
+        var f=fixture(h,Profession.BAKER);var farmer=source(f,Profession.FARMER,f.p.east(6));var pos=f.p.east(5);var chest=barrel(f,pos);bind(farmer,chest);chest.setItem(0,new ItemStack(Items.WHEAT,10));
+        work(f,20);check(count(f,Items.WHEAT)==0&&chest.getItem(0).getCount()==10,"teleported industrial input");
+        h.startSequence().thenWaitUntil(() -> {
+            f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(pos.south()));
+            work(f,20);
+            check(count(f,Items.WHEAT)==10&&chest.getItem(0).isEmpty(),"failed to withdraw available wheat within quota");
+        }).thenExecute(() -> {
+            f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(f.p.above()));
+            work(f,1200);check(count(f,Items.BREAD)==1,"upstream chain");
+        }).thenSucceed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void two_workers_share_scarce_chest_without_double_withdrawal(GameTestHelper h){
-        var f=fixture(h,Profession.BAKER);var sourcePos=f.p.east(6);source(f,Profession.FARMER,sourcePos);var pos=f.p.east(5);var chest=barrel(f,pos);chest.setItem(0,new ItemStack(Items.WHEAT,3));
+        var f=fixture(h,Profession.BAKER);var sourcePos=f.p.east(6);var farmer=source(f,Profession.FARMER,sourcePos);var pos=f.p.east(5);var chest=barrel(f,pos);bind(farmer,chest);chest.setItem(0,new ItemStack(Items.WHEAT,3));
         var second=EntityType.VILLAGER.create(f.l);second.setAge(0);second.setNoAi(true);second.setPos(f.p.getX()+.5,f.p.getY(),f.p.getZ()+.5);f.l.addFreshEntity(second);check(ResidenceData.get(f.l).link(f.l,f.home,second).equals("ok"),"second resident");
         var p2=f.p.south(2);f.l.setBlock(p2,WorkModule.COMMERCIAL.get().defaultBlockState(),3);var station=((WorkBlockEntity)f.l.getBlockEntity(p2)).station();station.setItem(31,new ItemStack(Items.EMERALD,10));
         var employer=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"SecondEmployer"));employer.setPos(p2.getX()+.5,p2.getY(),p2.getZ()+1.5);check(Employment.hire(employer,station,second.getUUID(),Profession.BAKER).equals("ok"),"second hire");
-        f.v.setPos(pos.getX()+.5,pos.getY(),pos.getZ()+.5);second.setPos(pos.getX()+.5,pos.getY(),pos.getZ()+.5);CommercialWork.step(f.l,f.s,20);CommercialWork.step(f.l,station,20);
+        f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(pos.south()));second.setPos(f.v.position());CommercialWork.step(f.l,f.s,20);CommercialWork.step(f.l,station,20);
         check(CommercialWork.count(f.s,Items.WHEAT)+CommercialWork.count(station,Items.WHEAT)==3&&chest.getItem(0).isEmpty(),"double withdrawal");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void evening_deposits_finished_products_only_and_full_chest_never_loses_items(GameTestHelper h){
-        var f=fixture(h,Profession.BAKER);var pos=f.p.west();var chest=barrel(f,pos);f.s.setItem(0,new ItemStack(Items.BREAD,3));f.s.setItem(1,new ItemStack(Items.WHEAT,2));f.l.setDayTime(12000);
+        var f=fixture(h,Profession.BAKER);var pos=f.p.west();var chest=barrel(f,pos);bind(f.s,chest);f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(pos.south()));f.s.setItem(0,new ItemStack(Items.BREAD,3));f.s.setItem(1,new ItemStack(Items.WHEAT,2));f.l.setDayTime(12000);
         work(f,20);check(count(f,Items.BREAD)==0&&count(f,Items.WHEAT)==2&&chest.getItem(0).is(Items.BREAD),"evening product/input handling");
         for(int i=0;i<27;i++)chest.setItem(i,new ItemStack(Items.STONE,64));f.s.setItem(0,new ItemStack(Items.BREAD,3));f.s.commerce.remove("deposited_day");work(f,20);check(count(f,Items.BREAD)==3,"full discard lost items");f.l.setDayTime(1000);h.succeed();
     }
@@ -188,16 +204,16 @@ public final class CommerceGameTests {
         return new F(l,s,v,merchant.player,merchant.home,pos);
     }
     private static void takeAndProduce(F merchant,BlockPos chest){
-        merchant.v.setPos(chest.getX()+.5,chest.getY(),chest.getZ()+.5);work(merchant,20);
-        merchant.v.setPos(merchant.p.getX()+.5,merchant.p.getY(),merchant.p.getZ()+1.5);work(merchant,1200);
+        merchant.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(chest.south()));work(merchant,20);
+        merchant.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(merchant.s.profession==Profession.BAKER?merchant.p.above():merchant.p.south()));work(merchant,1200);
     }
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void complete_farmer_to_baker_chain_uses_real_mature_crop_and_discard(GameTestHelper h){
-        var f=fixture(h,Profession.BAKER);var farm=industrialSource(h,f,Profession.FARMER);var chestPos=farm.p.west();var chest=barrel(f,chestPos);chest.clearContent();
+        var f=fixture(h,Profession.BAKER);var farm=industrialSource(h,f,Profession.FARMER);var chestPos=farm.p.west();var chest=barrel(f,chestPos);chest.clearContent();bind(farm.s,chest);
         farm.s.setItem(27,new ItemStack(Items.NETHERITE_HOE));farm.s.setItem(0,new ItemStack(Items.WHEAT_SEEDS,25));var crop=farm.p.east().above();farm.l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);
         for(int i=0;i<3&&count(farm,Items.WHEAT)<3;i++){farm.l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);farm.v.setPos(crop.getX()+.5,crop.getY(),crop.getZ()+.5);for(int action=0;action<3;action++)IndustrialWork.tick(farm.l,farm.s);}
         int produced=count(farm,Items.WHEAT);check(produced>=3,"real farmer wheat production");IndustrialWork.deposit(farm.l,farm.s,farm.v);
-        takeAndProduce(f,chestPos);check(count(f,Items.BREAD)==1,"real farmer-baker chain output");int left=0;for(int slot=0;slot<27;slot++)if(chest.getItem(slot).is(Items.WHEAT))left+=chest.getItem(slot).getCount();check(left+3==produced,"wheat conservation");h.succeed();
+        takeAndProduce(f,chestPos);check(count(f,Items.BREAD)==1,"real farmer-baker chain output");int left=0;for(int slot=0;slot<27;slot++)if(chest.getItem(slot).is(Items.WHEAT))left+=chest.getItem(slot).getCount();check(left+count(f,Items.WHEAT)+3==produced,"wheat conservation");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void complete_farmer_to_confectioner_chain_harvests_mature_cane_leaving_root(GameTestHelper h){
@@ -225,6 +241,107 @@ public final class CommerceGameTests {
         var a=new WorkMenu(1,f.player.getInventory(),f.s,false,null);var b=new WorkMenu(2,f.player.getInventory(),f.s,false,f.v.getUUID());
         check(a.inventory==b.inventory&&a.slots.size()==68,"commercial shared menu");var reconnected=new WorkMenu(3,f.player.getInventory(),f.s,false,null);check(reconnected.inventory==a.inventory&&f.s.commerce.getInt("elapsed")==600,"reconnect lost partial/inventory");h.succeed();
     }
+    @GameTest(template="empty",timeoutTicks=100,batch="baker_quota")
+    public static void baker_retries_empty_bound_chest_then_deposits_nine_plus_six(GameTestHelper h) {
+        var f = fixture(h, Profession.BAKER);
+        var farmer = source(f, Profession.FARMER, f.p.east(6));
+        var target = f.p.east(5);
+        var supply = barrel(f, target);
+        bind(farmer, supply);
+        var personal = barrel(f, f.p.east());
+        personal.setItem(0, new ItemStack(Items.WHEAT, 64));
+        var output = barrel(f, f.p.west());
+        bind(f.s, output);
+        supply.setItem(1, new ItemStack(Items.WHEAT_SEEDS, 4));
+        work(f, 20);
+        check(br.com.kraftcity.commerce.BakerWork.collected(f.l, f.v)==0, "empty source spent quota");
+        h.startSequence().thenExecuteAfter(2,()->supply.setItem(0,new ItemStack(Items.WHEAT,9))).thenWaitUntil(() -> {
+            f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(target.south()));
+            work(f,20);
+            check(count(f,Items.WHEAT)==9,"waiting for first restock");
+        }).thenExecute(() -> {
+            for (int wave = 0; wave < 2; wave++) {
+                if(wave==1){
+                    supply.setItem(0, new ItemStack(Items.WHEAT,64));
+                    f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(target.south()));
+                    work(f,20);
+                }
+                int wheat = wave==0 ? 9 : 6;
+                check(count(f, Items.WHEAT)==wheat, "wrong withdrawal for wave "+wave);
+                work(f, 1200);
+                check(count(f, Items.BREAD)==0, "baked remotely");
+                f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(f.p.above()));
+                work(f, (wheat/3)*1200);
+                check(count(f, Items.WHEAT)==0 && count(f, Items.BREAD)==wheat/3, "wrong recipe ratio");
+                f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(f.p.west().south()));
+                work(f, 20);
+                check(count(f, Items.BREAD)==0 && output.getItem(0).getCount()==(wave==0?3:5), "bread not delivered");
+                f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(f.p.above()));
+                // Pause at the post with no further operation until the next sample.
+                CommercialWork.step(f.l,f.s,0);
+            }
+            f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(target.south()));
+            work(f, 20);
+            check(supply.getItem(0).getCount()==58 && supply.getItem(1).getCount()==4
+                    && personal.getItem(0).getCount()==64, "quota or source isolation failed");
+            check(br.com.kraftcity.commerce.BakerWork.collected(f.l,f.v)==15,"quota is not cumulative");
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="baker_remainders")
+    public static void baker_combines_small_supplies_from_two_bound_farmers(GameTestHelper h) {
+        var f=fixture(h,Profession.BAKER);
+        var first=barrel(f,f.p.east(5));
+        var second=barrel(f,f.p.west(5));
+        bind(source(f,Profession.FARMER,f.p.east(6)),first);
+        bind(source(f,Profession.FARMER,f.p.west(6)),second);
+        first.setItem(0,new ItemStack(Items.WHEAT,1));
+        f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(first.getBlockPos().south()));
+        work(f,20);
+        f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(f.p.above()));
+        work(f,20);
+        check(count(f,Items.WHEAT)==1&&count(f,Items.BREAD)==0,"one wheat was lost or baked");
+        second.setItem(0,new ItemStack(Items.WHEAT,2));
+        f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(second.getBlockPos().south()));
+        work(f,20);
+        f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(f.p.above()));
+        work(f,1200);
+        check(count(f,Items.BREAD)==1&&count(f,Items.WHEAT)==0&&
+                br.com.kraftcity.commerce.BakerWork.collected(f.l,f.v)==3,"remainders were not conserved");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="baker_levels")
+    public static void baker_uses_current_level_and_preserves_quota_on_same_day_reload(GameTestHelper h) {
+        var f = fixture(h, Profession.BAKER);
+        var farmer = source(f, Profession.FARMER, f.p.east(6));
+        var target = f.p.east(5);
+        var supply = barrel(f, target);
+        bind(farmer, supply);
+        supply.setItem(0, new ItemStack(Items.WHEAT,64));
+        supply.setItem(1, new ItemStack(Items.WHEAT,64));
+        for (int level = 1; level <= 5; level++) {
+            level(f, level, (level-1)*25L);
+            f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(f.p.above()));
+            f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(target.south()));
+            work(f, 1);
+            check(count(f,Items.WHEAT)==15,"level increase reused already-spent quota");
+            check(br.com.kraftcity.commerce.BakerWork.collected(f.l,f.v)==level*15, "wrong cumulative level quota");
+            f.v.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(f.p.above()));
+            work(f, 1);
+            for(int slot=0;slot<27;slot++)if(f.s.getItem(slot).is(Items.WHEAT))f.s.setItem(slot,ItemStack.EMPTY);
+        }
+        var copy = EntityType.VILLAGER.create(f.l);
+        copy.load(f.v.saveWithoutId(new CompoundTag()));
+        check(br.com.kraftcity.commerce.BakerWork.collected(f.l,copy)==75,"same day deserialization lost quota");
+        f.l.setDayTime(22999);
+        check(br.com.kraftcity.commerce.BakerWork.collected(f.l,copy)==75,"reset before professional day");
+        f.l.setDayTime(23000);
+        check(br.com.kraftcity.commerce.BakerWork.collected(f.l,copy)==0,"did not reset at professional day");
+        f.l.setDayTime(1000);
+        h.succeed();
+    }
+
     @GameTest(template="empty",timeoutTicks=40,batch="commerce")
     public static void loaded_double_chest_is_one_deterministic_container(GameTestHelper h){
         var f=fixture(h,Profession.BAKER);var left=f.p.west();var right=left.south();

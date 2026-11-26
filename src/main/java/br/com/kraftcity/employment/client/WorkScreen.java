@@ -51,6 +51,10 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
                 if(current!=null&&current.employed())addRenderableWidget(new Button(leftPos+276,topPos+2,66,14,
                     Component.translatable("gui.kraftcity.dismiss"),b->WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Dismiss(menu.containerId,menu.stationId,current.epoch()))));
                 if(menu.sector==Profession.Sector.COMMERCIAL)addRenderableWidget(new Button(leftPos+8,topPos+121,96,16,Component.literal("Cancelar operação"),b->option(0,4)));
+                if(menu.profession==Profession.BAKER&&current!=null&&current.employed())
+                    addRenderableWidget(new Button(leftPos+264,topPos+165,78,18,
+                        Component.literal(current.discardLinked()?"Desvincular":"Vincular baú"),
+                        b->option(0,current.discardLinked()?6:5)));
                 if(menu.profession==Profession.BUTCHER)addRenderableWidget(new Button(leftPos+8,topPos+115,110,18,Component.literal("Cadastrar animais"),b->option(0,3)));
             }
             if(menu.snapshot!=null&&!menu.snapshot.employed())

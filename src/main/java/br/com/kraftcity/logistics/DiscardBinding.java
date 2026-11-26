@@ -76,6 +76,10 @@ public final class DiscardBinding {
             return;
         }
         var tile = level.getBlockEntity(pos);
+        if (station.profession==Profession.BAKER && (tile instanceof EnderChestBlockEntity || ArcaneDiscard.isEnder(tile))) {
+            message(player, "Vincule um recipiente de descarte com inventário local.");
+            return;
+        }
         if (tile instanceof EnderChestBlockEntity chest && tile.getBlockState().is(Blocks.ENDER_CHEST)) {
             if (!EnderDiscard.authorize(chest, player)) {
                 message(player, "Este Baú do Ender pertence a outro jogador.");
@@ -112,7 +116,7 @@ public final class DiscardBinding {
     }
 
     private static boolean valid(ServerLevel level, EmploymentData.Station station) {
-        return station!=null && (station.profession==Profession.FARMER||station.profession==Profession.BEEKEEPER||station.profession==Profession.LUMBERJACK||station.profession==Profession.SOLDIER) && station.at(level, station.pos)
+        return station!=null && (station.profession==Profession.BAKER||station.profession==Profession.FARMER||station.profession==Profession.BEEKEEPER||station.profession==Profession.LUMBERJACK||station.profession==Profession.SOLDIER) && station.at(level, station.pos)
             && level.hasChunkAt(station.pos) && level.getBlockEntity(station.pos) instanceof WorkBlockEntity post
             && station.id.equals(post.identity());
     }

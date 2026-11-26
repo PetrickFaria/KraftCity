@@ -245,13 +245,16 @@ public final class DiscardChests {
         var hit=new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(pos),interactionSide(pos,worker),pos,false);
         var permission=net.minecraftforge.common.ForgeHooks.onRightClickBlock(actor,net.minecraft.world.InteractionHand.MAIN_HAND,pos,hit);
         if(permission.isCanceled()||permission.getUseBlock()==net.minecraftforge.eventbus.api.Event.Result.DENY
-            ||!level.hasChunkAt(pos)||!worker.getUUID().equals(station.worker)||!Employment.valid(level,worker.getUUID()))return;
+            ||!level.hasChunkAt(pos)||!worker.getUUID().equals(station.worker)||!Employment.valid(level,worker.getUUID())
+            ||station.profession==br.com.kraftcity.employment.Profession.BAKER
+                &&!pos.equals(DiscardBinding.boundPosition(level,station)))return;
         var container=at(level,pos);
         var be=container==null?capability(level,pos):null;
         var handler=be==null?null:accessibleHandler(be,worker);
         if(container==null&&handler==null)return;
         boolean activated=false;
         for(int i=0;i<offers.length;i++){
+            if(station.profession==br.com.kraftcity.employment.Profession.BAKER&&!station.getItem(i).is(net.minecraft.world.item.Items.BREAD))continue;
             int count=Math.min(offers[i],station.getItem(i).getCount());
             if(count==0)continue;
             var stack=station.getItem(i).copy();

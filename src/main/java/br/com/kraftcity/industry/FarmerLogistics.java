@@ -66,7 +66,7 @@ public final class FarmerLogistics {
     private record Jump(BlockPos soil,BlockPos stem,long until){}
 
     /** 1 arrived, 0 navigating, -1 inaccessible. */
-    static int approachCell(ServerLevel l,Villager v,BlockPos pos,boolean adjacent){
+    public static int approachCell(ServerLevel l,Villager v,BlockPos pos,boolean adjacent){
         return approach(l,v,pos,adjacent?1.38:.68,adjacent?1:0);
     }
 

@@ -39,7 +39,7 @@ public final class CommercialRecipes {
                     for(int y=0;y<shaped.getHeight();y++)for(int x=0;x<shaped.getWidth();x++)if(!ingredients.get(y*shaped.getWidth()+x).isEmpty())grid.setItem(y*3+x,new ItemStack(ingredient));
                 }else{int i=0;for(var in:ingredients)if(!in.isEmpty())grid.setItem(i++,new ItemStack(ingredient));}
                 if(!recipe.matches(grid,l))continue;
-                var result=recipe.assemble(grid);if(!result.is(product)||result.isEmpty())continue;
+                var result=recipe.assemble(grid);if(!result.is(product)||result.isEmpty()||profession==Profession.BAKER&&result.getCount()!=1)continue;
                 if(recipe.getRemainingItems(grid).stream().anyMatch(s->!s.isEmpty()))continue;
                 out.add(new Plan(recipe.getId(),ingredient,count,result,0));
             }

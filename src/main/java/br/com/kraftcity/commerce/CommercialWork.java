@@ -42,11 +42,15 @@ public final class CommercialWork {
         if(elapsedTicks<0||elapsedTicks>20)throw new IllegalArgumentException("Unbounded operation delta");
         if(!commercial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
         if(!IndustrialWork.day(l)){
-            if(Math.floorMod(l.getDayTime(),24000)<13000&&!l.isThundering()&&!Employment.fleeing(v)&&!v.isSleeping())evening(l,s,v);
+            if(Math.floorMod(l.getDayTime(),24000)<13000&&!l.isThundering()&&!Employment.fleeing(v)&&!v.isSleeping()){
+                if(s.profession==Profession.BAKER) BakerWork.deposit(l,s,v);
+                else evening(l,s,v);
+            }
             pause(s);return;
         }
         if(WorkplaceVisits.leaving(v))return;
         if(!ownsNavigation(v)){state(s,v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")?"Pausa para transporte residencial; progresso preservado.":"Pausa por clima/rotina residencial; progresso preservado.");return;}
+        if(s.profession==Profession.BAKER&&BakerWork.handleLogistics(l,s,v))return;
         var plans=CommercialRecipes.plans(l,s.profession);
         if(plans.isEmpty()){state(s,"Receita aprovada indisponível.");IndustrialWork.alert(l,s,"recipe","Receita apropriada não encontrada no jogo/datapack.");return;}
         String id=s.commerce.getString("recipe");var plan=id.isEmpty()?null:plans.stream().filter(p->p.id().toString().equals(id)).findFirst().orElse(null);
@@ -59,6 +63,7 @@ public final class CommercialWork {
             s.commerce.putString("recipe",plan.id().toString());s.commerce.putInt("elapsed",0);s.setChanged();
         }
         if(count(s,plan.input())<plan.count()){
+            if(s.profession==Profession.BAKER)return;
             var supply=findSupply(l,s,v,List.of(plan));
             if(supply==null){state(s,"Estoque insuficiente; progresso preservado.");IndustrialWork.alert(l,s,"stock","Faltam insumos necessários no posto e nos descartes industriais carregados.");return;}
             state(s,"Buscando insumos no descarte industrial.");
@@ -67,27 +72,29 @@ public final class CommercialWork {
             if(!IndustrialWork.allowed(l,s,v,supply.chest.pos(),null,"commercial_supply")||!stillWorker(l,s,v)||v.distanceToSqr(Vec3.atCenterOf(supply.chest.pos()))>9)return;
             take(l,s,supply,plan.count()-count(s,plan.input()));return;
         }
-        if(!reach(v,s.pos)){state(s,"Indo ao posto de trabalho.");return;}
+        if(!(s.profession==Profession.BAKER?BakerWork.atPost(l,s,v):reach(v,s.pos))){state(s,"Indo ao posto de trabalho.");return;}
         if(s.profession==Profession.GRILL_COOK&&!fuelAvailable(s,plan)){
             state(s,EmploymentConfig.COOKING_FUEL.get()==EmploymentConfig.CookingFuel.PENDING?"Combustível pendente; produção pausada.":"Falta combustível vanilla.");
             IndustrialWork.alert(l,s,"fuel",s.commerce.getString("status"));return;
         }
-        if(!IndustrialWork.allowed(l,s,v,s.pos,null,"commercial_produce")||!stillWorker(l,s,v)){state(s,"Proteção/vínculo recusou a operação.");return;}
+        if(!IndustrialWork.allowed(l,s,v,s.pos,null,"commercial_produce")||!stillWorker(l,s,v)
+                ||s.profession==Profession.BAKER&&(!IndustrialWork.day(l)||!ownsNavigation(v)||!BakerWork.atPost(l,s,v))){state(s,"Proteção/vínculo recusou a operação.");return;}
         int elapsed=Math.min(duration(level(l,s)),s.commerce.getInt("elapsed")+elapsedTicks);
         s.commerce.putInt("elapsed",elapsed);state(s,"Produzindo; insumos consumidos ao concluir.");s.setChanged();
         if(elapsed<duration(level(l,s)))return;
         if(!complete(l,s,plan)){state(s,"Saída cheia ou insumo alterado; operação pronta aguardando.");IndustrialWork.alert(l,s,"space","Libere espaço para o resultado; insumos e progresso foram preservados.");return;}
+        if(s.profession==Profession.BAKER)BakerWork.recordBread(l,v);
         var data=WorkforceData.get(l);var old=data.progress(s.worker,s.profession.id());long xp=old.xp()+1;
         data.setProgress(s.worker,s.profession.id(),Math.min(5,Math.max(old.level(),1+(int)Math.min(4,xp/25))),xp);
         s.commerce.remove("recipe");s.commerce.putInt("elapsed",0);state(s,"Receita concluída.");s.setChanged();
     }
-    private static boolean stillWorker(ServerLevel l,EmploymentData.Station s,Villager v){return commercial(s)&&v.getUUID().equals(s.worker)&&l.getEntity(s.worker)==v&&Employment.valid(l,s.worker);}
+    static boolean stillWorker(ServerLevel l,EmploymentData.Station s,Villager v){return commercial(s)&&v.getUUID().equals(s.worker)&&l.getEntity(s.worker)==v&&Employment.valid(l,s.worker);}
     public static int count(EmploymentData.Station s,Item input){int n=s.getItem(28).is(input)?s.getItem(28).getCount():0;for(int i=0;i<27;i++)if(s.getItem(i).is(input))n+=s.getItem(i).getCount();return n;}
     private static boolean reach(Villager v,BlockPos p){
         if(v.distanceToSqr(Vec3.atCenterOf(p))<=9){v.getNavigation().stop();return true;}
         v.getNavigation().moveTo(p.getX()+.5,p.getY(),p.getZ()+.5,.75);return false;
     }
-    private static void state(EmploymentData.Station s,String value){if(!s.commerce.getString("status").equals(value)){s.commerce.putString("status",value);s.setChanged();}}
+    static void state(EmploymentData.Station s,String value){if(!s.commerce.getString("status").equals(value)){s.commerce.putString("status",value);s.setChanged();}}
     private static void pause(EmploymentData.Station s){state(s,"Pausa noturna/retorno residencial; progresso preservado.");}
     private record Supply(EmploymentData.Station source,DiscardChests.Access chest,CommercialRecipes.Plan plan){}
     private static Supply findSupply(ServerLevel l,EmploymentData.Station s,Villager v,List<CommercialRecipes.Plan> plans){

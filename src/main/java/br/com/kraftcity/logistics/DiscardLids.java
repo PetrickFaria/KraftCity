@@ -21,7 +21,7 @@ public final class DiscardLids {
     private record Open(long until, Runnable close) {}
     private static final Map<BlockEntity, Open> OPEN = new IdentityHashMap<>();
 
-    static void afterApproval(ServerLevel level, BlockEntity tile) {
+    public static void afterApproval(ServerLevel level, BlockEntity tile) {
         if(tile==null)return;
         activate(level,tile);
         var state=tile.getBlockState();

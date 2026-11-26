@@ -76,6 +76,7 @@ for marker in ('MILITARY_RANGED_GRAPHICS_AND_AMMO_PASSED','MILITARY_GRAPHICAL_CO
     if marker not in text:fail('Military client check missing '+marker)
 for marker in ('BUILDER_CAPTURE_AND_GLOBAL_STOCK_PASSED','BUILDER_PRINT_AND_POSITION_PASSED','BUILDER_FOUR_WORKERS_AND_FLIGHT_PASSED','BUILDER_PARTIAL_PROJECT_SAVED'):
     if marker not in text:fail('Builder client check missing '+marker)
+if "BAKER_VISUAL_NINE_PLUS_SIX_PASSED" not in text:fail("Bakery did not finish the two-wave scenario.")
 print('Real Minecraft client captured all required scenes; image inspection is still required.')
 if 'KRAFTCITY_LIMITS_TOGGLE_AND_REMOVAL_PASSED' not in text:
     fail('Residence limit toggle/removal check did not complete.')
@@ -108,6 +109,7 @@ for marker in ('COMMERCE_THREE_CHAINS_WORLD_RESTART_PASSED','COMMERCE_PARTIAL_RE
     if marker not in restored_text:fail('Commercial restart missing '+marker)
 for marker in ('BUILDER_WORLD_RESTART_PASSED','BUILDER_13_BLOCKS_RESERVE_RESUPPLY_PASSED','BUILDER_RESUMED_ONCE_PASSED'):
     if marker not in restored_text:fail('Builder restart missing '+marker)
+if "BAKER_VISUAL_QUOTA_RESTART_PASSED" not in restored_text:fail("Bakery quota did not survive reopening.")
 if restored.returncode and 'Gradle build daemon disappeared unexpectedly' not in restored_text:
     fail(restored.returncode)
 p=Path('build/screenshots/visual-anchor-restored.png')

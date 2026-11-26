@@ -31,13 +31,21 @@ public final class CommerceVisualCheck {
     private static volatile UUID worker;
     private static volatile boolean done,nightReady,restoreComplete;
     private static volatile String problem="";
-    private static int stage=-1,ticks,readyTicks;private static boolean builderReturned;
+    private static int stage=-1,ticks,readyTicks;private static boolean builderReturned, bakerPartialStarted;
     private static final long[] began=new long[3];
     private static final boolean[] visited=new boolean[3];
     private static BlockPos post(int i){return new BlockPos(100+18*i,-60,40);}
     private static EmploymentData.Station station(ServerLevel l,int i){return ((WorkBlockEntity)l.getBlockEntity(post(i))).station();}
     private static int count(EmploymentData.Station s,Item item){int n=0;for(int i=0;i<27;i++)if(s.getItem(i).is(item))n+=s.getItem(i).getCount();return n;}
     private static void check(boolean value,String message){if(!value)throw new IllegalStateException(message);}
+    private static void bind(EmploymentData.Station station, BarrelBlockEntity barrel){
+        var id=UUID.randomUUID();
+        barrel.getPersistentData().putUUID("KraftCityDiscardIdentity",id);
+        station.industry.putUUID("discard_binding_id",id);
+        station.industry.putLong("discard_binding_pos",barrel.getBlockPos().asLong());
+        barrel.setChanged();
+        station.setChanged();
+    }
     private static void setup(ServerPlayer player,int i){
         var l=player.getLevel();var p=post(i);l.setDayTime(1000);l.setWeatherParameters(10000,0,false,false);l.setRainLevel(0F);
         player.teleportTo(l,p.getX()+.5,p.getY(),p.getZ()+2.5,180,20);
@@ -80,7 +88,19 @@ public final class CommerceVisualCheck {
         }else{
             src.setItem(27,new ItemStack(Items.WOODEN_AXE));for(int n=0;n<3;n++){var cow=EntityType.COW.create(l);cow.setAge(0);cow.setNoAi(true);cow.setPos(sourcePos.getX()+1.5,sourcePos.getY(),sourcePos.getZ()+.5);cow.getPersistentData().putUUID("KCIndustryStation",src.id);cow.getPersistentData().putLong("KCIndustryBorn",-1000000+n);l.addFreshEntity(cow);}IndustrialWork.tick(l,src);check(count(src,Items.BEEF)==1,"Real butcher source");s.setItem(30,new ItemStack(Items.COAL));
         }
-        IndustrialWork.deposit(l,src,supplier);s.commerce.putLong("visual_source",chestPos.asLong());s.commerce.putInt("visual_stage",i);WorkBlock.open(player,s);
+        if(i==0)bind(src,(BarrelBlockEntity)l.getBlockEntity(chestPos));
+        IndustrialWork.deposit(l,src,supplier);
+        if(i==0){
+            var source=(BarrelBlockEntity)l.getBlockEntity(chestPos);
+            check(source.hasAnyOf(java.util.Set.of(Items.WHEAT)),"Farmer discard did not receive harvested wheat");
+            for(int slot=0;slot<source.getContainerSize();slot++)
+                if(source.getItem(slot).is(Items.WHEAT))source.setItem(slot,ItemStack.EMPTY);
+            check(source.addItem(new ItemStack(Items.WHEAT,9)).isEmpty(),"Could not provision the first bakery round");
+            var drop=p.west(2).south(2);
+            l.setBlock(drop,Blocks.BARREL.defaultBlockState(),3);
+            bind(s,(BarrelBlockEntity)l.getBlockEntity(drop));
+        }
+        s.commerce.putLong("visual_source",chestPos.asLong());s.commerce.putInt("visual_stage",i);WorkBlock.open(player,s);
     }
     private static Button button(WorkScreen screen,String text){return screen.children().stream().filter(w->w instanceof Button).map(w->(Button)w).filter(b->b.getMessage().getString().contains(text)).findFirst().orElse(null);}
     private static void click(WorkScreen screen,String text){var b=button(screen,text);check(b!=null&&b.active,"Commercial button missing: "+text);b.onPress();}
@@ -108,7 +128,23 @@ public final class CommerceVisualCheck {
         if(v!=null&&v.distanceToSqr(Vec3.atCenterOf(chest))<=9)visited[i]=true;
         if(!done&&l.getGameTime()%200==0)System.out.println("COMMERCE_DEBUG "+JOBS[i]+" elapsed="+s.commerce.getInt("elapsed")+" pos="+(v==null?"unloaded":v.position())+" status="+s.commerce.getString("status"));
         Item product=i==0?Items.BREAD:i==1?Items.SUGAR:Items.COOKED_BEEF;
-        if(count(s,product)>0&&!done){
+        int produced=count(s,product);
+        if(i==0&&!done){
+            var target=(BarrelBlockEntity)l.getBlockEntity(post(0).west(2).south(2));
+            int stored=0;
+            for(int slot=0;slot<target.getContainerSize();slot++)if(target.getItem(slot).is(Items.BREAD))stored+=target.getItem(slot).getCount();
+            if(stored>=3&&v!=null&&v.blockPosition().equals(s.pos.above())&&!s.commerce.getBoolean("visual_second_delivery")){
+                check(stored==3&&br.com.kraftcity.commerce.BakerWork.collected(l,v)==9,"First bakery batch");
+                ((BarrelBlockEntity)l.getBlockEntity(chest)).setItem(0,new ItemStack(Items.WHEAT,6));
+                s.commerce.putBoolean("visual_second_delivery",true);
+            }
+            if(stored!=5||v==null||!v.blockPosition().equals(s.pos.above()))return;
+            check(br.com.kraftcity.commerce.BakerWork.collected(l,v)==15
+                    &&CommercialWork.count(s,Items.WHEAT)==0&&count(s,Items.BREAD)==0,"Bakery daily conservation");
+            produced=stored;
+            System.out.println("BAKER_VISUAL_NINE_PLUS_SIX_PASSED");
+        }
+        if(produced>0&&!done){
             check(visited[i],"Merchant did not physically reach upstream chest");
             check(l.getGameTime()-began[i]>=CommercialWork.duration(i==0?1:5),"Commercial product completed before real operation duration");
             check(s.getItem(31).getCount()==20&&s.profession==JOBS[i]&&ResidenceData.get(l).owner(s.worker)!=null,"Contract/home conservation");
@@ -137,14 +173,22 @@ public final class CommerceVisualCheck {
                     if(stage<3){int next=stage;mc.getSingleplayerServer().execute(()->setup(mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()),next));}
                 }
             }
-            check(ticks<2200,"Commercial production/navigation timed out: "+JOBS[i]);
+            check(ticks<(i==0?7900:2200),"Commercial production/navigation timed out: "+JOBS[i]);
         }else{
             if(ticks%10==0&&!nightReady)mc.getSingleplayerServer().execute(()->{
                 var l=mc.getSingleplayerServer().overworld();var s=station(l,0);
-                if(CommercialWork.count(s,Items.WHEAT)==0)s.setItem(28,new ItemStack(Items.WHEAT,3));
+                if(!bakerPartialStarted){
+                    bakerPartialStarted=true;
+                    l.setDayTime(25000);
+                    // Keep the next day's bread in stock for the existing restore assertion.
+                    s.industry.remove("discard_binding_id");
+                    s.industry.remove("discard_binding_pos");
+                    var source=(BarrelBlockEntity)l.getBlockEntity(BlockPos.of(s.commerce.getLong("visual_source")));
+                    source.setItem(0,new ItemStack(Items.WHEAT,3));
+                }
                 if(s.commerce.getInt("elapsed")>=1100){
                     s.commerce.putInt("visual_partial",s.commerce.getInt("elapsed"));s.commerce.putInt("visual_bread_before",count(s,Items.BREAD));s.commerce.putLong("visual_xp_before",WorkforceData.get(l).progress(s.worker,Profession.BAKER.id()).xp());s.setChanged();
-                    l.setDayTime(13001);var p=mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());p.teleportTo(l,60.5,-57,10.5,180,20);nightReady=true;System.out.println("COMMERCE_PARTIAL_OPERATION_SAVED_FOR_RESTART");
+                    l.setDayTime(37001);var p=mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());p.teleportTo(l,60.5,-57,10.5,180,20);nightReady=true;System.out.println("COMMERCE_PARTIAL_OPERATION_SAVED_FOR_RESTART");
                 }
             });
             if(nightReady){readyTicks++;if(readyTicks==30)mc.getSingleplayerServer().execute(()->EmploymentVisualCheck.restoreNightFixture(mc.getSingleplayerServer().overworld()));if(readyTicks>=80)MilitaryVisualCheck.tick(mc,readyTicks-80);}
@@ -157,6 +201,8 @@ public final class CommerceVisualCheck {
             check(ResidenceData.get(l).owner(s.worker)!=null&&WorkforceData.get(l).progress(s.worker,JOBS[i].id()).xp()>=(i==0?1:101),"Commercial history/home reload "+i);
         }
         var baker=station(l,0);check(baker.commerce.getInt("elapsed")==baker.commerce.getInt("visual_partial")&&CommercialWork.count(baker,Items.WHEAT)>=3&&count(baker,Items.BREAD)==baker.commerce.getInt("visual_bread_before"),"Partial recipe changed during offline/night pause");
+        if(l.getEntity(baker.worker) instanceof Villager worker)
+            check(br.com.kraftcity.commerce.BakerWork.collected(l,worker)==3,"Baker quota reset after reopening");
         check(station(l,2).commerce.getLong("heat")==1400,"Vanilla fuel credit not persistent");
         System.out.println("COMMERCE_THREE_CHAINS_WORLD_RESTART_PASSED");
     }
@@ -171,7 +217,7 @@ public final class CommerceVisualCheck {
                 var l=server.overworld();
                 var p=post(0);
                 server.getPlayerList().getPlayer(playerId).teleportTo(l,p.getX()+.5,p.getY(),p.getZ()+3.5,180,20);
-                l.setDayTime(1000);
+                l.setDayTime(25000);
             });
         }
         if(tick<=160||tick%20!=0||restoreComplete)return;
@@ -187,6 +233,9 @@ public final class CommerceVisualCheck {
                 return;
             }
             check(bread==before+1&&wheat==0,"Resumed recipe duplicated/lost output after JVM restart");
+            check(l.getEntity(s.worker) instanceof Villager worker && br.com.kraftcity.commerce.BakerWork.collected(l,worker)==3,
+                "Baker quota lost after JVM restart");
+            System.out.println("BAKER_VISUAL_QUOTA_RESTART_PASSED");
             check(xp==beforeXp+1,"Reloaded recipe XP duplicated");
             check(station(l,2).commerce.getLong("heat")==1400,"Unrelated fuel credit changed during baker recovery");
             if(!restoreComplete){
