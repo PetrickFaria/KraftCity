@@ -75,6 +75,8 @@ public final class BakerWork {
             return false;
         }
         worker.getNavigation().stop();
+        worker.getMoveControl().setWantedPosition(worker.getX(), worker.getY(), worker.getZ(), 0);
+        worker.setDeltaMovement(0, worker.getDeltaMovement().y, 0);
         return true;
     }
 
