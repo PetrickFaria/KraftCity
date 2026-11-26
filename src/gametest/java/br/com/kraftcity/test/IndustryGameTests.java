@@ -2758,7 +2758,9 @@ public final class IndustryGameTests {
             }
         }
         var root = f.p.east(boneMeal ? 2 : 1);
-        var start = Vec3.atBottomCenterOf(f.p.west(2).north(2)).add(-.4, 0, -.4);
+        var start = boneMeal
+                ? Vec3.atBottomCenterOf(f.p.west(2).north(2)).add(-.4, 0, -.4)
+                : Vec3.atBottomCenterOf(f.p.west(2)).add(0, 0, .17);
         f.v.setPos(start);
         f.s.setItem(EmploymentData.TOOL, new ItemStack(Items.NETHERITE_AXE));
         f.v.setNoAi(false);

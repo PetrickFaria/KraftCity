@@ -353,9 +353,23 @@ public final class LumberjackWork {
 
     private static boolean clearStroke(ServerLevel level, Villager worker, Vec3 eyes, BlockPos target, boolean choppingTree) {
         var center = Vec3.atCenterOf(target);
-        return clearTo(level, worker, eyes, target, center, choppingTree)
-                || choppingTree && (clearTo(level, worker, eyes, target, center.add(0, -.4375, 0), true)
-                    || clearTo(level, worker, eyes, target, center.add(0, .4375, 0), true));
+        if (clearTo(level, worker, eyes, target, center, choppingTree)) return true;
+        if (!choppingTree) return false;
+        // The post or an upper log may hide the center while an exposed edge can be reached.
+        double x = net.minecraft.util.Mth.clamp(eyes.x, target.getX() + .0625, target.getX() + .9375);
+        double z = net.minecraft.util.Mth.clamp(eyes.z, target.getZ() + .0625, target.getZ() + .9375);
+        var xFace = new Vec3(x, center.y, center.z);
+        var zFace = new Vec3(center.x, center.y, z);
+        return clearChopFace(level, worker, eyes, target, xFace)
+                || clearChopFace(level, worker, eyes, target, zFace)
+                || clearTo(level, worker, eyes, target, center.add(0, -.4375, 0), true)
+                || clearTo(level, worker, eyes, target, center.add(0, .4375, 0), true);
+    }
+
+    private static boolean clearChopFace(ServerLevel level, Villager worker, Vec3 eyes, BlockPos target, Vec3 face) {
+        return clearTo(level, worker, eyes, target, face, true)
+                || clearTo(level, worker, eyes, target, face.add(0, -.4375, 0), true)
+                || clearTo(level, worker, eyes, target, face.add(0, .4375, 0), true);
     }
 
     private static boolean clearTo(ServerLevel level, Villager worker, Vec3 eyes, BlockPos target, Vec3 end, boolean choppingTree) {
