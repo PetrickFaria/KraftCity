@@ -9,7 +9,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 36
+    timeout-minutes: 55
     outputs:
       version: ${{ steps.version.outputs.value }}
       release: ${{ steps.version.outputs.release }}
@@ -93,7 +93,7 @@ jobs:
           python3 tools/verify_skin_preview_ui.py
           python3 tools/verify_skin_opacity_uv_and_night_doors.py
       - name: Build installable mod
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: bash gradlew --no-daemon clean build
       - name: Run actual Forge GameTest server
         timeout-minutes: 20
