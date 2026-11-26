@@ -178,13 +178,16 @@ public final class CommerceVisualCheck {
             if(ticks%10==0&&!nightReady)mc.getSingleplayerServer().execute(()->{
                 var l=mc.getSingleplayerServer().overworld();var s=station(l,0);
                 if(!bakerPartialStarted){
-                    bakerPartialStarted=true;
+                    var sourcePosition=BlockPos.of(s.commerce.getLong("visual_source"));
+                    if (!(l.getEntity(s.worker) instanceof Villager)
+                            || !(l.getBlockEntity(sourcePosition) instanceof BarrelBlockEntity source)) return;
                     l.setDayTime(25000);
                     // Keep the next day's bread in stock for the existing restore assertion.
                     s.industry.remove("discard_binding_id");
                     s.industry.remove("discard_binding_pos");
-                    var source=(BarrelBlockEntity)l.getBlockEntity(BlockPos.of(s.commerce.getLong("visual_source")));
-                    source.setItem(0,new ItemStack(Items.WHEAT,3));
+                    check(IndustrialWork.transfer(source,new ItemStack(Items.WHEAT,3)).isEmpty(),"Could not provision the restart round");
+                    bakerPartialStarted=true;
+                    System.out.println("BAKER_VISUAL_RESTART_ROUND_STOCKED");
                 }
                 if(s.commerce.getInt("elapsed")>=1100){
                     s.commerce.putInt("visual_partial",s.commerce.getInt("elapsed"));s.commerce.putInt("visual_bread_before",count(s,Items.BREAD));s.commerce.putLong("visual_xp_before",WorkforceData.get(l).progress(s.worker,Profession.BAKER.id()).xp());s.setChanged();
