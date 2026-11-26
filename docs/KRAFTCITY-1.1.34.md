@@ -7,4 +7,6 @@ No Forge 43.5.0, um carvalho cresceu por random ticks na área 5×5×5 de um Len
 - No corte, o alcance horizontal é medido até a face do tronco. O golpe pode passar por folhas naturais e alcançar partes expostas acima e abaixo do centro da face. Folhas persistentes e blocos sólidos continuam obstruindo. Se a copa crescer ao redor do Lenhador em cima do próprio posto, ele pode alcançar para baixo apenas a raiz adjacente da árvore já selecionada. O caminho físico permanece dentro da área após entrar nela e usa as colisões do mundo.
 - O Lenhador abandona o passeio ao assumir a rota de corte. O trabalho usa a lista de troncos registrada ao selecionar a árvore, o que permite continuar acima da área vertical. Preserva os tempos dos sete machados, a durabilidade, os drops e as verificações de proteção.
 
+No replantio de carvalho escuro, a posição de trabalho precisa alcançar as quatro mudas do quadrado 2×2 antes de iniciar a colocação.
+
 Ative `-Dkraftcity.lumberjackDebug=true` na JVM do servidor para registrar expediente, ferramenta e área a cada busca e motivos de rejeição, entrada em rota e início do temporizador. Os registros de estado aparecem quando a atividade muda.

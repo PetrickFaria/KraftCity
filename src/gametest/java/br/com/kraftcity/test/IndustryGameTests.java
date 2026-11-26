@@ -2937,16 +2937,20 @@ public final class IndustryGameTests {
         var square=List.of(root,root.east(),root.south(),root.south().east());
         for(var cell:square)f.l.setBlockAndUpdate(cell.below(),Blocks.DIRT.defaultBlockState());
         f.s.setItem(28,new ItemStack(Items.DARK_OAK_SAPLING));
-        f.v.setPos(root.getX()+1,root.getY(),root.getZ()+2.5);
+        var firstPlotOnly = Vec3.atBottomCenterOf(root.west(2)).add(-.5, 0, 0);
+        f.v.setPos(firstPlotOnly);
         f.v.setNoAi(false);
         h.runAfterDelay(80,()->{
             check(square.stream().noneMatch(cell->f.l.getBlockState(cell).is(Blocks.DARK_OAK_SAPLING))
                 &&f.s.getItem(28).getCount()==1,"dark oak used only one sapling");
+            f.v.getNavigation().stop();
+            f.v.setPos(firstPlotOnly);
             f.s.setItem(28,new ItemStack(Items.DARK_OAK_SAPLING,4));
         });
         h.succeedWhen(()->{
             check(square.stream().allMatch(cell->f.l.getBlockState(cell).is(Blocks.DARK_OAK_SAPLING)),"waiting for dark oak square");
             check(f.s.getItem(28).isEmpty(),"did not consume the four saplings");
+            check(f.v.position().distanceToSqr(firstPlotOnly) > .25, "Did not approach the whole planting square");
             f.v.setNoAi(true);
         });
     }

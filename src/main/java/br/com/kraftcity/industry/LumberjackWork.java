@@ -373,6 +373,11 @@ public final class LumberjackWork {
     }
 
     private static boolean route(ServerLevel level, Villager worker, Session session, AABB area, BlockPos target, BlockPos base, boolean choppingTree) {
+        return route(level, worker, session, area, target, base, choppingTree, List.of());
+    }
+
+    private static boolean route(ServerLevel level, Villager worker, Session session, AABB area, BlockPos target,
+                                 BlockPos base, boolean choppingTree, List<BlockPos> plantingFootprint) {
         if (session.path != null && worker.getNavigation().getPath() == session.path && !worker.getNavigation().isDone()
                 && session.path.getTarget().distSqr(new BlockPos(target.getX(),base.getY(),target.getZ())) <= 12) return true;
         if (level.getGameTime() < session.routeAfter) return false;
@@ -381,10 +386,14 @@ public final class LumberjackWork {
         for (var cell : BlockPos.betweenClosed(new BlockPos(target.getX()-radius,base.getY()-1,target.getZ()-radius),
                 new BlockPos(target.getX()+radius,base.getY()+1,target.getZ()+radius))) {
             int dx = cell.getX() - target.getX(), dz = cell.getZ() - target.getZ();
-            if ((dx != 0 || dz != 0) && withinReach(cell.getX() + .5, cell.getZ() + .5, target, choppingTree)
-                    && walkable(level,cell,area)
-                    && clearStroke(level, worker, Vec3.atBottomCenterOf(cell).add(0,worker.getEyeHeight(),0), target, choppingTree)) {
-                candidates.add(cell.immutable());
+            var feet = Vec3.atBottomCenterOf(cell);
+            if ((dx != 0 || dz != 0) && withinReach(feet.x, feet.z, target, choppingTree) && walkable(level, cell, area)) {
+                var eyes = feet.add(0, worker.getEyeHeight(), 0);
+                if (clearStroke(level, worker, eyes, target, choppingTree)
+                        && plantingFootprint.stream().allMatch(plot -> plot.equals(target) || withinReach(feet.x, feet.z, plot, false)
+                            && clearStroke(level, worker, eyes, plot, false))) {
+                    candidates.add(cell.immutable());
+                }
             }
         }
         candidates.sort(Comparator.comparingDouble(cell -> Vec3.atBottomCenterOf(cell).distanceToSqr(worker.position())));
@@ -479,8 +488,11 @@ public final class LumberjackWork {
             for (var pos : candidates) {
                 if (!plantable(level,area,pos,stack)) continue;
                 session.routeAfter=0;
-                if (reachable(level,worker,area,pos,pos,false) || route(level,worker,session,area,pos,pos,false))
+                var footprint = plantingCells(pos, stack);
+                if (canPlantFromHere(level, worker, area, pos, footprint)
+                        || route(level, worker, session, area, pos, pos, false, footprint)) {
                     return new Planting(pos,slot);
+                }
             }
         }
         return null;
@@ -529,10 +541,15 @@ public final class LumberjackWork {
                 || state.getBlock() instanceof TallFlowerBlock;
     }
 
+    private static boolean canPlantFromHere(ServerLevel level, Villager worker, AABB area, BlockPos root, List<BlockPos> footprint) {
+        return footprint.stream().allMatch(cell -> reachable(level, worker, area, cell, root, false));
+    }
+
     private static boolean plant(ServerLevel level, EmploymentData.Station station, Villager worker, Session session, AABB area) {
         var seed = station.getItem(session.seed);
         var pos = session.planting;
-        boolean inReach=reachable(level,worker,area,pos,pos,false);
+        var cells = plantingCells(pos, seed);
+        boolean inReach = canPlantFromHere(level, worker, area, pos, cells);
         if (!inReach && level.getGameTime()<session.plantCheckAfter && session.path!=null
                 && worker.getNavigation().getPath()==session.path && !worker.getNavigation().isDone()) return true;
         session.plantCheckAfter=level.getGameTime()+10;
@@ -541,10 +558,9 @@ public final class LumberjackWork {
             display.setCount(1);
             IndustrialWork.displayTool(worker,display);
             if (!inReach) {
-                if (route(level,worker,session,area,pos,pos,false)) return true;
+                if (route(level, worker, session, area, pos, pos, false, cells)) return true;
             } else {
                 var block = ((BlockItem)seed.getItem()).getBlock().defaultBlockState();
-                var cells = plantingCells(pos,seed);
                 if (cells.stream().allMatch(cell -> reachable(level,worker,area,cell,pos,false)
                         && level.mayInteract(IndustrialWork.actor(level,station,worker),cell)
                         && IndustrialWork.placeAllowed(level,station,worker,cell,block)) && plantable(level,area,pos,seed)) {
