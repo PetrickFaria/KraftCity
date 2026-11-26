@@ -106,8 +106,9 @@ public final class Employment {
         }
         HOMEWARD_ESCAPE.remove(v);
         FLEE_UNTIL.put(v,level.getGameTime()+40);
-        if(!nightShelter)NIGHT_DETOUR.remove(v);
-        if(nightShelter&&NIGHT_DETOUR.contains(v))return;
+        // A completed or interrupted detour must not suppress replanning while the zombie is nearby.
+        if(!nightShelter||v.getNavigation().isDone())NIGHT_DETOUR.remove(v);
+        if(NIGHT_DETOUR.contains(v))return;
         if(starting||v.getNavigation().isDone()||v.tickCount%15==0){
             if(v.isSleeping())v.stopSleeping();
             v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);

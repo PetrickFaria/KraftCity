@@ -2185,7 +2185,10 @@ public final class IndustryGameTests {
                 f.l.addFreshEntity(zombie);
                 zombie.setTarget(f.v);
             }).thenWaitUntil(()->{
-                check(Employment.fleeing(f.v)&&f.v.distanceToSqr(atTransfer[0])>4,"farmer remained stopped at the barrel");
+                check(Employment.fleeing(f.v)&&f.v.distanceToSqr(atTransfer[0])>4,
+                    "farmer remained stopped at the barrel: start="+atTransfer[0]+", position="+f.v.position()
+                    +", fleeing="+Employment.fleeing(f.v)+", path="+f.v.getNavigation().getTargetPos()
+                    +", path finished="+f.v.getNavigation().isDone());
                 check(f.v.getHealth()==health&&f.v.getLastHurtByMob()==null,"escape depended on damage");
             }).thenExecute(()->{zombie.discard();f.l.setDayTime(1000);}).thenSucceed();
     }
