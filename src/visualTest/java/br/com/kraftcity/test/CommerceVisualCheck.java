@@ -31,7 +31,7 @@ public final class CommerceVisualCheck {
     private static volatile UUID worker;
     private static volatile boolean done,nightReady,restoreComplete;
     private static volatile String problem="";
-    private static int stage=-1,ticks,readyTicks;private static boolean builderReturned, bakerPartialStarted;
+    private static int stage=-1,ticks,readyTicks;private static boolean builderReturned, bakerDawnStarted, bakerPartialStarted;
     private static final long[] began=new long[3];
     private static final boolean[] visited=new boolean[3];
     private static BlockPos post(int i){return new BlockPos(100+18*i,-60,40);}
@@ -177,11 +177,19 @@ public final class CommerceVisualCheck {
         }else{
             if(ticks%10==0&&!nightReady)mc.getSingleplayerServer().execute(()->{
                 var l=mc.getSingleplayerServer().overworld();var s=station(l,0);
+                if(!bakerDawnStarted){
+                    l.setDayTime(25000);
+                    bakerDawnStarted=true;
+                    return;
+                }
                 if(!bakerPartialStarted){
+                    // The Butcher from the preceding scene can collect from the same Farmer at dawn.
+                    var butcherPost=l.getBlockEntity(post(2).east(8));
+                    if (!(butcherPost instanceof WorkBlockEntity butcher)
+                            || butcher.station().industry.getLong("supplied_day")!=2) return;
                     var sourcePosition=BlockPos.of(s.commerce.getLong("visual_source"));
                     if (!(l.getEntity(s.worker) instanceof Villager)
                             || !(l.getBlockEntity(sourcePosition) instanceof BarrelBlockEntity source)) return;
-                    l.setDayTime(25000);
                     // Keep the next day's bread in stock for the existing restore assertion.
                     s.industry.remove("discard_binding_id");
                     s.industry.remove("discard_binding_pos");
