@@ -33,12 +33,15 @@ public final class IndustryGameTests {
         return fixture(h, profession, post -> {});
     }
     private static F fixture(GameTestHelper h, Profession profession, java.util.function.Consumer<BlockPos> beforeHire){
+        return fixture(h,profession,0,beforeHire);
+    }
+    private static F fixture(GameTestHelper h, Profession profession, int elevation, java.util.function.Consumer<BlockPos> beforeHire){
         var l=h.getLevel();l.setDayTime(1000);l.setWeatherParameters(10000,0,false,false);
-        BlockPos home=h.absolutePos(new BlockPos(2,2,2)),p=h.absolutePos(new BlockPos(8,2,8));
+        BlockPos home=h.absolutePos(new BlockPos(2,2+elevation,2)),p=h.absolutePos(new BlockPos(8,2+elevation,8));
         l.setBlock(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);
         ((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)l.getBlockEntity(home)).setSize(11);
         l.setBlock(p.below(),Blocks.STONE.defaultBlockState(),3);l.setBlock(p,WorkModule.generic(profession.sector).defaultBlockState(),3);
-        var v=h.spawn(EntityType.VILLAGER,new BlockPos(3,2,2));v.setNoAi(true);v.setAge(0);
+        var v=h.spawn(EntityType.VILLAGER,new BlockPos(3,2+elevation,2));v.setNoAi(true);v.setAge(0);
         check(ResidenceData.get(l).link(l,home,v).equals("ok"),"residence link");v.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
         var player=FakePlayerFactory.get(l,new GameProfile(UUID.randomUUID(),"IndustryTest"));player.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
         var s=((WorkBlockEntity)l.getBlockEntity(p)).station();s.setItem(31,new ItemStack(Items.EMERALD,EmploymentConfig.cost(profession.sector)));
@@ -2707,6 +2710,7 @@ public final class IndustryGameTests {
             for (var pos : BlockPos.betweenClosed(root.offset(-4,0,-4),root.offset(4,20,4))) {
                 if (level.getBlockState(pos).is(Blocks.OAK_LOG)) logs.add(pos.immutable());
             }
+            level.setBlockAndUpdate(root.east(),Blocks.STONE.defaultBlockState());
             check(logs.stream().anyMatch(pos -> pos.getY() > post.getY() + 4
                     && (pos.getX() != root.getX() || pos.getZ() != root.getZ())), "Generated oak did not have a high branch");
         });
@@ -2786,6 +2790,7 @@ public final class IndustryGameTests {
                 if (f.l.getBlockState(pos).is(Blocks.OAK_LOG)) logs.add(pos.immutable());
             }
             check(logs.size() >= 4, "Vanilla tree had fewer than four logs");
+            f.l.setBlockAndUpdate(root.east(),Blocks.STONE.defaultBlockState());
         }).thenWaitUntil(() -> {
             var remaining = logs.stream().filter(pos -> f.l.getBlockState(pos).is(Blocks.OAK_LOG)).toList();
             check(remaining.isEmpty(), "Vanilla oak left uncut logs " + remaining + " at post " + f.p
@@ -2802,20 +2807,63 @@ public final class IndustryGameTests {
         var f=fixture(h,Profession.LUMBERJACK);
         check(f.l.getBlockState(f.p).is(WorkModule.PROFESSIONAL.get(Profession.LUMBERJACK).get()),"station conversion");
         check(f.s.getItem(EmploymentData.PAYMENT).isEmpty(),"ten emeralds");
-        check(!IndustrialRules.selectSize(f.l,f.s,10),"level one unlocked ten");
+        check(!IndustrialRules.selectSize(f.l,f.s,25),"level one unlocked the second option");
         for(int level=1;level<=5;level++){
             level(f,level,(level-1)*25L);
-            check(IndustrialRules.size(f.l,f.s)==Math.max(5,(level-1)*5),"level expanded area");
-            int width=level*5;
+            check(IndustrialRules.size(f.l,f.s)==15+10*Math.max(0,level-2),"level expanded area");
+            int width=15+10*(level-1);
+            var legacy=EmploymentData.load(EmploymentData.get(f.l).save(new CompoundTag())).station(f.s.id);
+            legacy.industry.remove("lumberjack_width");
+            legacy.industry.putInt("size",level*5);
+            check(IndustrialRules.size(f.l,legacy)==width && IndustrialRules.size(f.l,legacy)==width,"legacy option migrated incorrectly");
             check(IndustrialRules.selectSize(f.l,f.s,width),"could not select "+width);
             var bounds=IndustrialWork.area(f.l,f.s);
-            check(bounds.getXsize()==width&&bounds.getYsize()==5&&bounds.getZsize()==width,"wrong dimensions "+bounds);
-            check(bounds.minX==f.p.getX()-width/2&&bounds.maxX==bounds.minX+width,"even centering");
+            check(bounds.getXsize()==width&&bounds.getYsize()==15&&bounds.getZsize()==width,"wrong dimensions "+bounds);
+            check(bounds.minX==f.p.getX()-width/2&&bounds.maxX==f.p.getX()+width/2+1
+                    &&bounds.minZ==f.p.getZ()-width/2&&bounds.maxZ==f.p.getZ()+width/2+1
+                    &&bounds.minY==f.p.getY()-7&&bounds.maxY==f.p.getY()+8,"incorrect centering");
+            for(int dx:new int[]{-width/2,0,width/2})for(int dz:new int[]{-width/2,0,width/2}){
+                check(bounds.contains(Vec3.atBottomCenterOf(f.p.offset(dx,-7,dz))),"bottom boundary missing");
+                check(bounds.contains(Vec3.atBottomCenterOf(f.p.offset(dx,7,dz))),"top boundary missing");
+            }
+            check(!bounds.contains(Vec3.atBottomCenterOf(f.p.east(width/2+1))),"outside horizontal boundary");
+            check(!bounds.contains(Vec3.atBottomCenterOf(f.p.above(8))),"outside vertical boundary");
         }
         var restored=EmploymentData.load(EmploymentData.get(f.l).save(new CompoundTag())).station(f.s.id);
         check(restored!=null&&restored.worker.equals(f.v.getUUID())&&restored.profession==Profession.LUMBERJACK
-                &&restored.industry.getInt("size")==25,"saved lumberjack state");
+                &&restored.industry.getInt("lumberjack_width")==55,"saved lumberjack state");
         h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=400,batch="lumberjack_upper_corner")
+    public static void lumberjack_cuts_tree_starting_at_upper_corner(GameTestHelper h){
+        assertLumberjackCutsAtCorner(h,7);
+    }
+
+    @GameTest(template="empty",timeoutTicks=400,batch="lumberjack_lower_corner")
+    public static void lumberjack_cuts_tree_starting_at_lower_corner(GameTestHelper h){
+        assertLumberjackCutsAtCorner(h,-7);
+    }
+
+    private static void assertLumberjackCutsAtCorner(GameTestHelper h,int height){
+        var f=fixture(h,Profession.LUMBERJACK,12,post->{});
+        var edge=f.p.offset(7,height,7);
+        var outside=f.p.offset(-8,height,7);
+        for(var floor:BlockPos.betweenClosed(f.p.offset(-8,height-1,3),edge.below()))
+            f.l.setBlockAndUpdate(floor,Blocks.STONE.defaultBlockState());
+        var root=lumberTree(f,edge,Blocks.OAK_LOG,Blocks.OAK_LEAVES,4);
+        lumberTree(f,outside,Blocks.OAK_LOG,Blocks.OAK_LEAVES,4);
+        var start=Vec3.atBottomCenterOf(root.west(5).north(2));
+        f.v.setPos(start);
+        f.s.setItem(EmploymentData.TOOL,new ItemStack(Items.NETHERITE_AXE));
+        f.v.setNoAi(false);
+        h.succeedWhen(()->{
+            check(count(f,Items.OAK_LOG)==4,"worker did not finish the boundary tree");
+            check(f.v.distanceToSqr(start)>1,"worker did not approach the boundary tree");
+            check(f.l.isEmptyBlock(root)&&f.l.isEmptyBlock(root.above(3)),"boundary tree left logs");
+            check(f.l.getBlockState(outside).is(Blocks.OAK_LOG),"cut an independent tree outside the area");
+            f.v.setNoAi(true);
+        });
     }
 
     private static void lumberTime(GameTestHelper h,Item axe,int ticks){
@@ -2974,16 +3022,16 @@ public final class IndustryGameTests {
     @GameTest(template="empty",timeoutTicks=360,batch="lumberjack_reduce")
     public static void lumberjack_resize_cancels_cutting_outside_the_new_area(GameTestHelper h){
         var f=fixture(h,Profession.LUMBERJACK);
-        for(var cell:BlockPos.betweenClosed(f.p.offset(-5,-1,-5),f.p.offset(4,-1,4)))
+        for(var cell:BlockPos.betweenClosed(f.p.offset(-5,-1,-5),f.p.offset(9,-1,4)))
             f.l.setBlockAndUpdate(cell,Blocks.DIRT.defaultBlockState());
         level(f,2,25);
-        check(IndustrialRules.selectSize(f.l,f.s,10),"select initial even area");
-        var root=lumberTree(f,f.p.east(4),Blocks.OAK_LOG,Blocks.OAK_LEAVES,5);
+        check(IndustrialRules.selectSize(f.l,f.s,25),"select initial larger area");
+        var root=lumberTree(f,f.p.east(8),Blocks.OAK_LOG,Blocks.OAK_LEAVES,5);
         f.s.setItem(27,new ItemStack(Items.NETHERITE_AXE));
-        f.v.setPos(f.p.getX()+3.5,f.p.getY(),f.p.getZ()+1.5);
+        f.v.setPos(f.p.getX()+7.5,f.p.getY(),f.p.getZ()+1.5);
         f.v.setNoAi(false);
         h.startSequence().thenWaitUntil(()->check(f.l.isEmptyBlock(root),"waiting for first cut"))
-            .thenExecute(()->check(IndustrialRules.selectSize(f.l,f.s,5),"shrink area"))
+            .thenExecute(()->check(IndustrialRules.selectSize(f.l,f.s,15),"shrink area"))
             .thenIdle(85).thenExecute(()->{
                 check(f.l.getBlockState(root.above()).is(Blocks.OAK_LOG)&&count(f,Items.OAK_LOG)==1,"cut outside new area");
                 f.v.setNoAi(true);

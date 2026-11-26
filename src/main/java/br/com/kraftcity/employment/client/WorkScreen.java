@@ -20,6 +20,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     private UUID selected;
     private Profession profession;
     private int page;
+    private static final int LUMBER_AREA_X=18, LUMBER_AREA_STEP=54, LUMBER_BUTTON_WIDTH=52;
     private static final int FARM_AREA_X=(WorkMenu.FARM_WIDTH-172)/2, FARM_AREA_Y=123, XP_WIDTH=182, XP_Y=22;
     private static final String[] FARM_INPUTS={"Enxada","Farinha de Osso","Balde de Água"};
 
@@ -93,11 +94,12 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
                 if(menu.getCarried().isEmpty()){menu.settingsPage=!menu.settingsPage;buttons();}
             })).active=menu.getCarried().isEmpty();
         if(!menu.settingsPage){
+            boolean lumberjack=menu.profession==Profession.LUMBERJACK;
             for(int i=0;i<5;i++){
-                int size=menu.profession==Profession.LUMBERJACK?5*(i+1):IndustrialRules.minimumSize(menu.profession)+i*2;
-                var button=addRenderableWidget(new Button(leftPos+FARM_AREA_X+i*35,topPos+FARM_AREA_Y,32,17,
-                    Component.literal(size+"×"+size),b->option(size,0),
-                    (buttonWidget,pose,x,y)->{if(menu.profession==Profession.LUMBERJACK)renderTooltip(pose,Component.literal(size+"×"+size+"×5"),x,y);}));
+                int size=lumberjack?IndustrialRules.lumberjackWidth(i):IndustrialRules.minimumSize(menu.profession)+i*2;
+                String dimensions=size+"×"+size+(lumberjack?"×"+IndustrialRules.LUMBERJACK_HEIGHT:"");
+                var button=addRenderableWidget(new Button(leftPos+areaButtonX(i),topPos+FARM_AREA_Y,
+                    lumberjack?LUMBER_BUTTON_WIDTH:32,17,Component.literal(dimensions),b->option(size,0)));
                 button.active=state!=null&&size<=IndustrialRules.maximumSize(menu.profession,state.level());
             }
             if(state!=null&&!state.employed())addRenderableWidget(new Button(leftPos+222,topPos+142,75,16,
@@ -164,6 +166,9 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         if(menu.fieldLayout)drawFarmerBackground(pose);
         for(var slot:menu.slots){if(!slot.isActive())continue;int x=leftPos+slot.x,y=topPos+slot.y;fill(pose,x-1,y-1,x+17,y+17,0xFF251F18);fill(pose,x,y,x+16,y+16,0xFFB69B73);}
     }
+    private int areaButtonX(int option){
+        return menu.profession==Profession.LUMBERJACK?LUMBER_AREA_X+option*LUMBER_AREA_STEP:FARM_AREA_X+option*35;
+    }
     private void drawFarmerBackground(PoseStack pose){
         fill(pose,leftPos+4,topPos+4,leftPos+imageWidth-4,topPos+29,0xFF44372A);
         WorkerTextures.drawExperience(pose,leftPos+(imageWidth-XP_WIDTH)/2,topPos+XP_Y,farmerXpWidth(),false);
@@ -173,9 +178,10 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         var state=menu.snapshot;
         int minSize=IndustrialRules.minimumSize(menu.profession);
         if(state!=null&&state.size()>=minSize&&state.size()<=IndustrialRules.maximumSize(menu.profession,5)){
-            int index=menu.profession==Profession.LUMBERJACK?state.size()/5-1:(state.size()-minSize)/2;
-            int x=leftPos+FARM_AREA_X+index*35;
-            fill(pose,x-1,topPos+FARM_AREA_Y-1,x+33,topPos+FARM_AREA_Y+18,0xFFBFD375);
+            int index=menu.profession==Profession.LUMBERJACK?IndustrialRules.lumberjackOption(state.size()):(state.size()-minSize)/2;
+            int x=leftPos+areaButtonX(index);
+            int width=menu.profession==Profession.LUMBERJACK?LUMBER_BUTTON_WIDTH:32;
+            fill(pose,x-1,topPos+FARM_AREA_Y-1,x+width+1,topPos+FARM_AREA_Y+18,0xFFBFD375);
         }
     }
     @Override protected void renderLabels(PoseStack pose,int mx,int my){
@@ -187,7 +193,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
             for(int i=0;i<inputs.length;i++)
                 drawCenteredString(pose,font,inputs[i],WorkMenu.farmAuxX(i)+8,31,0xFFF6E8CC);
             drawCenteredString(pose,font,"Inventário compartilhado",imageWidth/2,59,0xFFF6E8CC);
-            if(menu.profession==Profession.BEEKEEPER||menu.profession==Profession.LUMBERJACK)font.draw(pose,"Altura 5",245,128,0xFFF6E8CC);
+            if(menu.profession==Profession.BEEKEEPER)font.draw(pose,"Altura 5",245,128,0xFFF6E8CC);
             font.draw(pose,playerInventoryTitle,inventoryLabelX,inventoryLabelY,0xFFF6E8CC);
             return;
         }

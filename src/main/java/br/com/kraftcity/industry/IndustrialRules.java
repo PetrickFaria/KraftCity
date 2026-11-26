@@ -20,14 +20,30 @@ public final class IndustrialRules {
     }
     public static int level(ServerLevel l,EmploymentData.Station s){return s.worker==null||s.profession==null?1:Math.min(5,Math.max(1,WorkforceData.get(l).progress(s.worker,s.profession.id()).level()));}
     public static int maximumSize(int level){return 3+2*Math.min(5,Math.max(1,level));}
-    public static int minimumSize(Profession profession){return profession==Profession.BEEKEEPER?7:5;}
+    public static int minimumSize(Profession profession){return profession==Profession.LUMBERJACK?15:profession==Profession.BEEKEEPER?7:5;}
     public static int maximumSize(Profession profession,int level){
-        return profession==Profession.LUMBERJACK?5*Math.min(5,Math.max(1,level)):maximumSize(level)+(minimumSize(profession)-5);
+        return profession==Profession.LUMBERJACK?lumberjackWidth(Math.min(5,Math.max(1,level))-1):maximumSize(level)+(minimumSize(profession)-5);
+    }
+    public static final int LUMBERJACK_HEIGHT=15;
+    public static int lumberjackWidth(int option){return 15+10*option;}
+    public static int lumberjackOption(int width){return (width-15)/10;}
+    private static boolean validLumberjackWidth(int width,int max){return width>=15&&width<=max&&(width-15)%10==0;}
+    public static void setLumberjackWidth(EmploymentData.Station s,int width){
+        s.industry.putInt("lumberjack_width",width);
+        s.industry.remove("size");
+        s.setChanged();
     }
     public static int size(ServerLevel l,EmploymentData.Station s){
         int max=maximumSize(s.profession,level(l,s));
         int selected=s.industry.getInt("size");
-        if(s.profession==Profession.LUMBERJACK)return selected>=5&&selected<=max&&selected%5==0?selected:5;
+        if(s.profession==Profession.LUMBERJACK){
+            if(!s.industry.contains("lumberjack_width")){
+                int option=selected>=5&&selected<=25&&selected%5==0?selected/5-1:0;
+                setLumberjackWidth(s,lumberjackWidth(option));
+            }
+            int width=s.industry.getInt("lumberjack_width");
+            return validLumberjackWidth(width,s.worker==null?lumberjackWidth(4):max)?width:lumberjackWidth(0);
+        }
         if(s.profession==Profession.BEEKEEPER){
             // Preserve the old selected width where it still exists, even while the post is vacant.
             int migrated=validSize(selected,15)?Math.max(7,selected):7;
@@ -48,8 +64,8 @@ public final class IndustrialRules {
     public static boolean selectSize(ServerLevel l,EmploymentData.Station s,int size){
         int max=maximumSize(s.profession,level(l,s));
         if(s.profession==Profession.LUMBERJACK){
-            if(size<5||size>max||size%5!=0)return false;
-            s.industry.putInt("size",size);s.setChanged();return true;
+            if(!validLumberjackWidth(size,max))return false;
+            setLumberjackWidth(s,size);return true;
         }
         if(size<minimumSize(s.profession)||!validSize(size,max)||s.profession!=Profession.FARMER&&s.profession!=Profession.BEEKEEPER&&level(l,s)<5&&size!=max)return false;
         s.industry.putInt("size",size);s.industry.remove("cursor");s.setChanged();return true;

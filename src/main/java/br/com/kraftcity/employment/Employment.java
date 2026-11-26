@@ -338,7 +338,7 @@ public final class Employment {
         }
         if(profession==Profession.LUMBERJACK&&(!s.industry.hasUUID("lumberjack_area_owner")
                 ||!worker.equals(s.industry.getUUID("lumberjack_area_owner")))){
-            s.industry.putInt("size",5);
+            br.com.kraftcity.industry.IndustrialRules.setLumberjackWidth(s,br.com.kraftcity.industry.IndustrialRules.lumberjackWidth(0));
             s.industry.putUUID("lumberjack_area_owner",worker);
         }
         if(profession==Profession.BEEKEEPER&&(!s.industry.hasUUID("apiary_worker")

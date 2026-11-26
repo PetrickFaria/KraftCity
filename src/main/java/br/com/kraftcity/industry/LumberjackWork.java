@@ -76,7 +76,8 @@ public final class LumberjackWork {
     public static AABB bounds(BlockPos origin, int width) {
         int min = -width / 2;
         int max = min + width;
-        return new AABB(origin.offset(min,-2,min), origin.offset(max,3,max));
+        int vertical=IndustrialRules.LUMBERJACK_HEIGHT/2;
+        return new AABB(origin.offset(min,-vertical,min), origin.offset(max,vertical+1,max));
     }
 
     public static int cutTicks(ItemStack tool) {
@@ -178,9 +179,28 @@ public final class LumberjackWork {
 
     private static LumberjackTrees.Tree selectTree(ServerLevel level, EmploymentData.Station station, Villager worker, Session session, AABB area) {
         var bases = new ArrayList<BlockPos>();
-        for (var pos : cells(area)) {
-            if (LumberjackTrees.loaded(level, pos) && level.getBlockState(pos).is(BlockTags.LOGS)) bases.add(pos.immutable());
+        int minX=(int)area.minX, maxX=(int)area.maxX-1;
+        int minY=Math.max(level.getMinBuildHeight(),(int)area.minY);
+        int maxY=Math.min(level.getMaxBuildHeight(),(int)area.maxY)-1;
+        int minZ=(int)area.minZ, maxZ=(int)area.maxZ-1;
+        for(int cx=minX>>4;cx<=maxX>>4;cx++)for(int cz=minZ>>4;cz<=maxZ>>4;cz++){
+            var chunk=level.getChunkSource().getChunkNow(cx,cz);
+            if(chunk==null)continue;
+            int x0=cx<<4, z0=cz<<4;
+            for(int sy=minY>>4;sy<=maxY>>4;sy++){
+                int y0=sy<<4;
+                var section=chunk.getSection(level.getSectionIndex(y0));
+                if(!section.maybeHas(state->state.is(BlockTags.LOGS)))continue;
+                for(int x=Math.max(minX,x0);x<=Math.min(maxX,x0+15);x++)
+                    for(int y=Math.max(minY,y0);y<=Math.min(maxY,y0+15);y++)
+                        for(int z=Math.max(minZ,z0);z<=Math.min(maxZ,z0+15);z++){
+                            if(!section.getBlockState(x&15,y&15,z&15).is(BlockTags.LOGS))continue;
+                            var pos=new BlockPos(x,y,z);
+                            if(LumberjackTrees.rootSupport(level.getBlockState(pos.below())))bases.add(pos);
+                        }
+            }
         }
+        if (TRACE) LOGGER.info("Lumberjack worker={} level={} candidate roots={}", worker.getUUID(), IndustrialRules.level(level,station), bases.size());
         bases.sort(Comparator.<BlockPos>comparingDouble(pos -> Vec3.atBottomCenterOf(pos).distanceToSqr(worker.position())).thenComparingInt(BlockPos::getY));
         for (var base : bases) {
             var tree = LumberjackTrees.identify(level, base, area, station.pos);
@@ -306,6 +326,7 @@ public final class LumberjackWork {
         }
         if (!IndustrialWork.outputs(station,drops,true)) drops.forEach(drop -> Block.popResource(level,target,drop));
         axe.hurtAndBreak(1,worker,v -> v.broadcastBreakEvent(InteractionHand.MAIN_HAND));
+        if (TRACE) LOGGER.info("Lumberjack worker={} broke log {} after {} ticks",worker.getUUID(),target,session.elapsed);
         station.industry.putLong("lumberjack_cut_count",station.industry.getLong("lumberjack_cut_count")+1);
         station.industry.putString("lumberjack_species",job.getString("species"));
         IndustrialRules.progress(level,station);

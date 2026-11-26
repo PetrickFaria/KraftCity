@@ -97,7 +97,10 @@ final class LumberjackTrees extends SavedData {
                 if (state.is(BlockTags.LOGS) && !state.is(trunk.getBlock())) return rejected(base, "touching other log species", neighbor);
                 // A sapling can grow alongside the assigned work block at ground level.
                 boolean besidePost = pos.getY() == base.getY() && neighbor.equals(workPost);
-                if (!besidePost && state.isCollisionShapeFullBlock(level, neighbor) && !state.is(BlockTags.LOGS)
+                // A rooted tree can share its lowest layer with exposed terrain.
+                boolean terrainAtRoot = pos.getY() == base.getY() && side.getAxis().isHorizontal()
+                        && state.is(BlockTags.BASE_STONE_OVERWORLD);
+                if (!besidePost && !terrainAtRoot && state.isCollisionShapeFullBlock(level, neighbor) && !state.is(BlockTags.LOGS)
                         && !state.is(BlockTags.DIRT) && !state.is(Blocks.MANGROVE_ROOTS)
                         && !state.is(Blocks.MUDDY_MANGROVE_ROOTS) && !state.is(BlockTags.LEAVES)) return rejected(base, "adjoining solid block", neighbor);
             }
