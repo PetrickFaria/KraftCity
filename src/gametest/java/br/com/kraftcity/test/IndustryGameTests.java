@@ -631,9 +631,11 @@ public final class IndustryGameTests {
 
     @GameTest(template="empty",timeoutTicks=350,batch="kc130_idle")
     public static void idle_industrial_worker_walks_and_stops_for_work(GameTestHelper h){
-        var f=fixture(h,Profession.FARMER);
+        // The GameTest runner keeps other fixtures' stations in the same level.
+        // Vertically separate this farm from large neighboring lumberjack areas.
+        var f=fixture(h,Profession.FARMER,12,post->{});
         buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
-        var start=Vec3.atBottomCenterOf(f.p.above());
+        var start=Vec3.atBottomCenterOf(f.p.west().above());
         f.v.setPos(start);
         f.v.setNoAi(false);
         f.s.setItem(27,new ItemStack(Items.IRON_HOE));
@@ -3050,7 +3052,7 @@ public final class IndustryGameTests {
         f.v.setNoAi(false);
         h.startSequence().thenExecuteAfter(60,()->{
             check(f.l.getBlockState(legacy).is(Blocks.BIRCH_LOG),"Legacy mark did not protect the root");
-            check(server.getCommands().performPrefixedCommand(source.withMaximumPermission(1),legacyCommand)==0,
+            check(server.getCommands().performPrefixedCommand(source.withPermission(1),legacyCommand)==0,
                 "Recovery accepted a source without operator permission");
             check(server.getCommands().performPrefixedCommand(source,constructionCommand)==0,
                 "Recovery accepted a partially marked trunk");
