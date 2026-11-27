@@ -47,11 +47,11 @@ public final class WorkMenu extends AbstractContainerMenu {
             if(fieldLayout){
                 int[] inputs={EmploymentData.TOOL,EmploymentData.INPUT_A,farmer?EmploymentData.EQUIPMENT:EmploymentData.INPUT_B};
                 for(int i=0;i<(this.profession==Profession.LUMBERJACK?2:inputs.length);i++){
-                    int index=i;
+                    int inputIndex=i;
                     addSlot(new Slot(inventory,inputs[i],farmAuxX(i),FARM_AUX_Y){
                         @Override public boolean isActive(){return !settingsPage;}
                         @Override public boolean mayPlace(ItemStack stack){
-                            if(WorkMenu.this.profession==Profession.LUMBERJACK)return index==0?br.com.kraftcity.industry.LumberjackWork.cutTicks(stack)>0:br.com.kraftcity.industry.LumberjackWork.sapling(stack);
+                            if(WorkMenu.this.profession==Profession.LUMBERJACK)return inputIndex==0?br.com.kraftcity.industry.LumberjackWork.cutTicks(stack)>0:br.com.kraftcity.industry.LumberjackWork.sapling(stack);
                             if(!farmer)return br.com.kraftcity.industry.ApiaryWork.validInput(index,stack);
                             return switch(index){
                                 case 0->stack.getItem() instanceof HoeItem;

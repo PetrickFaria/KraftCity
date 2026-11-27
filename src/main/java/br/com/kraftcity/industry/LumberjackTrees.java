@@ -12,8 +12,11 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.world.level.block.SaplingBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.phys.AABB;
@@ -48,6 +51,12 @@ final class LumberjackTrees extends SavedData {
     static void placed(BlockEvent.EntityPlaceEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level) || event.isCanceled()) return;
         if (event instanceof BlockEvent.EntityMultiPlaceEvent multiple) {
+            // Forge wraps player use of bone meal in the same event as construction.
+            if (event.getEntity() instanceof Player player
+                    && (player.getMainHandItem().is(Items.BONE_MEAL) || player.getOffhandItem().is(Items.BONE_MEAL))
+                    && multiple.getReplacedBlockSnapshots().stream().anyMatch(snapshot ->
+                        snapshot.getReplacedBlock().getBlock() instanceof SaplingBlock
+                            && level.getBlockState(snapshot.getPos()).is(BlockTags.LOGS))) return;
             for (var snapshot : multiple.getReplacedBlockSnapshots()) mark(level, snapshot.getPos(), level.getBlockState(snapshot.getPos()));
         } else {
             mark(level, event.getPos(), event.getPlacedBlock());

@@ -2685,6 +2685,31 @@ public final class IndustryGameTests {
         return root;
     }
 
+    @GameTest(template="empty",timeoutTicks=40,batch="lumberjack_axe_slot")
+    public static void lumberjack_menu_accepts_all_seven_axe_tiers(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK);
+        var player=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"LumberjackMenu"));
+        player.setPos(Vec3.atBottomCenterOf(f.p.south()));
+        var menu=new WorkMenu(1,player.getInventory(),f.s,false,null);
+        for(var item:List.of(Items.WOODEN_AXE,Items.STONE_AXE,Items.IRON_AXE,Items.GOLDEN_AXE,
+                IndustrialTools.AXE.get(),Items.DIAMOND_AXE,Items.NETHERITE_AXE)){
+            var axe=new ItemStack(item);
+            axe.setDamageValue(7);
+            menu.setCarried(axe.copy());
+            menu.clicked(27,0,net.minecraft.world.inventory.ClickType.PICKUP,player);
+            check(menu.getCarried().isEmpty()&&ItemStack.matches(f.s.getItem(27),axe),"axe did not reach the tool slot: "+item);
+            menu.clicked(27,0,net.minecraft.world.inventory.ClickType.PICKUP,player);
+            check(f.s.getItem(27).isEmpty()&&ItemStack.matches(menu.getCarried(),axe),"axe was lost, duplicated or changed");
+        }
+        menu.setCarried(new ItemStack(Items.OAK_SAPLING));
+        menu.clicked(27,0,net.minecraft.world.inventory.ClickType.PICKUP,player);
+        check(f.s.getItem(27).isEmpty()&&menu.getCarried().is(Items.OAK_SAPLING),"sapling accepted by tool slot");
+        f.s.setItem(0,new ItemStack(Items.IRON_AXE));
+        IndustrialWork.replenish(f.s);
+        check(f.s.getItem(0).isEmpty()&&f.s.getItem(27).is(Items.IRON_AXE),"shared inventory no longer supplies the tool slot");
+        h.succeed();
+    }
+
     @GameTest(template="empty",timeoutTicks=650,batch="lumberjack_vanilla_growth")
     public static void lumberjack_finishes_an_oak_grown_after_hiring_beside_its_post(GameTestHelper h){
         assertLumberjackFellsVanillaOak(h, false);
@@ -2782,8 +2807,13 @@ public final class IndustryGameTests {
             f.v.setPos(start);
             for (int attempt = 0; attempt < 100 && f.l.getBlockState(root).is(sapling); attempt++) {
                 var state = f.l.getBlockState(root);
-                if (boneMeal) sapling.performBonemeal(f.l, random, root, state);
-                else sapling.randomTick(state, f.l, root, random);
+                if (boneMeal) {
+                    var actor=FakePlayerFactory.get(f.l,new GameProfile(f.v.getUUID(),"LumberjackGrower"));
+                    actor.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,new ItemStack(Items.BONE_MEAL,64));
+                    var hit=new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(root),Direction.UP,root,false);
+                    net.minecraftforge.common.ForgeHooks.onPlaceItemIntoWorld(
+                        new net.minecraft.world.item.context.UseOnContext(actor,net.minecraft.world.InteractionHand.MAIN_HAND,hit));
+                } else sapling.randomTick(state, f.l, root, random);
             }
             check(f.l.getBlockState(root).is(Blocks.OAK_LOG), "Vanilla sapling did not grow");
             for (var pos : BlockPos.betweenClosed(root.offset(-4,0,-4),root.offset(4,16,4))) {
