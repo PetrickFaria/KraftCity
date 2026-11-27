@@ -766,12 +766,13 @@ public final class MilitaryGameTests {
         var f = fixture(h);
         clearTestHostiles(f);
         var cow = mob(f, EntityType.COW, 2);
-        cow.setPos(f.v.position());
+        cow.setPos(Vec3.atBottomCenterOf(f.p.east(3)));
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.east()));
+        f.v.setNoAi(false);
         cow.setHealth(1);
         Military.select(f.s, EntityType.COW, true);
         check(cow.hurt(DamageSource.mobAttack(f.v), 8), "soldier did not deal the killing blow");
         h.succeedWhen(() -> {
-            Military.tick(f.l, f.s, f.v);
             var drops = f.l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, f.v.getBoundingBox().inflate(12));
             check(f.s.countItem(Items.BEEF) > 0, "waiting for actual cow loot at " + f.v.position()
                     + "; cow alive=" + cow.isAlive() + "; loot rule=" + f.l.getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT)
