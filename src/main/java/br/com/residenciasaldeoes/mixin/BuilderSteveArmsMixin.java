@@ -25,7 +25,7 @@ public abstract class BuilderSteveArmsMixin {
             float cycle=WorkerPose.walking(swing,amount)*(1-action);
             model.body.xRot=.27F*action;
             model.jacket.copyFrom(model.body);
-            model.rightArm.xRot=cycle-1.1F*action;
+            model.rightArm.xRot=WorkerPose.rightArmPitch(worker,age,cycle,action);
             model.leftArm.xRot=-cycle;
         }else return;
         WorkerPose.aim(worker,model.rightArm,model.leftArm);

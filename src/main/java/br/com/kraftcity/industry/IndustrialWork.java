@@ -35,7 +35,7 @@ public final class IndustrialWork {
     public static boolean ownsNavigation(Villager v){
         if(!(v.level instanceof ServerLevel l))return false;
         var s=EmploymentData.get(l).assigned(v.getUUID());
-        return s!=null&&industrial(s)&&(day(l)||FarmerLogistics.fieldWorker(s)&&FarmerLogistics.ending(v))&&!v.isSleeping()&&!l.isThundering()&&!Employment.fleeing(v)
+        return s!=null&&industrial(s)&&(day(l)||FarmerLogistics.ending(v))&&!v.isSleeping()&&!l.isThundering()&&!Employment.fleeing(v)
             &&!v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced")
             &&!v.getPersistentData().contains("residenciasaldeoes_emerald_transfer")
             &&!v.getPersistentData().contains("residenciasaldeoes_night_door_task");
@@ -49,6 +49,7 @@ public final class IndustrialWork {
                 LumberjackWork.trace(v,"blocked: storm or danger");
                 LumberjackWork.pause(v);
             }
+            if(!FarmerLogistics.fieldWorker(s))FarmerLogistics.release(v);
             IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER){restoreHand(v);ApiaryWork.blocked(l,s,v,"storm_or_danger");}
             s.industry.remove("fish_elapsed");
@@ -62,12 +63,6 @@ public final class IndustrialWork {
             IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER){restoreHand(v);ApiaryWork.blocked(l,s,v,"rest");}
             s.industry.remove("fish_elapsed");
-            if(!day(l)&&FarmerLogistics.fieldWorker(s))return;
-            if(!day(l)){
-                if(s.industry.getLong("deposited_day")!=Math.floorDiv(l.getDayTime(),24000)+1){
-                    deposit(l,s,v);s.industry.putLong("deposited_day",Math.floorDiv(l.getDayTime(),24000)+1);s.setChanged();
-                }
-            }
             return;
         }
         if(!ownsNavigation(v)||br.com.kraftcity.employment.WorkplaceVisits.leaving(v)){
@@ -75,6 +70,7 @@ public final class IndustrialWork {
                 LumberjackWork.trace(v,"blocked: residential or safety route");
                 LumberjackWork.pause(v);
             }
+            if(!FarmerLogistics.fieldWorker(s))FarmerLogistics.release(v);
             IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER)ApiaryWork.blocked(l,s,v,"residential_or_safety_route");
             return;
@@ -94,7 +90,10 @@ public final class IndustrialWork {
             IndustrialIdle.tick(l,s,v);
             return;
         }
-        boolean busy=switch(s.profession){
+        boolean busy;
+        if(!v.isNoAi()&&!FarmerLogistics.fieldWorker(s)&&s.profession!=Profession.LUMBERJACK&&mobGriefing
+                &&(FarmerLogistics.collect(l,s,v)||FarmerLogistics.deliverCollected(l,s,v)))busy=true;
+        else busy=switch(s.profession){
             case FARMER->{
                 if(FarmerLogistics.isJumping(v)||FarmerLogistics.leaveWater(l,v)||FarmerLogistics.collect(l,s,v))yield true;
                 if(v.distanceToSqr(area(l,s).getCenter())<=400)yield FarmerWork.tick(l,s,v);
@@ -136,7 +135,7 @@ public final class IndustrialWork {
     }
     private static void showTool(Villager v,EmploymentData.Station s){
         if(!v.getPersistentData().contains("KCOriginalHand"))v.getPersistentData().put("KCOriginalHand",v.getMainHandItem().save(new CompoundTag()));
-        if((FarmerLogistics.fieldWorker(s)||s.profession==Profession.LUMBERJACK)&&!v.getPersistentData().contains("KCFarmerOriginalPickup")){
+        if(!v.getPersistentData().contains("KCFarmerOriginalPickup")){
             v.getPersistentData().putBoolean("KCFarmerOriginalPickup",v.canPickUpLoot());
             v.setCanPickUpLoot(false);
         }
@@ -202,10 +201,10 @@ public final class IndustrialWork {
     }
     public static boolean insert(EmploymentData.Station s,ItemStack out,boolean commit){return outputs(s,List.of(out),commit);}
     public static void deposit(ServerLevel l,EmploymentData.Station s,Villager v){
+        if(s.profession==Profession.LUMBERJACK)return;
         if(FarmerLogistics.fieldWorker(s)){FarmerLogistics.depositDirect(l,s,v);return;}
-        boolean lumberjack=s.profession==Profession.LUMBERJACK;
-        var offers=DiscardChests.offers(s,stack->!lumberjack||!LumberjackWork.sapling(stack)&&LumberjackWork.cutTicks(stack)==0);
-        var destinations=lumberjack?br.com.kraftcity.logistics.DiscardBinding.destinations(l,s,area(l,s)):DiscardChests.destinations(l,s,area(l,s));
+        var offers=FarmerLogistics.offers(s);
+        var destinations=DiscardChests.destinations(l,s,area(l,s));
         for(var pos:destinations){
             if(!DiscardChests.hasOffers(offers))break;
             DiscardChests.deposit(l,s,v,pos,offers,"deposit");

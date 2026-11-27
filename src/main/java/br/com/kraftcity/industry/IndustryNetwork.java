@@ -29,11 +29,11 @@ public final class IndustryNetwork {
                     else if(command==1){s.industry.putBoolean("preview",!s.industry.getBoolean("preview"));s.setChanged();sendBounds(p);}
                     else if(command==4&&s.sector==Profession.Sector.COMMERCIAL){br.com.kraftcity.commerce.CommercialWork.cancel(s);}
                     else if(command==3&&s.profession==Profession.BUTCHER){p.getPersistentData().putUUID("KCRegisterAnimal",station);p.closeContainer();p.sendSystemMessage(Component.literal("Clique nos animais que você colocou na área. Agache e clique no posto para encerrar."));}
-                    else if(command==5&&(m.fieldLayout||s.profession==Profession.BAKER)){
+                    else if(command==5&&br.com.kraftcity.logistics.DiscardBinding.supportsManualBinding(s.profession)){
                         br.com.kraftcity.logistics.DiscardBinding.begin(p,s);
                         if(p.containerMenu!=m){c.get().setPacketHandled(true);return;}
                     }
-                    else if(command==6&&(m.fieldLayout||s.profession==Profession.BAKER))br.com.kraftcity.logistics.DiscardBinding.unlink(p,s);
+                    else if(command==6&&br.com.kraftcity.logistics.DiscardBinding.supportsManualBinding(s.profession))br.com.kraftcity.logistics.DiscardBinding.unlink(p,s);
                     m.sync(p);
                 }
             }c.get().setPacketHandled(true);

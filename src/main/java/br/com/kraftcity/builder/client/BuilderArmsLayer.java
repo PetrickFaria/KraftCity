@@ -58,7 +58,7 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
     public static void poseArms(Villager worker,ModelPart right,ModelPart left,float stride,float amount,float age,boolean building){
         float action=WorkerPose.action(worker,age);
         float cycle=building?Mth.sin(age*.55F)*.8F:WorkerPose.walking(stride,amount)*(1-action);
-        right.xRot=building?-.9F+cycle:cycle-1.1F*action;
+        right.xRot=building?-.9F+cycle:WorkerPose.rightArmPitch(worker,age,cycle,action);
         left.xRot=building?-.9F-cycle:-cycle;
         right.yRot=left.yRot=0;
         WorkerPose.aim(worker,right,left);

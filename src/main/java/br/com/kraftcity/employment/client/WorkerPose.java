@@ -46,7 +46,22 @@ public final class WorkerPose {
 
     public static float action(Villager worker,float age){
         var activity=ACTIVE.get(worker);
+        if(activity!=null&&activity.profession==Profession.LUMBERJACK&&!chopping(worker))return 0;
         return activity==null||activity.profession!=Profession.FARMER&&activity.profession!=Profession.SOLDIER&&activity.profession!=Profession.BEEKEEPER&&activity.profession!=Profession.LUMBERJACK?0:Mth.sin(Mth.PI*Mth.clamp(worker.getAttackAnim(age-worker.tickCount),0,1));
+    }
+
+    public static float rightArmPitch(Villager worker,float age,float walking,float action){
+        if(profession(worker)!=Profession.LUMBERJACK)return walking-1.1F*action;
+        if(!chopping(worker)||worker.isSleeping()||!worker.swinging)return walking;
+        float phase=Mth.clamp(worker.getAttackAnim(age-worker.tickCount),0,1);
+        if(phase<.35F)return Mth.lerp(phase/.35F,walking,-2.7F);
+        if(phase<.7F)return Mth.lerp((phase-.35F)/.35F,-2.7F,.15F);
+        return Mth.lerp((phase-.7F)/.3F,.15F,walking);
+    }
+
+    private static boolean chopping(Villager worker){
+        var tag=worker.getMainHandItem().getTag();
+        return tag!=null&&tag.getBoolean(br.com.kraftcity.industry.LumberjackWork.CHOPPING_AXE);
     }
 
     public static boolean soldier(Villager worker){

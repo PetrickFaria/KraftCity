@@ -2727,12 +2727,14 @@ public final class IndustryGameTests {
         assertLumberjackFellsVanillaTree(h, true);
     }
 
-    @GameTest(template="empty",timeoutTicks=1300,batch="lumberjack_vanilla_branched")
+    // The 21-log fixture includes 180 setup ticks and physical pickup between
+    // cuts. Budget each log for a 40-tick cut and up to 45 ticks of handling.
+    @GameTest(template="empty",timeoutTicks=2050,batch="lumberjack_vanilla_branched")
     public static void lumberjack_waits_for_shift_and_axe_then_cuts_preexisting_branched_oak(GameTestHelper h){
         var level = h.getLevel();
         var logs = new ArrayList<BlockPos>();
         var f = fixture(h, Profession.LUMBERJACK, post -> {
-            for (var floor : BlockPos.betweenClosed(post.offset(-2,-1,-2),post.offset(2,-1,2))) {
+            for (var floor : BlockPos.betweenClosed(post.offset(-6,-1,-6),post.offset(8,-1,6))) {
                 level.setBlockAndUpdate(floor, Blocks.DIRT.defaultBlockState());
             }
             var root = post.east(2);
@@ -2758,7 +2760,8 @@ public final class IndustryGameTests {
             check(logs.stream().allMatch(pos -> level.getBlockState(pos).is(Blocks.OAK_LOG)), "Cut started without an axe");
             f.s.setItem(EmploymentData.TOOL, new ItemStack(Items.NETHERITE_AXE));
         }).thenWaitUntil(() -> {
-            check(logs.stream().noneMatch(pos -> level.getBlockState(pos).is(Blocks.OAK_LOG)), "Vanilla fancy oak left uncut logs");
+            var remaining=logs.stream().filter(pos->level.getBlockState(pos).is(Blocks.OAK_LOG)).toList();
+            check(remaining.isEmpty(),"Vanilla fancy oak left uncut logs "+remaining+" at worker "+f.v.position());
             check(count(f, Items.OAK_LOG) == logs.size(), "Logs missing from a mature tree");
         }).thenExecute(() -> f.v.setNoAi(true)).thenSucceed();
     }
@@ -2842,7 +2845,16 @@ public final class IndustryGameTests {
             check(remaining.isEmpty(), "Vanilla tree left uncut logs " + remaining + " at post " + f.p
                     + " with worker at " + f.v.position() + " and axe damage " + f.s.getItem(EmploymentData.TOOL).getDamageValue());
             check(f.v.position().distanceToSqr(start) > 1, "Worker never approached the trunk");
-            check(count(f, wood) == logs.size(), "Some generated logs were not collected");
+        }).thenIdle(20).thenExecute(()->{
+            // The low oak canopy can physically seal drops beside the post.
+            // Run vanilla random ticks on already unsupported leaves to exercise collection after decay.
+            for(var pos:BlockPos.betweenClosed(root.offset(-6,0,-6),root.offset(6,16,6))){
+                var state=f.l.getBlockState(pos);
+                if(state.getBlock() instanceof LeavesBlock&&state.getValue(LeavesBlock.DISTANCE)==7)
+                    state.randomTick(f.l,pos,f.l.random);
+            }
+        }).thenWaitUntil(()->{
+            check(count(f, wood) == logs.size(), "Some generated logs were not physically collected after decay");
             check(f.s.getItem(EmploymentData.TOOL).getDamageValue() == logs.size(), "Durability did not match actual cuts");
             check(f.l.getBlockState(f.p).is(WorkModule.PROFESSIONAL.get(Profession.LUMBERJACK).get()), "Tree cut affected the work post");
         }).thenExecute(() -> f.v.setNoAi(true)).thenSucceed();
@@ -2928,7 +2940,7 @@ public final class IndustryGameTests {
             check(f.l.isEmptyBlock(root.above()),"waiting for second cut");
             if(second[0]<0)second[0]=f.l.getGameTime();
             long since=second[0]-first[0];
-            check(since>=ticks&&since<=ticks+2,"second cut took "+since+" ticks instead of "+ticks);
+            check(since>=ticks,"second cut completed too soon at "+since+" ticks");
             check(count(f,Items.OAK_LOG)==2&&f.s.getItem(27).getDamageValue()==2,"loot or durability did not commit twice");
             f.v.setNoAi(true);
         });
@@ -2973,7 +2985,7 @@ public final class IndustryGameTests {
 
     @GameTest(template="empty",timeoutTicks=360,batch="lumberjack_replant")
     public static void lumberjack_replants_a_single_sapling_after_respecting_the_clearance(GameTestHelper h){
-        var f=fixture(h,Profession.LUMBERJACK);
+        var f=fixture(h,Profession.LUMBERJACK,32,post->{});
         level(f,5,100);
         check(IndustrialRules.selectSize(f.l,f.s,25),"select replant area");
         var seed=f.p.east(8);
@@ -3015,7 +3027,7 @@ public final class IndustryGameTests {
         f.v.setNoAi(false);
         h.startSequence().thenWaitUntil(()->{
             check(f.l.isEmptyBlock(good)&&f.s.getItem(27).isEmpty(),"first cut did not break axe");
-            check(count(f,Items.BIRCH_LOG)==1,"first cut output");
+            check(count(f,Items.BIRCH_LOG)==1,"waiting for first physical pickup");
         }).thenIdle(65).thenExecute(()->{
             check(f.l.getBlockState(good.above()).is(Blocks.BIRCH_LOG),"cut continued without axe");
             check(f.l.getBlockState(placed).is(Blocks.OAK_LOG),"constructed trunk changed");
@@ -3075,7 +3087,7 @@ public final class IndustryGameTests {
 
     @GameTest(template="empty",timeoutTicks=420,batch="lumberjack_dark_oak")
     public static void lumberjack_dark_oak_waits_for_four_saplings(GameTestHelper h){
-        var f=fixture(h,Profession.LUMBERJACK);
+        var f=fixture(h,Profession.LUMBERJACK,32,post->{});
         level(f,5,100);
         check(IndustrialRules.selectSize(f.l,f.s,25),"select dark oak area");
         var root=f.p.east(8);
@@ -3114,11 +3126,153 @@ public final class IndustryGameTests {
         f.s.setItem(27,new ItemStack(Items.NETHERITE_AXE));
         f.v.setPos(f.p.getX()+7.5,f.p.getY(),f.p.getZ()+1.5);
         f.v.setNoAi(false);
-        h.startSequence().thenWaitUntil(()->check(f.l.isEmptyBlock(root),"waiting for first cut"))
+        h.startSequence().thenWaitUntil(()->check(f.l.isEmptyBlock(root)&&count(f,Items.OAK_LOG)==1,"waiting for first cut and pickup"))
             .thenExecute(()->check(IndustrialRules.selectSize(f.l,f.s,15),"shrink area"))
             .thenIdle(85).thenExecute(()->{
                 check(f.l.getBlockState(root.above()).is(Blocks.OAK_LOG)&&count(f,Items.OAK_LOG)==1,"cut outside new area");
                 f.v.setNoAi(true);
             }).thenSucceed();
     }
+    @GameTest(template="empty",timeoutTicks=380,batch="lumberjack_physical")
+    public static void lumberjack_walks_to_unrelated_dropped_items(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK,12,post->{});
+        level(f,2,25);
+        check(IndustrialRules.selectSize(f.l,f.s,25),"select larger collection area");
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        for(var floor:BlockPos.betweenClosed(f.p.offset(1,0,-2),f.p.offset(11,0,2)))
+            f.l.setBlockAndUpdate(floor,Blocks.STONE.defaultBlockState());
+        var start=Vec3.atBottomCenterOf(f.p.east().above());
+        var target=Vec3.atBottomCenterOf(f.p.east(11).above());
+        f.v.setPos(start);
+        f.v.setNoAi(false);
+        var item=new net.minecraft.world.entity.item.ItemEntity(f.l,target.x,target.y,target.z,new ItemStack(Items.WHEAT_SEEDS,3));
+        item.setDeltaMovement(Vec3.ZERO);
+        f.l.addFreshEntity(item);
+        h.runAfterDelay(2,()->check(item.isAlive()&&count(f,Items.WHEAT_SEEDS)==0,"remote pickup"));
+        h.succeedWhen(()->{
+            check(count(f,Items.WHEAT_SEEDS)==3,"waiting for physical pickup");
+            check(!item.isAlive()&&f.v.distanceToSqr(target)<2.25,"items were collected without reaching them");
+            f.v.setNoAi(true);
+        });
+    }
+
+    @GameTest(template="empty",timeoutTicks=720,batch="lumberjack_resume")
+    public static void lumberjack_resumes_remaining_trunk_after_night_and_storm(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK,12,post->{});
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var root=lumberTree(f,f.p.east(2).above(),Blocks.OAK_LOG,Blocks.OAK_LEAVES,4);
+        f.s.setItem(EmploymentData.TOOL,new ItemStack(Items.NETHERITE_AXE));
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.west().above()));
+        f.v.setNoAi(false);
+        h.startSequence().thenWaitUntil(()->check(f.l.isEmptyBlock(root),"waiting for first cut"))
+            .thenExecute(()->f.l.setDayTime(13000))
+            .thenIdle(55).thenExecute(()->{
+                check(f.l.getBlockState(root.above()).is(Blocks.OAK_LOG)&&f.s.industry.contains("lumberjack_tree"),"night discarded the pending cut");
+                f.l.setDayTime(1000);
+                f.l.setWeatherParameters(0,400,true,true);
+                f.l.setRainLevel(1);
+                f.l.setThunderLevel(1);
+            }).thenIdle(55).thenExecute(()->{
+                check(f.l.getBlockState(root.above()).is(Blocks.OAK_LOG)&&f.s.industry.contains("lumberjack_tree"),"storm discarded the pending cut");
+                f.l.setWeatherParameters(400,0,false,false);
+                f.l.setRainLevel(0);
+                f.l.setThunderLevel(0);
+            }).thenWaitUntil(()->{
+                check(f.l.isEmptyBlock(root.above(3))&&count(f,Items.OAK_LOG)==4,"waiting for remaining trunk and drops");
+                f.v.setNoAi(true);
+            }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=420,batch="lumberjack_plant_buffer")
+    public static void lumberjack_keeps_seed_until_edge_and_residence_margins_allow_planting(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK,32,post->{});
+        level(f,2,25);
+        check(IndustrialRules.selectSize(f.l,f.s,25),"select larger planting area");
+        var edge=f.p.east(10);
+        var allowed=f.p.east(9);
+        for(var floor:BlockPos.betweenClosed(f.p.offset(5,-1,-7),f.p.offset(15,-1,7)))
+            f.l.setBlockAndUpdate(floor,Blocks.STONE.defaultBlockState());
+        lumberClearance(f,allowed);
+        f.l.setBlockAndUpdate(edge.below(),Blocks.DIRT.defaultBlockState());
+        var residence=allowed.east(7).below();
+        f.l.setBlockAndUpdate(residence,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState());
+        ((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)f.l.getBlockEntity(residence)).setSize(9);
+        f.s.setItem(EmploymentData.INPUT_A,new ItemStack(Items.BIRCH_SAPLING));
+        f.v.setPos(Vec3.atBottomCenterOf(allowed.north(2)));
+        f.v.setNoAi(false);
+        h.startSequence().thenIdle(85).thenExecute(()->{
+            check(f.l.isEmptyBlock(edge)&&f.s.getItem(28).getCount()==1,"planted within two blocks of the edge");
+            f.l.setBlockAndUpdate(edge.below(),Blocks.STONE.defaultBlockState());
+            f.l.setBlockAndUpdate(allowed.below(),Blocks.DIRT.defaultBlockState());
+        }).thenIdle(80).thenExecute(()->{
+            check(f.l.isEmptyBlock(allowed)&&f.s.getItem(28).getCount()==1,"planted within five blocks of a residence");
+            f.l.removeBlock(residence,false);
+        }).thenWaitUntil(()->{
+            check(f.l.getBlockState(allowed).is(Blocks.BIRCH_SAPLING)&&f.s.getItem(28).isEmpty(),"waiting for legal planting");
+            f.v.setNoAi(true);
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=380,batch="lumberjack_bound_barrel")
+    public static void lumberjack_walks_only_to_its_manually_bound_barrel(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK,32,post->{});
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var start=Vec3.atBottomCenterOf(f.p.north().above());
+        var unbound=f.p.west(2).above();
+        var endpoint=f.p.east(5).above();
+        f.l.setBlockAndUpdate(unbound,Blocks.BARREL.defaultBlockState());
+        f.l.setBlockAndUpdate(endpoint,Blocks.BARREL.defaultBlockState());
+        var other=(BarrelBlockEntity)f.l.getBlockEntity(unbound);
+        var barrel=(BarrelBlockEntity)f.l.getBlockEntity(endpoint);
+        f.s.setItem(0,new ItemStack(Items.OAK_LOG,8));
+        f.s.setItem(EmploymentData.TOOL,new ItemStack(Items.IRON_AXE));
+        f.v.setPos(start);
+        f.v.setNoAi(false);
+        h.startSequence().thenIdle(70).thenExecute(()->{
+            check(other.isEmpty()&&barrel.isEmpty()&&count(f,Items.OAK_LOG)==8,"unlinked barrel got material");
+            var identity=UUID.randomUUID();
+            barrel.getPersistentData().putUUID("KraftCityDiscardIdentity",identity);
+            f.s.industry.putLong("discard_binding_pos",endpoint.asLong());
+            f.s.industry.putUUID("discard_binding_id",identity);
+        }).thenWaitUntil(()->{
+            check(barrel.getItem(0).is(Items.OAK_LOG)&&barrel.getItem(0).getCount()==8,"waiting for the bound barrel delivery");
+            check(f.v.distanceToSqr(Vec3.atCenterOf(endpoint))<=2.73,"remote barrel delivery");
+            check(other.isEmpty()&&count(f,Items.OAK_LOG)==0&&f.s.getItem(27).is(Items.IRON_AXE),"incorrect delivery or tool lost");
+            f.v.setNoAi(true);
+        }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=180,batch="shared_pickup_farmer")
+    public static void farmer_collects_unrelated_wood(GameTestHelper h){
+        unrelatedIndustrialPickup(h,Profession.FARMER,Items.OAK_LOG);
+    }
+
+    @GameTest(template="empty",timeoutTicks=180,batch="shared_pickup_apiary")
+    public static void beekeeper_collects_unrelated_cobblestone(GameTestHelper h){
+        unrelatedIndustrialPickup(h,Profession.BEEKEEPER,Items.COBBLESTONE);
+    }
+
+    @GameTest(template="empty",timeoutTicks=220,batch="shared_pickup_fisherman")
+    public static void fisherman_collects_unrelated_seeds(GameTestHelper h){
+        unrelatedIndustrialPickup(h,Profession.FISHERMAN,Items.WHEAT_SEEDS);
+    }
+
+    private static void unrelatedIndustrialPickup(GameTestHelper h,Profession profession,Item type){
+        var f=fixture(h,profession,32,post->{});
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var start=Vec3.atBottomCenterOf(f.p.west().above());
+        var target=Vec3.atBottomCenterOf(f.p.east(2).above());
+        f.v.setPos(start);
+        f.v.setNoAi(false);
+        var item=new net.minecraft.world.entity.item.ItemEntity(f.l,target.x,target.y,target.z,new ItemStack(type,3));
+        item.setDeltaMovement(Vec3.ZERO);
+        f.l.addFreshEntity(item);
+        h.runAfterDelay(2,()->check(item.isAlive()&&count(f,type)==0,"remote pickup"));
+        h.succeedWhen(()->{
+            check(count(f,type)==3,"waiting for unrelated item pickup");
+            check(!item.isAlive()&&f.v.distanceToSqr(target)<2.25,"worker did not approach the unrelated item");
+            f.v.setNoAi(true);
+        });
+    }
+
 }

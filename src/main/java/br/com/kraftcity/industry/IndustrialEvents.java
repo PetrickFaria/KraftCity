@@ -64,6 +64,11 @@ public final class IndustrialEvents {
         if(e.getEntity() instanceof Villager v&&e.getLevel() instanceof ServerLevel l&&!Employment.active(v))IndustrialWork.restoreHand(v);
     }
     @SubscribeEvent(priority=net.minecraftforge.eventbus.api.EventPriority.HIGH)
-    public void died(net.minecraftforge.event.entity.living.LivingDeathEvent e){if(e.getEntity() instanceof Villager v)IndustrialWork.restoreHand(v);}
+    public void died(net.minecraftforge.event.entity.living.LivingDeathEvent e){
+        if(e.getEntity() instanceof Villager v&&v.level instanceof ServerLevel)LumberjackWork.pause(v);
+    }
+    @SubscribeEvent public void left(net.minecraftforge.event.entity.EntityLeaveLevelEvent e){
+        if(e.getEntity() instanceof Villager v&&e.getLevel() instanceof ServerLevel)LumberjackWork.unloaded(v);
+    }
     @SubscribeEvent public void stopped(net.minecraftforge.event.server.ServerStoppedEvent e){next.clear();cursor=0;}
 }

@@ -115,8 +115,13 @@ public final class DiscardBinding {
         return false;
     }
 
+    public static boolean supportsManualBinding(Profession profession){
+        return profession!=null&&(profession.sector==Profession.Sector.INDUSTRIAL
+            ||profession==Profession.BAKER||profession==Profession.SOLDIER);
+    }
+
     private static boolean valid(ServerLevel level, EmploymentData.Station station) {
-        return station!=null && (station.profession==Profession.BAKER||station.profession==Profession.FARMER||station.profession==Profession.BEEKEEPER||station.profession==Profession.LUMBERJACK||station.profession==Profession.SOLDIER) && station.at(level, station.pos)
+        return station!=null && supportsManualBinding(station.profession) && station.at(level, station.pos)
             && level.hasChunkAt(station.pos) && level.getBlockEntity(station.pos) instanceof WorkBlockEntity post
             && station.id.equals(post.identity());
     }
@@ -185,7 +190,7 @@ public final class DiscardBinding {
             var target = BlockPos.of(station.industry.getLong(TARGET));
             return level.hasChunkAt(target) ? List.of(target) : List.of();
         }
-        return hadBinding ? List.of() : DiscardChests.destinations(level, station, area);
+        return hadBinding || station.profession == Profession.LUMBERJACK ? List.of() : DiscardChests.destinations(level, station, area);
     }
 
     private static void message(ServerPlayer player, String message) {

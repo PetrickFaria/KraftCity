@@ -1,6 +1,9 @@
 package br.com.kraftcity.industry;
 
+import br.com.kraftcity.builder.BuilderData;
 import br.com.kraftcity.employment.EmploymentData;
+import br.com.kraftcity.workforce.WorkerRecord;
+import br.com.kraftcity.workforce.WorkforceData;
 import br.com.kraftcity.employment.Profession;
 import com.mojang.logging.LogUtils;
 import java.util.ArrayList;
@@ -17,6 +20,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.ItemTags;
+import br.com.residenciasaldeoes.data.ResidenceData;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.npc.Villager;
@@ -46,6 +50,7 @@ public final class LumberjackWork {
     static final Logger LOGGER = LogUtils.getLogger();
     private static final Map<Villager, String> LAST_STATE = new WeakHashMap<>();
     private static final String JOB = "lumberjack_tree";
+    public static final String CHOPPING_AXE = "KCLumberjackChopping";
     private static final int SEARCH_INTERVAL = 60;
     private static final double WORK_REACH = 3;
     private static final Map<Villager, Session> SESSIONS = new WeakHashMap<>();
@@ -63,10 +68,18 @@ public final class LumberjackWork {
         int seed = -1;
         int selectedWidth;
         long plantCheckAfter;
-        java.util.UUID collecting;
-        final Map<java.util.UUID,Long> missedDrops = new java.util.HashMap<>();
+        int crackStage = -1;
+        long depositAfter;
+        boolean depositRoute;
 
-        void resetCut() {
+        void suspendCut(Villager worker) {
+            if(crackStage>=0&&chopping!=null&&worker.level instanceof ServerLevel level)
+                level.destroyBlockProgress(worker.getId(),chopping,-1);
+            crackStage=-1;
+        }
+
+        void resetCut(Villager worker) {
+            suspendCut(worker);
             chopping = null;
             elapsed = 0;
             axe = ItemStack.EMPTY;
@@ -105,8 +118,17 @@ public final class LumberjackWork {
 
     public static void pause(Villager worker) {
         var session = SESSIONS.remove(worker);
-        if (session != null) stop(worker, session);
+        if (session != null) {
+            stop(worker,session);
+            session.resetCut(worker);
+            FarmerLogistics.release(worker);
+        }
         IndustrialWork.restoreHand(worker);
+    }
+
+    static void unloaded(Villager worker){
+        if(SESSIONS.containsKey(worker))pause(worker);
+        else FarmerLogistics.release(worker);
     }
 
     static boolean tick(ServerLevel level, EmploymentData.Station station, Villager worker) {
@@ -117,7 +139,7 @@ public final class LumberjackWork {
         }
         var session = SESSIONS.computeIfAbsent(worker, key -> new Session());
         if (session.lastTick == level.getGameTime()) return session.chopping != null;
-        if (session.lastTick != level.getGameTime() - 1) session.resetCut();
+        if (session.lastTick != level.getGameTime() - 1) session.resetCut(worker);
         session.lastTick = level.getGameTime();
         AABB area = IndustrialWork.area(level, station);
         int width=(int)area.getXsize();
@@ -125,15 +147,40 @@ public final class LumberjackWork {
             session.selectedWidth=width;
             session.scanAfter=0;
             session.planting=null;
-            session.collecting=null;
             stop(worker,session);
-            session.resetCut();
+            session.resetCut(worker);
+        }
+        if(FarmerLogistics.collect(level,station,worker)){
+            session.suspendCut(worker);
+            session.path=null;
+            IndustrialWork.displayTool(worker,ItemStack.EMPTY);
+            return true;
+        }
+        if(session.depositRoute||level.getGameTime()>=session.depositAfter){
+            session.depositRoute=FarmerLogistics.deliverCollected(level,station,worker);
+            session.depositAfter=level.getGameTime()+40;
+            if(session.depositRoute){
+                session.suspendCut(worker);
+                session.path=null;
+                IndustrialWork.displayTool(worker,ItemStack.EMPTY);
+                return true;
+            }
         }
         var axe = station.getItem(EmploymentData.TOOL);
         var job = station.industry.getCompound(JOB);
+        if(job.hasUUID("worker")&&!worker.getUUID().equals(job.getUUID("worker"))){
+            clear(station,worker,session);
+            job=new CompoundTag();
+        }
         if (!job.isEmpty() && !jobLoaded(level,job)) {
             stop(worker,session);
-            session.resetCut();
+            session.resetCut(worker);
+            IndustrialWork.displayTool(worker,ItemStack.EMPTY);
+            return false;
+        }
+        if(!job.isEmpty()&&!rootsInArea(area,job)){
+            stop(worker,session);
+            session.resetCut(worker);
             IndustrialWork.displayTool(worker,ItemStack.EMPTY);
             return false;
         }
@@ -142,7 +189,7 @@ public final class LumberjackWork {
             job = new CompoundTag();
         }
         if (!job.isEmpty() && cutTicks(axe) > 0) return chop(level, station, worker, session, area, job, axe);
-        session.resetCut();
+        session.resetCut(worker);
         if (level.getGameTime() >= session.scanAfter) {
             if (TRACE) LOGGER.info("Lumberjack worker={} on duty, axe={}, cut ticks={}, bounds={}",
                     worker.getUUID(), axe, cutTicks(axe), area);
@@ -153,16 +200,14 @@ public final class LumberjackWork {
             if (cutTicks(axe) > 0 && job.isEmpty()) {
                 var tree = selectTree(level, station, worker, session, area);
                 if (tree != null) {
-                    job = write(tree);
+                    job = write(tree,worker);
                     station.industry.put(JOB, job);
                     station.setChanged();
                     session.planting = null;
-                    session.collecting = null;
                     return chop(level, station, worker, session, area, job, axe);
                 }
             }
-            if (session.collecting == null) session.collecting = findDrop(level, station, worker, session, area);
-            if (session.collecting == null && session.planting == null && job.isEmpty()) {
+            if (session.planting == null && job.isEmpty()) {
                 var planting = findPlanting(level, station, worker, session, area);
                 if (planting != null) {
                     session.planting = planting.pos();
@@ -170,7 +215,6 @@ public final class LumberjackWork {
                 }
             }
         }
-        if (session.collecting != null && collect(level, station, worker, session, area)) return true;
         if (session.planting != null && job.isEmpty() && plant(level, station, worker, session, area)) return true;
         stop(worker, session);
         IndustrialWork.displayTool(worker, ItemStack.EMPTY);
@@ -230,8 +274,9 @@ public final class LumberjackWork {
         return false;
     }
 
-    private static CompoundTag write(LumberjackTrees.Tree tree) {
+    private static CompoundTag write(LumberjackTrees.Tree tree,Villager worker) {
         var job = new CompoundTag();
+        job.putUUID("worker",worker.getUUID());
         job.putLong("base", tree.base().asLong());
         var roots = tree.logs().stream().map(LumberjackTrees.Log::pos)
                 .filter(pos -> pos.getY()==tree.base().getY()).mapToLong(BlockPos::asLong).toArray();
@@ -252,6 +297,13 @@ public final class LumberjackWork {
         for (var row : job.getList("logs",Tag.TAG_COMPOUND)) {
             if (!level.hasChunkAt(BlockPos.of(((CompoundTag)row).getLong("pos")))) return false;
         }
+        return true;
+    }
+
+    private static boolean rootsInArea(AABB area, CompoundTag job){
+        if(!area.contains(Vec3.atBottomCenterOf(BlockPos.of(job.getLong("base")))))return false;
+        for(long root:job.getLongArray("roots"))
+            if(!area.contains(Vec3.atBottomCenterOf(BlockPos.of(root))))return false;
         return true;
     }
 
@@ -279,7 +331,6 @@ public final class LumberjackWork {
         var logs = job.getList("logs", Tag.TAG_COMPOUND);
         var first = logs.getCompound(0);
         BlockPos target = BlockPos.of(first.getLong("pos")), base = BlockPos.of(job.getLong("base"));
-        IndustrialWork.displayTool(worker, axe);
         if (!LumberjackTrees.loaded(level,target) || !area.contains(Vec3.atBottomCenterOf(base))
                 || LumberjackTrees.placed(level,target)
                 || !first.getCompound("state").equals(NbtUtils.writeBlockState(level.getBlockState(target)))) {
@@ -287,34 +338,54 @@ public final class LumberjackWork {
             return false;
         }
         if (!chopReachable(level, worker, area, target, base, station.pos)) {
-            session.resetCut();
+            session.suspendCut(worker);
+            IndustrialWork.displayTool(worker,axe);
             if (route(level, worker, session, area, target, base, true)) {
                 if (TRACE) trace(worker, "walking to log " + target);
                 return true;
             }
             if (TRACE) trace(worker, "no clear path to log " + target);
-            clear(station, worker, session);
+            stop(worker,session);
+            IndustrialWork.displayTool(worker,ItemStack.EMPTY);
             return false;
         }
         stop(worker, session);
-        worker.getLookControl().setLookAt(target.getX()+.5,target.getY()+.5,target.getZ()+.5);
+        if(level.getGameTime()<session.stockAfter){
+            IndustrialWork.displayTool(worker,ItemStack.EMPTY);
+            return true;
+        }
+        var displayed=axe.copy();
+        displayed.getOrCreateTag().putBoolean(CHOPPING_AXE,true);
+        IndustrialWork.displayTool(worker,displayed);
+        var aim=Vec3.atCenterOf(target);
+        worker.getLookControl().setLookAt(aim.x,aim.y,aim.z);
+        double dx=aim.x-worker.getX(),dz=aim.z-worker.getZ();
+        if(dx*dx+dz*dz>.01)
+            worker.setYBodyRot((float)(net.minecraft.util.Mth.atan2(dz,dx)*180/Math.PI)-90);
         if (!target.equals(session.chopping) || !ItemStack.matches(axe,session.axe)) {
+            session.resetCut(worker);
             session.chopping = target;
             session.axe = axe.copy();
             session.elapsed = 0;
             if (TRACE) trace(worker, "cutting log " + target + " for " + cutTicks(axe) + " ticks");
             worker.swing(InteractionHand.MAIN_HAND,true);
+            crack(level,worker,session,0);
             return true;
         }
-        if (++session.elapsed < cutTicks(axe)) {
+        int duration=cutTicks(axe);
+        if(session.crackStage<0)worker.swing(InteractionHand.MAIN_HAND,true);
+        session.elapsed=Math.min(duration,session.elapsed+1);
+        crack(level,worker,session,Math.min(9,session.elapsed*10/duration));
+        if (session.elapsed < duration) {
             if (session.elapsed % 16 == 0) worker.swing(InteractionHand.MAIN_HAND,true);
             return true;
         }
-        if (level.getGameTime()<session.stockAfter) return true;
         var old = level.getBlockState(target);
         var drops = Block.getDrops(old, level, target, null, worker, axe);
         if (!IndustrialWork.outputs(station,drops,false)) {
             session.stockAfter=level.getGameTime()+20;
+            session.suspendCut(worker);
+            IndustrialWork.displayTool(worker,ItemStack.EMPTY);
             IndustrialWork.alert(level,station,"lumberjack_stock","Inventário cheio. Os troncos permanecem na árvore.");
             return true;
         }
@@ -324,23 +395,37 @@ public final class LumberjackWork {
             clear(station,worker,session);
             return false;
         }
-        if (!IndustrialWork.outputs(station,drops,true)) drops.forEach(drop -> Block.popResource(level,target,drop));
+        if(level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_DOBLOCKDROPS))for(var stack:drops){
+            if(stack.isEmpty())continue;
+            var drop=new ItemEntity(level,target.getX()+.5,target.getY()+.5,target.getZ()+.5,stack);
+            drop.setDeltaMovement(Vec3.ZERO);
+            drop.setDefaultPickUpDelay();
+            drop.getPersistentData().putUUID(FarmerLogistics.HARVEST_STATION,station.id);
+            level.addFreshEntity(drop);
+        }
+        FarmerLogistics.rescan(worker);
         axe.hurtAndBreak(1,worker,v -> v.broadcastBreakEvent(InteractionHand.MAIN_HAND));
         if (TRACE) LOGGER.info("Lumberjack worker={} broke log {} after {} ticks",worker.getUUID(),target,session.elapsed);
         station.industry.putLong("lumberjack_cut_count",station.industry.getLong("lumberjack_cut_count")+1);
         station.industry.putString("lumberjack_species",job.getString("species"));
         IndustrialRules.progress(level,station);
         logs.remove(0);
-        session.resetCut();
+        session.resetCut(worker);
         if (logs.isEmpty()) clear(station,worker,session);
         station.setChanged();
         return true;
     }
 
+    private static void crack(ServerLevel level,Villager worker,Session session,int stage){
+        if(stage==session.crackStage&&session.elapsed%20!=0)return;
+        level.destroyBlockProgress(worker.getId(),session.chopping,stage);
+        session.crackStage=stage;
+    }
+
     private static void clear(EmploymentData.Station station, Villager worker, Session session) {
         station.industry.remove(JOB);
         station.setChanged();
-        session.resetCut();
+        session.resetCut(worker);
         session.scanAfter = Math.max(session.scanAfter, worker.level.getGameTime()+10);
         stop(worker,session);
     }
@@ -436,7 +521,7 @@ public final class LumberjackWork {
             if (cell.distSqr(worker.blockPosition()) == 0) continue;
             var path = worker.getNavigation().createPath(cell,0);
             if (path == null || !path.canReach() || !insidePath(path,area,worker)) continue;
-            if (choppingTree) IndustrialIdle.interrupt(worker);
+            IndustrialIdle.interrupt(worker);
             if (worker.getNavigation().moveTo(path,.7)) {
                 session.path = path;
                 return true;
@@ -474,34 +559,6 @@ public final class LumberjackWork {
                 new BlockPos(area.maxX-1,area.maxY-1,area.maxZ-1));
     }
 
-    private static boolean resource(ItemStack stack) {
-        return sapling(stack) || stack.is(ItemTags.LOGS) || stack.is(Items.STICK) || stack.is(Items.APPLE);
-    }
-
-    private static java.util.UUID findDrop(ServerLevel level, EmploymentData.Station station, Villager worker, Session session, AABB area) {
-        session.missedDrops.values().removeIf(until -> until<=level.getGameTime());
-        return level.getEntitiesOfClass(ItemEntity.class,area,drop -> !drop.hasPickUpDelay() && resource(drop.getItem())
-                && drop.getOwner()==null && !session.missedDrops.containsKey(drop.getUUID())
-                && IndustrialWork.insert(station,drop.getItem(),false)).stream()
-                .min(Comparator.comparingDouble(worker::distanceToSqr)).map(ItemEntity::getUUID).orElse(null);
-    }
-
-    private static boolean collect(ServerLevel level, EmploymentData.Station station, Villager worker, Session session, AABB area) {
-        if (level.getEntity(session.collecting) instanceof ItemEntity drop && drop.isAlive() && !drop.hasPickUpDelay()
-                && drop.getOwner()==null && area.contains(drop.position()) && IndustrialWork.insert(station,drop.getItem(),false)) {
-            var target = drop.blockPosition();
-            if (!reachable(level,worker,area,target,target,false)) {
-                if (route(level,worker,session,area,target,target,false)) return true;
-            } else if (IndustrialWork.allowed(level,station,worker,target,drop,"lumberjack_collect")) {
-                if (drop.isAlive() && IndustrialWork.insert(station,drop.getItem(),true)) drop.discard();
-            }
-        }
-        session.missedDrops.put(session.collecting,level.getGameTime()+200);
-        session.collecting = null;
-        stop(worker,session);
-        return false;
-    }
-
     private record Planting(BlockPos pos, int slot) {}
 
     private static Planting findPlanting(ServerLevel level, EmploymentData.Station station, Villager worker, Session session, AABB area) {
@@ -512,6 +569,7 @@ public final class LumberjackWork {
         if (seeds.isEmpty()) return null;
         var species = station.industry.getString("lumberjack_species");
         seeds.sort(Comparator.comparingInt(slot -> preferred(species,station.getItem(slot))?0:1));
+        var protectedAreas=protectedAreas(level,station,area);
         var candidates = new ArrayList<BlockPos>();
         for (var pos : cells(area)) {
             if (LumberjackTrees.loaded(level,pos) && low(level.getBlockState(pos))
@@ -521,7 +579,7 @@ public final class LumberjackWork {
         for (int slot : seeds) {
             var stack = station.getItem(slot);
             for (var pos : candidates) {
-                if (!plantable(level,area,pos,stack)) continue;
+                if (!plantable(level,area,protectedAreas,pos,stack)) continue;
                 session.routeAfter=0;
                 var footprint = plantingCells(pos, stack);
                 if (canPlantFromHere(level, worker, area, pos, footprint)
@@ -543,14 +601,14 @@ public final class LumberjackWork {
         return seed.is(Items.DARK_OAK_SAPLING)?List.of(pos,pos.east(),pos.south(),pos.south().east()):List.of(pos);
     }
 
-    static boolean plantable(ServerLevel level, AABB area, BlockPos pos, ItemStack seed) {
+    static boolean plantable(ServerLevel level, AABB area, List<AABB> protectedAreas, BlockPos pos, ItemStack seed) {
         if (!sapling(seed)) return false;
         var footprint = plantingCells(pos,seed);
         if (seed.getCount()<footprint.size()) return false;
         var plant = ((BlockItem)seed.getItem()).getBlock().defaultBlockState();
         int clearance=seed.is(Items.JUNGLE_SAPLING)||seed.is(Items.SPRUCE_SAPLING)||seed.is(Items.MANGROVE_PROPAGULE)?15:9;
         for (var root : footprint) {
-            if (!area.contains(Vec3.atBottomCenterOf(root)) || !LumberjackTrees.loaded(level,root)
+            if (!plantingMargins(area,protectedAreas,root) || !LumberjackTrees.loaded(level,root)
                     || !level.getWorldBorder().isWithinBounds(root) || !low(level.getBlockState(root))
                     || !level.getFluidState(root).isEmpty() || !validSoil(level.getBlockState(root.below()),seed) || !plant.canSurvive(level,root) || level.getMaxLocalRawBrightness(root)<9) return false;
             for (int x=-6;x<=6;x++) for (int z=-6;z<=6;z++) {
@@ -561,6 +619,51 @@ public final class LumberjackWork {
                             || !low(level.getBlockState(test))) return false;
                 }
             }
+        }
+        return true;
+    }
+
+    private static List<AABB> protectedAreas(ServerLevel level,EmploymentData.Station station,AABB area){
+        var nearby=area.inflate(5);
+        var result=new ArrayList<AABB>();
+        for(var home:ResidenceData.get(level).homes()){
+            if(!home.dimension.equals(level.dimension()))continue;
+            int radius=home.size/2;
+            var bounds=new AABB(home.pos.offset(-radius,1,-radius),home.pos.offset(radius+1,home.size+1,radius+1));
+            if(nearby.intersects(bounds))result.add(bounds);
+        }
+        for(var other:EmploymentData.get(level).stations()){
+            if(other==station||!other.active||!other.dimension.equals(level.dimension()))continue;
+            AABB bounds=IndustrialWork.industrial(other)?IndustrialWork.area(level,other):
+                other.profession==Profession.SOLDIER?br.com.kraftcity.military.Military.areaBounds(other.pos):null;
+            if(bounds!=null&&nearby.intersects(bounds))result.add(bounds);
+            if(other.worker!=null)WorkforceData.get(level).worker(other.worker).flatMap(WorkerRecord::area)
+                .filter(work->work.dimension().equals(level.dimension()))
+                .map(work->new AABB(work.min(),work.max().offset(1,1,1)))
+                .filter(nearby::intersects).ifPresent(result::add);
+        }
+        var construction=BuilderData.get(level);
+        for(var job:construction.jobs.values()){
+            if(job.cancelled||!job.dimension.equals(level.dimension()))continue;
+            var paper=construction.papers.get(job.paper);
+            var blueprint=paper==null?null:construction.library.get(paper.schema);
+            if(blueprint==null||job.done.cardinality()>=blueprint.cells.size())continue;
+            var bounds=new AABB(job.origin,job.origin.offset(blueprint.transformedSize(job.rotation)));
+            if(nearby.intersects(bounds))result.add(bounds);
+        }
+        return result;
+    }
+
+    static boolean plantingMargins(AABB area,List<AABB> protectedAreas,BlockPos root){
+        var point=Vec3.atCenterOf(root);
+        if(!area.contains(point)||point.x<area.minX+3||point.x>area.maxX-3
+                ||point.z<area.minZ+3||point.z>area.maxZ-3)return false;
+        // Euclidean distance to the nearest point of each protected volume.
+        for(var bounds:protectedAreas){
+            double dx=Math.max(0,Math.max(bounds.minX-point.x,point.x-bounds.maxX));
+            double dy=Math.max(0,Math.max(bounds.minY-point.y,point.y-bounds.maxY));
+            double dz=Math.max(0,Math.max(bounds.minZ-point.z,point.z-bounds.maxZ));
+            if(dx*dx+dy*dy+dz*dz<25)return false;
         }
         return true;
     }
@@ -588,7 +691,8 @@ public final class LumberjackWork {
         if (!inReach && level.getGameTime()<session.plantCheckAfter && session.path!=null
                 && worker.getNavigation().getPath()==session.path && !worker.getNavigation().isDone()) return true;
         session.plantCheckAfter=level.getGameTime()+10;
-        if (plantable(level,area,pos,seed)) {
+        var protectedAreas=protectedAreas(level,station,area);
+        if (plantable(level,area,protectedAreas,pos,seed)) {
             ItemStack display=seed.copy();
             display.setCount(1);
             IndustrialWork.displayTool(worker,display);
@@ -598,7 +702,7 @@ public final class LumberjackWork {
                 var block = ((BlockItem)seed.getItem()).getBlock().defaultBlockState();
                 if (cells.stream().allMatch(cell -> reachable(level,worker,area,cell,pos,false)
                         && level.mayInteract(IndustrialWork.actor(level,station,worker),cell)
-                        && IndustrialWork.placeAllowed(level,station,worker,cell,block)) && plantable(level,area,pos,seed)) {
+                        && IndustrialWork.placeAllowed(level,station,worker,cell,block)) && plantable(level,area,protectedAreas(level,station,area),pos,seed)) {
                     var old = cells.stream().map(level::getBlockState).toList();
                     int placed = 0;
                     for (var cell : cells) {

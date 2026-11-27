@@ -340,6 +340,7 @@ public final class Employment {
                 ||!worker.equals(s.industry.getUUID("lumberjack_area_owner")))){
             br.com.kraftcity.industry.IndustrialRules.setLumberjackWidth(s,br.com.kraftcity.industry.IndustrialRules.lumberjackWidth(0));
             s.industry.putUUID("lumberjack_area_owner",worker);
+            s.industry.remove("lumberjack_tree");
         }
         if(profession==Profession.BEEKEEPER&&(!s.industry.hasUUID("apiary_worker")
                 ||!worker.equals(s.industry.getUUID("apiary_worker")))){

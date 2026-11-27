@@ -39,13 +39,14 @@ public final class FarmerLogistics {
         if(!(worker.level instanceof ServerLevel level))return false;
         var jobs=EmploymentData.get(level);
         var station=jobs.assigned(worker.getUUID());
-        if(station!=null&&station.profession==Profession.FARMER)return true;
+        if(station!=null&&IndustrialWork.industrial(station))return true;
         var source=jobs.station(harvestStation(item));
         return source!=null&&source.active&&source.worker!=null;
     }
 
     private static final Map<Villager,Route> ROUTES=new WeakHashMap<>();
     private static final Map<Villager,Pickup> PICKUPS=new WeakHashMap<>();
+    private static final Map<Villager,Long> NEXT_DISCARD=new WeakHashMap<>();
     private static final Map<Villager,Long> AIRBORNE_SINCE=new WeakHashMap<>();
     private record Route(BlockPos target,BlockPos endpoint,double remaining,long progress,int retries){}
     private record Pickup(UUID item,long nextScan){}
@@ -279,8 +280,9 @@ public final class FarmerLogistics {
     }
 
     public static void release(Villager worker){
-        ROUTES.remove(worker);
+        if(ROUTES.containsKey(worker))stopRoute(worker);
         PICKUPS.remove(worker);
+        NEXT_DISCARD.remove(worker);
         BLOCKED.remove(worker);
         JUMPS.remove(worker);
         UNREACHABLE_ITEMS.remove(worker);
@@ -303,7 +305,8 @@ public final class FarmerLogistics {
         var state=PICKUPS.get(v);
         long now=l.getGameTime();
         var area=IndustrialWork.area(l,s);
-        var search=pickupArea(area);
+        boolean field=fieldWorker(s);
+        var search=field?pickupArea(area):area;
         var farms=EmploymentData.get(l).stations().stream().filter(other->other!=s&&other.active&&other.worker!=null
             &&fieldWorker(other)&&other.dimension.equals(l.dimension()))
             .map(other->new NeighborFarm(other,IndustrialWork.area(l,other)))
@@ -328,23 +331,24 @@ public final class FarmerLogistics {
             if(pending)PICKUPS.put(v,new Pickup(null,now+5));
             return pending;
         }
-        if(!pickupReach(l,v,item)){
-            int travel=approachPickup(l,v,item,area,farms);
+        if(!pickupReach(l,v,item)||!field&&!area.contains(v.position())){
+            int travel=approachPickup(l,v,item,area,farms,field);
             if(travel==0)return true;
-            if(!pickupReach(l,v,item)){
+            if(!pickupReach(l,v,item)||!field&&!area.contains(v.position())){
                 rejected.put(item.getUUID(),now+30);
                 rescan(v);
                 return closing;
             }
         }
-        if(IndustrialWork.allowed(l,s,v,item.blockPosition(),item,s.profession==Profession.BEEKEEPER?"apiary_collect":"farmer_collect")
-            &&eligible(l,s,area,search,farms,item,false)&&pickupReach(l,v,item)
+        if(IndustrialWork.allowed(l,s,v,item.blockPosition(),item,switch(s.profession){case BEEKEEPER->"apiary_collect";case FARMER->"farmer_collect";case LUMBERJACK->"lumberjack_collect";default->"worker_collect";})
+            &&eligible(l,s,area,search,farms,item,false)&&(field||area.contains(v.position()))&&pickupReach(l,v,item)
             &&Employment.valid(l,v.getUUID())&&v.getUUID().equals(s.worker)){
             var take=item.getItem().copy();
             while(!take.isEmpty()&&!IndustrialWork.insert(s,take,false))take.shrink(1);
             if(!take.isEmpty()&&IndustrialWork.insert(s,take,true)){
                 var remaining=item.getItem().copy();
                 remaining.shrink(take.getCount());
+                v.take(item,take.getCount());
                 if(remaining.isEmpty())item.discard();else item.setItem(remaining);
                 stopRoute(v);
                 rescan(v);
@@ -365,7 +369,7 @@ public final class FarmerLogistics {
             &&(visible(level,worker,new Vec3(x,y,z),null)||visible(level,worker,box.getCenter(),null));
     }
 
-    private static int approachPickup(ServerLevel level,Villager worker,ItemEntity item,net.minecraft.world.phys.AABB area,List<NeighborFarm> farms){
+    private static int approachPickup(ServerLevel level,Villager worker,ItemEntity item,net.minecraft.world.phys.AABB area,List<NeighborFarm> farms,boolean field){
         var origin=new BlockPos(item.position().add(0,.2,0));
         var current=ROUTES.get(worker);
         var cells=new ArrayList<BlockPos>();
@@ -373,7 +377,7 @@ public final class FarmerLogistics {
             var at=mutable.immutable();
             if(!level.hasChunkAt(at)||!level.getFluidState(at).isEmpty())continue;
             var foot=Vec3.atBottomCenterOf(at);
-            if(exclusiveNeighbor(area,farms,foot)||Math.abs(item.getY()-foot.y)>.95||item.position().distanceToSqr(foot.x,item.getY(),foot.z)>1.56
+            if((!field&&!area.contains(foot))||exclusiveNeighbor(area,farms,foot)||Math.abs(item.getY()-foot.y)>.95||item.position().distanceToSqr(foot.x,item.getY(),foot.z)>1.56
                 ||!level.noCollision(worker,worker.getBoundingBox().move(foot.subtract(worker.position())))
                 ||level.getBlockState(at.below()).getCollisionShape(level,at.below()).isEmpty())continue;
             cells.add(at);
@@ -382,11 +386,19 @@ public final class FarmerLogistics {
             .thenComparingDouble(at->worker.distanceToSqr(Vec3.atBottomCenterOf(at))));
         for(var at:cells){
             int travel=approach(level,worker,at,.68,0,path->{
-                boolean enteredOwnRoute=false;
+                var start=worker.position();
+                boolean startsOutside=!field&&!area.contains(start)||exclusiveNeighbor(area,farms,start);
+                boolean enteredOwnRoute=!startsOutside;
+                int previousY=worker.blockPosition().getY();
                 for(int i=path.getNextNodeIndex();i<path.getNodeCount();i++){
-                    boolean exclusive=exclusiveNeighbor(area,farms,Vec3.atBottomCenterOf(path.getNode(i).asBlockPos()));
+                    var node=path.getNode(i).asBlockPos();
+                    // A descent that cannot be walked back can trap the worker below the job.
+                    if(!field&&node.getY()<previousY-1)return false;
+                    previousY=node.getY();
+                    var foot=Vec3.atBottomCenterOf(node);
+                    boolean exclusive=(!field&&!area.contains(foot))||exclusiveNeighbor(area,farms,foot);
                     if(!exclusive)enteredOwnRoute=true;
-                    else if(enteredOwnRoute||!exclusiveNeighbor(area,farms,worker.position()))return false;
+                    else if(enteredOwnRoute)return false;
                 }
                 return true;
             });
@@ -420,7 +432,7 @@ public final class FarmerLogistics {
 
     private static boolean eligible(ServerLevel l,EmploymentData.Station s,net.minecraft.world.phys.AABB area,
                                     net.minecraft.world.phys.AABB search,List<NeighborFarm> farms,ItemEntity e,boolean allowDelay){
-        if(e==null||!e.isAlive()||!allowDelay&&e.hasPickUpDelay()||!search.contains(e.position())||!l.hasChunkAt(e.blockPosition()))return false;
+        if(e==null||e.getOwner()!=null||!e.isAlive()||!allowDelay&&e.hasPickUpDelay()||!search.contains(e.position())||!l.hasChunkAt(e.blockPosition()))return false;
         var point=e.position();
         if(exclusiveNeighbor(area,farms,point))return false;
         UUID source=harvestStation(e);
@@ -452,6 +464,19 @@ public final class FarmerLogistics {
     }
     private static ItemStack excess(EmploymentData.Station s,int slot,Map<Item,Integer> remaining){
         var stack=s.getItem(slot);
+        if(!fieldWorker(s)){
+            boolean reserved=switch(s.profession){
+                case LUMBERJACK->LumberjackWork.sapling(stack)||LumberjackWork.cutTicks(stack)>0;
+                case BUTCHER->stack.getItem() instanceof net.minecraft.world.item.AxeItem||IndustrialWork.food(stack)
+                    ||stack.is(net.minecraft.world.item.Items.BUCKET)||stack.is(net.minecraft.world.item.Items.DANDELION);
+                case SHEPHERD->stack.is(net.minecraft.world.item.Items.SHEARS)||stack.is(net.minecraft.world.item.Items.WHEAT);
+                case BREEDER->stack.is(net.minecraft.world.item.Items.BONE)
+                    ||stack.getItem().isEdible()&&stack.getItem().getFoodProperties().isMeat();
+                case FISHERMAN->stack.is(net.minecraft.world.item.Items.FISHING_ROD);
+                default->true;
+            };
+            return reserved?ItemStack.EMPTY:stack;
+        }
         if(s.profession==Profession.BEEKEEPER){
             if(ApiaryHiveStock.isHive(stack)||stack.is(net.minecraft.tags.ItemTags.PLANKS))return ItemStack.EMPTY;
             for(int input=0;input<3;input++)if(ApiaryWork.validInput(input,stack))return ItemStack.EMPTY;
@@ -475,7 +500,29 @@ public final class FarmerLogistics {
         result.shrink(keep);
         return result;
     }
-    private static int[] offers(EmploymentData.Station station){
+    static boolean deliverCollected(ServerLevel level,EmploymentData.Station station,Villager worker){
+        long now=level.getGameTime();
+        if(now<NEXT_DISCARD.getOrDefault(worker,0L))return false;
+        var items=offers(station);
+        if(!DiscardChests.hasOffers(items))return false;
+        var destinations=br.com.kraftcity.logistics.DiscardBinding.destinations(level,station,IndustrialWork.area(level,station));
+        for(var destination:destinations){
+            if(!DiscardChests.accepts(level,station,worker,destination,items))continue;
+            int travel=approachDiscard(level,worker,destination,station,items);
+            if(travel==0)return true;
+            if(travel>0){
+                stopRoute(worker);
+                DiscardChests.deposit(level,station,worker,destination,items,"deposit");
+                NEXT_DISCARD.put(worker,now+40);
+                return true;
+            }
+        }
+        if(ROUTES.containsKey(worker))stopRoute(worker);
+        NEXT_DISCARD.put(worker,now+40);
+        return false;
+    }
+
+    static int[] offers(EmploymentData.Station station){
         Map<Item,Integer> remaining=new HashMap<>();
         int[] amounts=new int[EmploymentData.COMMON];
         for(int slot=0;slot<amounts.length;slot++)amounts[slot]=excess(station,slot,remaining).getCount();
@@ -488,7 +535,10 @@ public final class FarmerLogistics {
 
     private static int approachDiscard(ServerLevel level,Villager worker,BlockPos pos,EmploymentData.Station station,int[] offers){
         var be=DiscardChests.capability(level,pos);
-        if(be==null)return approach(level,worker,pos,1.65,1,path->safeDiscardPath(level,worker,path));
+        if(be==null){
+            int result=approach(level,worker,pos,1.65,1,path->safeDiscardPath(level,worker,path));
+            return result==1&&!visible(level,worker,Vec3.atCenterOf(pos),pos)?-1:result;
+        }
         var current=DiscardChests.accessibleHandler(be,worker);
         if(current!=null&&(station==null||DiscardChests.accepts(current,station,offers))
             &&worker.distanceToSqr(Vec3.atCenterOf(pos))<=2.72&&visible(level,worker,Vec3.atCenterOf(pos),pos))return 1;
@@ -553,7 +603,7 @@ public final class FarmerLogistics {
     public static boolean ending(Villager v){
         if(!(v.level instanceof ServerLevel l))return false;
         var s=EmploymentData.get(l).assigned(v.getUUID());
-        return fieldWorker(s)&&s.industry.contains("farmer_discard_until")
+        return s!=null&&IndustrialWork.industrial(s)&&s.industry.contains("farmer_discard_until")
             &&s.industry.getLong("farmer_discard_until")>l.getGameTime();
     }
 
@@ -578,14 +628,14 @@ public final class FarmerLogistics {
     public static boolean nightFarmer(ServerLevel level,Villager worker){
         if(IndustrialWork.day(level))return false;
         var station=EmploymentData.get(level).assigned(worker.getUUID());
-        return fieldWorker(station);
+        return station!=null&&IndustrialWork.industrial(station);
     }
 
     /** Called before the resident sleep routine, after emergency navigation. */
     public static boolean beforeHome(ServerLevel l,Villager v){
         if(v.isNoAi())return false;
         var s=EmploymentData.get(l).assigned(v.getUUID());
-        if(!fieldWorker(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,v.getUUID()))return false;
+        if(s==null||!IndustrialWork.industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,v.getUUID()))return false;
         if(IndustrialWork.day(l)){
             if(s.industry.contains("farmer_discard_day")){
                 if(s.industry.contains("farmer_discard_until"))finishClosing(s,v);
@@ -634,6 +684,8 @@ public final class FarmerLogistics {
 
     /** A successful transfer releases the walking command before another task can take control. */
     private static boolean seekDiscard(ServerLevel level,EmploymentData.Station station,Villager worker,Set<Long> tried){
+        long now=level.getGameTime();
+        if(now<NEXT_DISCARD.getOrDefault(worker,0L))return false;
         var items=offers(station);
         if(!DiscardChests.hasOffers(items))return false;
         var destinations=new ArrayList<>(br.com.kraftcity.logistics.DiscardBinding.destinations(level,station,IndustrialWork.area(level,station)));

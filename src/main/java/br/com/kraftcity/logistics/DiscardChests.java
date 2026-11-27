@@ -246,7 +246,8 @@ public final class DiscardChests {
         var permission=net.minecraftforge.common.ForgeHooks.onRightClickBlock(actor,net.minecraft.world.InteractionHand.MAIN_HAND,pos,hit);
         if(permission.isCanceled()||permission.getUseBlock()==net.minecraftforge.eventbus.api.Event.Result.DENY
             ||!level.hasChunkAt(pos)||!worker.getUUID().equals(station.worker)||!Employment.valid(level,worker.getUUID())
-            ||station.profession==br.com.kraftcity.employment.Profession.BAKER
+            ||(station.profession==br.com.kraftcity.employment.Profession.BAKER
+                ||station.profession==br.com.kraftcity.employment.Profession.LUMBERJACK)
                 &&!pos.equals(DiscardBinding.boundPosition(level,station)))return;
         var container=at(level,pos);
         var be=container==null?capability(level,pos):null;
