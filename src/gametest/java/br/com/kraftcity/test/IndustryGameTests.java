@@ -3026,6 +3026,44 @@ public final class IndustryGameTests {
         }).thenSucceed();
     }
 
+    @GameTest(template="empty",timeoutTicks=620,batch="lumberjack_recovery")
+    public static void lumberjack_recovers_only_an_explicitly_confirmed_legacy_tree(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK);
+        for(var cell:BlockPos.betweenClosed(f.p.offset(-2,-1,-2),f.p.offset(2,-1,2))){
+            f.l.setBlockAndUpdate(cell,Blocks.DIRT.defaultBlockState());
+        }
+        var legacy=lumberTree(f,f.p.east(2),Blocks.BIRCH_LOG,Blocks.BIRCH_LEAVES,4);
+        var construction=lumberTree(f,f.p.west(2),Blocks.OAK_LOG,Blocks.OAK_LEAVES,4);
+        var actor=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"LegacyLumberjackTree"));
+        for(var pos:List.of(legacy,legacy.above(),legacy.above(2),legacy.above(3),construction)){
+            var snapshot=net.minecraftforge.common.util.BlockSnapshot.create(f.l.dimension(),f.l,pos);
+            MinecraftForge.EVENT_BUS.post(new net.minecraftforge.event.level.BlockEvent.EntityPlaceEvent(
+                snapshot,f.l.getBlockState(pos.below()),actor));
+        }
+        var server=f.l.getServer();
+        var source=server.createCommandSourceStack().withLevel(f.l);
+        var command="kraftcity lenhador recuperar_arvore "+f.p.getX()+" "+f.p.getY()+" "+f.p.getZ()+" ";
+        var legacyCommand=command+legacy.getX()+" "+legacy.getY()+" "+legacy.getZ()+" confirmar";
+        var constructionCommand=command+construction.getX()+" "+construction.getY()+" "+construction.getZ()+" confirmar";
+        f.s.setItem(27,new ItemStack(Items.NETHERITE_AXE));
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.south()));
+        f.v.setNoAi(false);
+        h.startSequence().thenExecuteAfter(60,()->{
+            check(f.l.getBlockState(legacy).is(Blocks.BIRCH_LOG),"Legacy mark did not protect the root");
+            check(server.getCommands().performPrefixedCommand(source.withMaximumPermission(1),legacyCommand)==0,
+                "Recovery accepted a source without operator permission");
+            check(server.getCommands().performPrefixedCommand(source,constructionCommand)==0,
+                "Recovery accepted a partially marked trunk");
+            check(server.getCommands().performPrefixedCommand(source,legacyCommand)==4,"Legacy recovery failed");
+            check(server.getCommands().performPrefixedCommand(source,legacyCommand)==0,"Recovery was not idempotent");
+        }).thenWaitUntil(()->{
+            check(count(f,Items.BIRCH_LOG)==4,"Waiting for all recovered logs to be cut");
+            check(f.l.getBlockState(construction).is(Blocks.OAK_LOG),"Unconfirmed construction changed");
+            check(f.s.getItem(27).getDamageValue()==4,"Incorrect axe wear");
+            f.v.setNoAi(true);
+        }).thenSucceed();
+    }
+
     private static void lumberClearance(F f,BlockPos root){
         for(var pos:BlockPos.betweenClosed(root.offset(-6,0,-6),root.offset(7,8,7))){
             if(pos.distSqr(f.p)<1)continue;

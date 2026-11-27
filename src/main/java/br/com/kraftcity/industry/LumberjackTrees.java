@@ -86,10 +86,24 @@ final class LumberjackTrees extends SavedData {
     }
 
     static Tree identify(ServerLevel level, BlockPos base, AABB area, BlockPos workPost) {
+        return identify(level, base, area, workPost, false);
+    }
+
+    static int recoverConfirmedTree(ServerLevel level, BlockPos base, AABB area, BlockPos workPost) {
+        if (!placed(level, base)) return 0;
+        var tree = identify(level, base, area, workPost, true);
+        if (tree == null) return 0;
+        var data = get(level);
+        for (var log : tree.logs()) data.constructed.remove(log.pos().asLong());
+        data.setDirty();
+        return tree.logs().size();
+    }
+
+    private static Tree identify(ServerLevel level, BlockPos base, AABB area, BlockPos workPost, boolean recovering) {
         if (!area.contains(Vec3.atBottomCenterOf(base)) || !loaded(level, base)) return null;
         var trunk = level.getBlockState(base);
         if (!trunk.is(BlockTags.LOGS) || !grounded(level, base, trunk)) return null;
-        if (placed(level, base)) return rejected(base, "player-placed root", base);
+        if (!recovering && placed(level, base)) return rejected(base, "player-placed root", base);
         if (!loaded(level, base.above(2)) || !level.getBlockState(base.above()).is(trunk.getBlock())
                 || !level.getBlockState(base.above(2)).is(trunk.getBlock())) return rejected(base, "short trunk", base);
 
@@ -102,7 +116,7 @@ final class LumberjackTrees extends SavedData {
         seen.add(base);
         while (!pending.isEmpty()) {
             BlockPos pos = pending.remove();
-            if (logs.size() >= MAX_LOGS || !loaded(level, pos) || placed(level, pos)
+            if (logs.size() >= MAX_LOGS || !loaded(level, pos) || placed(level, pos) != recovering
                     || !level.getWorldBorder().isWithinBounds(pos)) return rejected(base, "unsafe or player-placed log", pos);
             if (pos.getY() == base.getY()) {
                 if (!grounded(level, pos, trunk) || !area.contains(Vec3.atBottomCenterOf(pos))) return rejected(base, "invalid root", pos);
