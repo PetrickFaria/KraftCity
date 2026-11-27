@@ -150,6 +150,11 @@ public final class LumberjackWork {
             stop(worker,session);
             session.resetCut(worker);
         }
+        var axe = station.getItem(EmploymentData.TOOL);
+        if(level.getGameTime()>=session.scanAfter&&cutTicks(axe)==0
+                &&(station.industry.contains(JOB)||IndustrialWork.find(station,LumberjackWork::sapling,0,EmploymentData.INPUT_A+1)<0)){
+            IndustrialWork.alert(level,station,"lumberjack_axe","Falta um machado válido para cortar árvores.");
+        }
         if(FarmerLogistics.collect(level,station,worker)){
             session.suspendCut(worker);
             session.path=null;
@@ -166,7 +171,6 @@ public final class LumberjackWork {
                 return true;
             }
         }
-        var axe = station.getItem(EmploymentData.TOOL);
         var job = station.industry.getCompound(JOB);
         if(job.hasUUID("worker")&&!worker.getUUID().equals(job.getUUID("worker"))){
             clear(station,worker,session);
@@ -194,9 +198,6 @@ public final class LumberjackWork {
             if (TRACE) LOGGER.info("Lumberjack worker={} on duty, axe={}, cut ticks={}, bounds={}",
                     worker.getUUID(), axe, cutTicks(axe), area);
             session.scanAfter = level.getGameTime() + SEARCH_INTERVAL;
-            if (cutTicks(axe)==0 && (!job.isEmpty() || IndustrialWork.find(station,LumberjackWork::sapling,0,EmploymentData.INPUT_A+1)<0)) {
-                IndustrialWork.alert(level,station,"lumberjack_axe","Falta um machado válido para cortar árvores.");
-            }
             if (cutTicks(axe) > 0 && job.isEmpty()) {
                 var tree = selectTree(level, station, worker, session, area);
                 if (tree != null) {

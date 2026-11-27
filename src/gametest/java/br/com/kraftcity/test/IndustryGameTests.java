@@ -1103,12 +1103,35 @@ public final class IndustryGameTests {
         step(f,1);check(f.s.getItem(28).is(Items.WHEAT)&&f.s.getItem(28).getCount()==5&&chest.getItem(0).getCount()==15,"dawn transfer not exactly five: slot="+f.s.getItem(28)+" source="+chest.getItem(0));
         step(f,1);check(f.s.getItem(28).getCount()==5&&chest.getItem(0).getCount()==15&&chest.getItem(1).getCount()==20,"repeat dawn or wrong item");h.succeed();
     }
-    @GameTest(template="empty",timeoutTicks=40,batch="industry")
+    @GameTest(template="empty",timeoutTicks=270,batch="industry_shepherd_night_delivery")
     public static void night_stops_production_deposits_once_and_keeps_home(GameTestHelper h){
-        var f=fixture(h,Profession.SHEPHERD);f.s.setItem(27,new ItemStack(Items.SHEARS));var sheep=animal(f,EntityType.SHEEP,false);
-        var pos=f.p.west();f.l.setBlock(pos,Blocks.BARREL.defaultBlockState(),3);f.s.industry.putLong("discard",pos.asLong());f.s.setItem(0,new ItemStack(Items.WHITE_WOOL,9));
-        f.l.setDayTime(12000);step(f,1);check(!sheep.isSheared()&&count(f,Items.WHITE_WOOL)==0,"night production/deposit");
-        check(ResidenceData.get(f.l).owner(f.v.getUUID())!=null&&f.s.worker.equals(f.v.getUUID()),"night lost home/job");f.l.setDayTime(1000);h.succeed();
+        var f=fixture(h,Profession.SHEPHERD,32,post->{});
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        f.s.setItem(27,new ItemStack(Items.SHEARS));
+        var sheep=animal(f,EntityType.SHEEP,false);
+        var pos=f.p.west(5).above();
+        f.l.setBlockAndUpdate(pos,Blocks.BARREL.defaultBlockState());
+        var barrel=(BarrelBlockEntity)f.l.getBlockEntity(pos);
+        var identity=UUID.randomUUID();
+        barrel.getPersistentData().putUUID("KraftCityDiscardIdentity",identity);
+        f.s.industry.putLong("discard_binding_pos",pos.asLong());
+        f.s.industry.putUUID("discard_binding_id",identity);
+        f.s.setItem(0,new ItemStack(Items.WHITE_WOOL,9));
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.east(2).above()));
+        f.v.setNoAi(false);
+        f.l.setDayTime(13000);
+        step(f,1);
+        check(!sheep.isSheared()&&count(f,Items.WHITE_WOOL)==9,"night produced wool or deposited remotely");
+        h.startSequence().thenWaitUntil(()->{
+            check(barrel.countItem(Items.WHITE_WOOL)==9&&f.v.distanceToSqr(Vec3.atCenterOf(pos))<=2.73,
+                "waiting for physical night delivery");
+        }).thenIdle(20).thenExecute(()->{
+            check(!sheep.isSheared()&&count(f,Items.WHITE_WOOL)==0&&barrel.countItem(Items.WHITE_WOOL)==9,
+                "night production or repeated deposit");
+            check(ResidenceData.get(f.l).owner(f.v.getUUID())!=null&&f.s.worker.equals(f.v.getUUID()),"night lost home/job");
+            f.v.setNoAi(true);
+            f.l.setDayTime(1000);
+        }).thenSucceed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
     public static void breeder_care_consumes_bone_and_progresses_without_free_passive_xp(GameTestHelper h){
