@@ -32,10 +32,13 @@ public final class CommerceGameTests {
     private record F(ServerLevel l,EmploymentData.Station s,Villager v,ServerPlayer player,BlockPos home,BlockPos p){}
     private static void check(boolean value,String message){if(!value)throw new GameTestAssertException(message);}
     private static F fixture(GameTestHelper h,Profession prof){
+        return fixture(h,prof,0);
+    }
+    private static F fixture(GameTestHelper h,Profession prof,int elevation){
         var l=h.getLevel();l.setDayTime(1000);l.setWeatherParameters(10000,0,false,false);
-        var home=h.absolutePos(new BlockPos(2,2,2));var p=h.absolutePos(new BlockPos(8,2,8));
+        var home=h.absolutePos(new BlockPos(2,2+elevation,2));var p=h.absolutePos(new BlockPos(8,2+elevation,8));
         l.setBlock(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)l.getBlockEntity(home)).setSize(11);
-        var v=h.spawn(EntityType.VILLAGER,new BlockPos(3,2,2));v.setAge(0);v.setNoAi(true);check(ResidenceData.get(l).link(l,home,v).equals("ok"),"home fixture");v.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
+        var v=h.spawn(EntityType.VILLAGER,new BlockPos(3,2+elevation,2));v.setAge(0);v.setNoAi(true);check(ResidenceData.get(l).link(l,home,v).equals("ok"),"home fixture");v.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
         l.setBlock(p.below(),Blocks.STONE.defaultBlockState(),3);l.setBlock(p,WorkModule.COMMERCIAL.get().defaultBlockState(),3);var s=((WorkBlockEntity)l.getBlockEntity(p)).station();
         var player=FakePlayerFactory.get(l,new GameProfile(UUID.randomUUID(),"CommerceTest"));player.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);s.setItem(31,new ItemStack(Items.EMERALD,30));
         String result=Employment.hire(player,s,v.getUUID(),prof);
@@ -431,7 +434,8 @@ public final class CommerceGameTests {
 
     @GameTest(template="empty",timeoutTicks=1600,batch="baker_distance_hundred")
     public static void baker_walks_to_the_linked_barrel_at_one_hundred_blocks(GameTestHelper h) {
-        var f = fixture(h, Profession.BAKER);
+        // Keep a 100-block supply corridor away from other batches' bound barrels.
+        var f = fixture(h, Profession.BAKER, 140);
         var block = f.p.east(100);
         var beyond = f.p.east(101);
         var source = source(f, Profession.FARMER, beyond.south(2));
@@ -461,7 +465,9 @@ public final class CommerceGameTests {
             .thenWaitUntil(() -> {
                 check(count(f, Items.WHEAT) == 15, "waiting for walk to bound barrel: " + f.v.position());
                 check(f.v.distanceToSqr(Vec3.atCenterOf(block)) < 16
-                        && rejected.countItem(Items.WHEAT) == 15 && approved.isEmpty(), "wrong source or remote withdrawal");
+                        && rejected.countItem(Items.WHEAT) == 15 && approved.isEmpty(),
+                        "wrong source or remote withdrawal, worker=" + f.v.position()
+                        + " at 100=" + approved.countItem(Items.WHEAT) + " at 101=" + rejected.countItem(Items.WHEAT));
             }).thenWaitUntil(() -> check(f.v.blockPosition().equals(f.p.above()), "waiting for return to bakery"))
             .thenExecute(() -> {
                 f.v.setNoAi(true);
