@@ -624,7 +624,11 @@ public final class ResidenceGameTests {
             (type,pos)->pos.equals(bed),bed,1).isPresent(),"Missing HOME POI for the reserved bed "+bed);
         resident.getBrain().setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.HOME,
             net.minecraft.core.GlobalPos.of(level.dimension(),bed));
-        level.setDayTime(13_001L);resident.startSleeping(bed);
+        level.setDayTime(13_001L);
+        // The fixture starts with an existing sleeper. Match the vanilla brain's
+        // REST state before applying the rain transition.
+        resident.getBrain().setActiveActivityIfPossible(net.minecraft.world.entity.schedule.Activity.REST);
+        resident.startSleeping(bed);
         check(resident.isSleeping(),"Resident did not enter sleep before the rain transition");
         level.setWeatherParameters(0,12_000,true,false);level.setRainLevel(1.0F);
         check(level.isRaining(),"Rain fixture did not activate");
