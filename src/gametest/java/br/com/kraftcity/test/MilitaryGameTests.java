@@ -369,6 +369,7 @@ public final class MilitaryGameTests {
             f.p.getY()+.5,f.p.getZ()+.5,new ItemStack(Items.IRON_NUGGET));
         var patrolItem=new net.minecraft.world.entity.item.ItemEntity(f.l,f.p.getX()+28.5,
             f.p.getY()+.5,f.p.getZ()+.5,new ItemStack(Items.GOLD_NUGGET));
+        recordMobDrops(f.v, protectedItem, boundaryItem, patrolItem);
         f.l.addFreshEntity(protectedItem);f.l.addFreshEntity(boundaryItem);f.l.addFreshEntity(patrolItem);
         f.v.setPos(f.p.getX()+24.8,f.p.getY(),f.p.getZ()+.5);
         Military.tick(f.l,f.s,f.v);
@@ -468,6 +469,7 @@ public final class MilitaryGameTests {
         f.s.setItem(0,new ItemStack(Items.BREAD,63));
         var item=new net.minecraft.world.entity.item.ItemEntity(f.l,f.v.getX()+.5,f.v.getY(),f.v.getZ(),new ItemStack(Items.BREAD,5));
         item.setDeltaMovement(Vec3.ZERO);
+        recordMobDrops(f.v, item);
         f.l.addFreshEntity(item);
         Military.tick(f.l,f.s,f.v);
         check(f.s.getItem(0).getCount()==64&&item.isAlive()&&item.getItem().getCount()==4&&f.s.getItem(9).isEmpty(),
@@ -513,6 +515,7 @@ public final class MilitaryGameTests {
         f.v.setNoAi(false);
         var item=new net.minecraft.world.entity.item.ItemEntity(f.l,f.v.getX()+4,f.v.getY(),f.v.getZ(),new ItemStack(Items.BREAD,3));
         item.setDeltaMovement(Vec3.ZERO);
+        recordMobDrops(f.v, item);
         f.l.addFreshEntity(item);
         h.startSequence().thenWaitUntil(()->check(!item.isAlive()&&f.s.getItem(0).getCount()==3,
             "Patrol did not physically reach the item under thunder, soldier="+f.v.position()+" alive="+f.v.isAlive()
@@ -629,6 +632,7 @@ public final class MilitaryGameTests {
         var item10=new net.minecraft.world.entity.item.ItemEntity(f.l,f.p.getX()+10.5,f.p.getY()+.05,f.p.getZ()+.5,new ItemStack(Items.COBBLESTONE,2));
         var item25=new net.minecraft.world.entity.item.ItemEntity(f.l,f.p.getX()+25.4,f.p.getY()+.05,f.p.getZ()+.5,new ItemStack(Items.IRON_NUGGET,3));
         var outside=new net.minecraft.world.entity.item.ItemEntity(f.l,f.p.getX()+27.5,f.p.getY()+.05,f.p.getZ()+.5,new ItemStack(Items.GOLD_NUGGET));
+        recordMobDrops(f.v, item10, item25, outside);
         for(var item:List.of(item10,item25,outside)){
             item.setDeltaMovement(Vec3.ZERO);f.l.addFreshEntity(item);
         }
@@ -710,6 +714,8 @@ public final class MilitaryGameTests {
         var protectedFarm=cityLoot(f.l,farmPos.east().above(),Items.LAPIS_LAZULI,3);
         var guardLoot=cityLoot(f.l,f.p.east(10),Items.COBBLESTONE,4);
         var patrolLoot=cityLoot(f.l,patrolPos.offset(29,0,4),Items.IRON_NUGGET,5);
+        recordMobDrops(f.v, guardLoot, protectedHouse, protectedFarm);
+        recordMobDrops(patrol, patrolLoot);
         front.discard();
         rear.discard();
         creeper.discard();
@@ -731,6 +737,47 @@ public final class MilitaryGameTests {
                 farmer.discard();
                 neighbors.forEach(villager->villager.setNoAi(false));
             }).thenSucceed();
+    }
+
+    private static void recordMobDrops(Villager soldier, net.minecraft.world.entity.item.ItemEntity... items) {
+        var zombie = EntityType.ZOMBIE.create(soldier.level);
+        zombie.setPos(soldier.position());
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(new net.minecraftforge.event.entity.living.LivingDropsEvent(
+                zombie, DamageSource.mobAttack(soldier), List.of(items), 0, false));
+    }
+
+    @GameTest(template="empty",batch="military_drop_origin")
+    public static void soldier_uses_forge_mob_drop_provenance_even_for_an_unexpected_stack(GameTestHelper h) {
+        var f = fixture(h);
+        clearTestHostiles(f);
+        var point = f.v.blockPosition();
+        var unknown = cityLoot(f.l, point, Items.DIAMOND, 1);
+        var verified = cityLoot(f.l, point.east(), Items.DIAMOND, 2);
+        verified.getItem().getOrCreateTag().putString("fixture", "custom loot");
+        recordMobDrops(f.v, verified);
+        Military.tick(f.l, f.s, f.v);
+        check(unknown.isAlive() && !verified.isAlive() && f.s.countItem(Items.DIAMOND) == 2
+                && f.s.getItem(0).getTag().getString("fixture").equals("custom loot"), "provenance or metadata lost");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=180,batch="military_vanilla_mob_drop")
+    public static void soldier_collects_ground_drops_from_its_actual_mob_kill(GameTestHelper h) {
+        var f = fixture(h);
+        clearTestHostiles(f);
+        var cow = mob(f, EntityType.COW, 2);
+        cow.setPos(f.v.position());
+        cow.setHealth(1);
+        Military.select(f.s, EntityType.COW, true);
+        check(cow.hurt(DamageSource.mobAttack(f.v), 8), "soldier did not deal the killing blow");
+        h.succeedWhen(() -> {
+            Military.tick(f.l, f.s, f.v);
+            var drops = f.l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, f.v.getBoundingBox().inflate(12));
+            check(f.s.countItem(Items.BEEF) > 0, "waiting for actual cow loot at " + f.v.position()
+                    + "; cow alive=" + cow.isAlive() + "; loot rule=" + f.l.getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT)
+                    + "; items=" + drops.stream().map(item -> item.getItem() + "@" + item.position()
+                    + " delayed=" + item.hasPickUpDelay() + " data=" + item.getPersistentData()).toList());
+        });
     }
 
     private static net.minecraft.world.entity.item.ItemEntity cityLoot(ServerLevel level,BlockPos pos,Item item,int count){

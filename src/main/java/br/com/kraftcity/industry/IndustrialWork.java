@@ -41,7 +41,7 @@ public final class IndustrialWork {
             &&!v.getPersistentData().contains("residenciasaldeoes_night_door_task");
     }
     public static boolean day(ServerLevel l){long t=Math.floorMod(l.getDayTime(),24000);return t<12000||t>=23000;}
-    public static AABB area(ServerLevel l,EmploymentData.Station s){if(s.profession==Profession.LUMBERJACK)return LumberjackWork.bounds(s.pos,IndustrialRules.size(l,s));int r=IndustrialRules.size(l,s)/2;if(s.profession==Profession.BEEKEEPER)return new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,6,r+1));return s.profession==Profession.FARMER ? new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,FarmerWork.HEIGHT+1,r+1)) : new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
+    public static AABB area(ServerLevel l,EmploymentData.Station s){if(IndustrialRules.centeredArea(s.profession))return LumberjackWork.bounds(s.pos,IndustrialRules.size(l,s));int r=IndustrialRules.size(l,s)/2;if(s.profession==Profession.BEEKEEPER)return new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,6,r+1));return s.profession==Profession.FARMER ? new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,FarmerWork.HEIGHT+1,r+1)) : new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
     public static void tick(ServerLevel l,EmploymentData.Station s){
         if(!industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
         if(l.isThundering()||Employment.fleeing(v)){

@@ -156,6 +156,7 @@ public final class DiscardChests {
             var station=worker.level instanceof ServerLevel level?EmploymentData.get(level).assigned(worker.getUUID()):null;
             return station!=null&&(station.profession==br.com.kraftcity.employment.Profession.FARMER
                 ||station.profession==br.com.kraftcity.employment.Profession.BEEKEEPER
+                ||station.profession==br.com.kraftcity.employment.Profession.COLLECTOR
                 ||station.profession==br.com.kraftcity.employment.Profession.LUMBERJACK
                 ||station.profession==br.com.kraftcity.employment.Profession.SOLDIER)
                 &&DiscardBinding.permitsEnder((ServerLevel)worker.level,station,chest)?EnderDiscard.inventory(chest):null;
@@ -247,6 +248,7 @@ public final class DiscardChests {
         if(permission.isCanceled()||permission.getUseBlock()==net.minecraftforge.eventbus.api.Event.Result.DENY
             ||!level.hasChunkAt(pos)||!worker.getUUID().equals(station.worker)||!Employment.valid(level,worker.getUUID())
             ||(station.profession==br.com.kraftcity.employment.Profession.BAKER
+                ||station.profession==br.com.kraftcity.employment.Profession.COLLECTOR
                 ||station.profession==br.com.kraftcity.employment.Profession.LUMBERJACK)
                 &&!pos.equals(DiscardBinding.boundPosition(level,station)))return;
         var container=at(level,pos);

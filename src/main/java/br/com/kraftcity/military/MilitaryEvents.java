@@ -66,6 +66,9 @@ public final class MilitaryEvents {
         if(Military.isSoldier(e.getEntity()))Military.death(l,e.getEntity());
         Military.award(l,e.getEntity(),e.getSource().getEntity()!=null?e.getSource().getEntity():e.getEntity().getKillCredit());
     }
+    @SubscribeEvent(priority=EventPriority.LOWEST) public void drops(LivingDropsEvent event){
+        MilitaryDropOrigin.record(event);
+    }
     @SubscribeEvent(priority=EventPriority.LOWEST) public void damage(LivingDamageEvent e){
         if(e.getAmount()<=0||!(e.getEntity().level instanceof ServerLevel l))return;var source=e.getSource().getEntity();
         if(source instanceof Villager v&&Military.isSoldier(v)){

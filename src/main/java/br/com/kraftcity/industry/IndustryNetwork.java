@@ -51,7 +51,7 @@ public final class IndustryNetwork {
     }
     public static void sendBounds(ServerPlayer p){
         var list=new ArrayList<Bound>();for(var s:EmploymentData.get(p.getLevel()).stations())if(s.active&&s.profession!=null&&s.dimension.equals(p.level.dimension())&&s.industry.getBoolean("preview")&&p.distanceToSqr(s.pos.getX(),s.pos.getY(),s.pos.getZ())<65536&&list.size()<4096)
-            list.add(new Bound(s.dimension.location(),s.pos,IndustrialRules.size(p.getLevel(),s),s.profession==Profession.FARMER,s.profession==Profession.BEEKEEPER,s.profession==Profession.LUMBERJACK));
+            list.add(new Bound(s.dimension.location(),s.pos,IndustrialRules.size(p.getLevel(),s),s.profession==Profession.FARMER,s.profession==Profession.BEEKEEPER,IndustrialRules.centeredArea(s.profession)));
         WorkNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(()->p),new Bounds(List.copyOf(list)));
     }
     private IndustryNetwork(){}

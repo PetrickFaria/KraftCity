@@ -1,4 +1,5 @@
 {
+  "block.residenciasaldeoes.work_collector": "Bloco de Coletor",
   "message.kraftcity.soldier.died": "[KraftCity] O Soldado %s morreu.",
   "message.kraftcity.soldier.zombified": "[KraftCity] O Soldado %s foi transformado em zumbi.",
   "message.kraftcity.soldier.cured": "[KraftCity] O Soldado %s foi curado.",

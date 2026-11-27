@@ -51,7 +51,7 @@ final class MilitaryLoot {
         if(!approach)items=level.getEntitiesOfClass(ItemEntity.class,soldier.getBoundingBox().inflate(1.2));
         else if(survey==null||survey.mode()!=mode||level.getGameTime()-survey.tick()>=15){
             items=level.getEntitiesOfClass(ItemEntity.class,mode==Military.Mode.GUARD
-                ?new AABB(station.pos).inflate(25):area.bounds(),item->item.isAlive()&&!item.hasPickUpDelay());
+                ?new AABB(station.pos).inflate(25):area.bounds(),item->item.isAlive()&&!item.hasPickUpDelay()&&MilitaryDropOrigin.belongsTo(item,soldier));
             items.sort(Comparator.<ItemEntity>comparingDouble(soldier::distanceToSqr).thenComparingInt(ItemEntity::getId));
             SURVEYS.put(soldier,new Survey(level.getGameTime(),mode,items));
         }else items=survey.items();
@@ -60,7 +60,7 @@ final class MilitaryLoot {
         int attempts=0;
         for(var item:items){
             var point=item.position();
-            if(!item.isAlive()||item.hasPickUpDelay()||!area.contains(point)||capacity(station,item.getItem())==0
+            if(!item.isAlive()||!MilitaryDropOrigin.belongsTo(item,soldier)||item.hasPickUpDelay()||!area.contains(point)||capacity(station,item.getItem())==0
                 ||mode==Military.Mode.GUARD&&center.distanceToSqr(point)>625
                 ||blocked(protectedAreas,point))continue;
             if(soldier.distanceToSqr(item)<=1.44&&soldier.hasLineOfSight(item)){
@@ -103,7 +103,7 @@ final class MilitaryLoot {
             if(area.intersects(box))result.add(box);
         }
         for(var post:EmploymentData.get(level).stations()){
-            if(!post.active||!post.dimension.equals(level.dimension())||post.sector==Profession.Sector.MILITARY
+            if(!post.active||!post.dimension.equals(level.dimension())||post.sector==Profession.Sector.MILITARY||post.profession==Profession.COLLECTOR
                 ||!level.hasChunkAt(post.pos))continue;
             var box=post.sector==Profession.Sector.INDUSTRIAL
                 ?br.com.kraftcity.industry.IndustrialWork.area(level,post):new AABB(post.pos);

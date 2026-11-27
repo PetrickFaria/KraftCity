@@ -1,6 +1,5 @@
 package br.com.kraftcity.commerce;
 
-import br.com.kraftcity.employment.EmploymentConfig;
 import br.com.kraftcity.employment.EmploymentData;
 import br.com.kraftcity.employment.Profession;
 import br.com.kraftcity.employment.WorkBlockEntity;
@@ -17,12 +16,16 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.ForgeHooks;
 import net.minecraftforge.eventbus.api.Event;
+import net.minecraftforge.items.IItemHandler;
+import net.minecraftforge.items.IItemHandlerModifiable;
+import net.minecraftforge.items.wrapper.InvWrapper;
 
 public final class BakerWork {
     private static final String QUOTA = "KraftCityBakerQuota";
@@ -30,6 +33,8 @@ public final class BakerWork {
     private static final WeakHashMap<Villager, Source> ROUTE = new WeakHashMap<>();
     private static final String RETURN = "baker_return";
     private static final int RETRY_TICKS = 40;
+    private static final int SUPPLY_RANGE = 100;
+    private static final double ROUTE_RANGE = SUPPLY_RANGE + 28;
     private static final WeakHashMap<Villager, Long> NEXT_SCAN = new WeakHashMap<>();
     private static final java.util.Set<Villager> TAKING = new java.util.HashSet<>();
 
@@ -71,7 +76,7 @@ public final class BakerWork {
                 || !level.getBlockState(feet).getCollisionShape(level, feet).isEmpty()
                 || !level.getBlockState(feet.above()).getCollisionShape(level, feet.above()).isEmpty()) return false;
         if (!worker.blockPosition().equals(feet) || Math.abs(worker.getY() - feet.getY()) > .125) {
-            FarmerLogistics.approachCell(level, worker, feet, false);
+            withLongPathSearch(worker, () -> FarmerLogistics.approachCell(level, worker, feet, false));
             return false;
         }
         worker.getNavigation().stop();
@@ -87,7 +92,7 @@ public final class BakerWork {
         if (target == null || !DiscardChests.accepts(level, station, worker, target, offers)) return false;
         IndustrialIdle.interrupt(worker);
         WorkplaceVisits.allowSupplyVisit(worker);
-        int travel = FarmerLogistics.approachDiscard(level, worker, target);
+        int travel = withLongPathSearch(worker, () -> FarmerLogistics.approachDiscard(level, worker, target));
         if (travel < 0) return false;
         CommercialWork.state(station, "Levando pão ao baú vinculado.");
         if (travel > 0) {
@@ -160,17 +165,44 @@ public final class BakerWork {
     }
 
     private static boolean visit(ServerLevel level, EmploymentData.Station station, Villager worker, Source source) {
-        var container = DiscardChests.at(level, source.pos);
-        if (container == null || !container.hasAnyOf(java.util.Set.of(Items.WHEAT))
+        if (!hasWheat(level, worker, source.pos)
                 || !DiscardChests.canOpen(level, source.pos, IndustrialWork.actor(level, station, worker))) return false;
         IndustrialIdle.interrupt(worker);
         WorkplaceVisits.allowSupplyVisit(worker);
-        int travel = FarmerLogistics.approachDiscard(level, worker, source.pos);
+        int travel = withLongPathSearch(worker, () -> FarmerLogistics.approachSupply(level, worker, source.pos, BakerWork::containsWheat));
         if (travel < 0) return false;
         CommercialWork.state(station, "Buscando trigo no descarte do Fazendeiro.");
         if (travel > 0) return take(level, station, worker, source);
         ROUTE.put(worker, source);
         return true;
+    }
+
+    private static boolean hasWheat(ServerLevel level, Villager worker, BlockPos pos) {
+        var container = supplyInventory(level, worker, pos);
+        if (container != null && containsWheat(container)) return true;
+        var block = DiscardChests.capability(level, pos);
+        if (block != null) {
+            for (var side : net.minecraft.core.Direction.values()) {
+                var handler = DiscardChests.handler(block, worker, side);
+                if (handler != null && containsWheat(handler)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsWheat(IItemHandler inventory) {
+        for (int slot = 0; slot < inventory.getSlots(); slot++) {
+            if (inventory.getStackInSlot(slot).is(Items.WHEAT)
+                    && inventory.extractItem(slot, 1, true).is(Items.WHEAT)) return true;
+        }
+        return false;
+    }
+
+    private static IItemHandler supplyInventory(ServerLevel level, Villager worker, BlockPos pos) {
+        var container = DiscardChests.at(level, pos);
+        if (container != null) return new InvWrapper(container);
+        var block = DiscardChests.capability(level, pos);
+        return block == null ? null : DiscardChests.accessibleHandler(block, worker);
     }
 
     private static boolean posStillBound(ServerLevel level, EmploymentData.Station station, Source source) {
@@ -181,11 +213,22 @@ public final class BakerWork {
 
     private static boolean validSource(ServerLevel level, EmploymentData.Station baker, Source source) {
         var farmer = source.station;
-        int range = EmploymentConfig.BAKER_SUPPLY_RANGE.get();
         return farmer.active && farmer.profession == Profession.FARMER && farmer.dimension.equals(baker.dimension)
-                && source.pos != null && source.pos.distSqr(baker.pos) <= (double)range * range
+                && source.pos != null && source.pos.distSqr(baker.pos) <= (double)SUPPLY_RANGE * SUPPLY_RANGE
                 && level.hasChunkAt(source.pos) && level.hasChunkAt(farmer.pos)
                 && level.getBlockEntity(farmer.pos) instanceof WorkBlockEntity post && farmer.id.equals(post.identity());
+    }
+
+    private static int withLongPathSearch(Villager worker, java.util.function.IntSupplier findRoute) {
+        var attribute = worker.getAttribute(Attributes.FOLLOW_RANGE);
+        if (attribute == null || attribute.getValue() >= ROUTE_RANGE) return findRoute.getAsInt();
+        double previous = attribute.getBaseValue();
+        attribute.setBaseValue(ROUTE_RANGE);
+        try {
+            return findRoute.getAsInt();
+        } finally {
+            attribute.setBaseValue(previous);
+        }
     }
 
     private static void markReturn(EmploymentData.Station station) {
@@ -207,32 +250,38 @@ public final class BakerWork {
                     || !CommercialWork.ownsNavigation(worker)
                     || !posStillBound(level, station, source)
                     || !DiscardChests.canOpen(level, pos, actor)
-                    || FarmerLogistics.approachDiscard(level, worker, pos) != 1) return false;
-            var container = DiscardChests.at(level, pos);
+                    || FarmerLogistics.approachSupply(level, worker, pos, BakerWork::containsWheat) != 1) return false;
+            var container = supplyInventory(level, worker, pos);
             if (container == null) return false;
             int remaining = wheatLimit(CommercialWork.level(level, station)) - collected(level, worker);
             int moved = 0;
-            for (int slot = 0; slot < container.getContainerSize() && moved < remaining; slot++) {
-                var stack = container.getItem(slot);
+            for (int slot = 0; slot < container.getSlots() && moved < remaining; slot++) {
+                var stack = container.getStackInSlot(slot);
                 if (!stack.is(Items.WHEAT)) continue;
                 var offered = stack.copy();
                 offered.setCount(Math.min(stack.getCount(), remaining - moved));
                 while (!offered.isEmpty() && !IndustrialWork.insert(station, offered, false)) offered.shrink(1);
                 if (offered.isEmpty()) break;
+                var possible = container.extractItem(slot, offered.getCount(), true);
+                if (possible.isEmpty() || !ItemStack.isSameItemSameTags(possible, offered)
+                        || possible.getCount() > offered.getCount()) continue;
                 ItemStack original = stack.copy();
-                ItemStack removed = container.removeItem(slot, offered.getCount());
+                ItemStack removed = container.extractItem(slot, possible.getCount(), false);
                 if (removed.isEmpty()) continue;
-                if (!removed.is(Items.WHEAT) || removed.getCount() > offered.getCount()
+                if (!ItemStack.isSameItemSameTags(removed, possible) || removed.getCount() > possible.getCount()
                         || !IndustrialWork.insert(station, removed, true)) {
-                    container.setItem(slot, original);
-                    container.setChanged();
+                    if (container instanceof IItemHandlerModifiable modifiable) modifiable.setStackInSlot(slot, original);
+                    else {
+                        var remainder = container.insertItem(slot, removed, false);
+                        if (!remainder.isEmpty()) net.minecraft.world.Containers.dropItemStack(
+                                level, pos.getX() + .5, pos.getY() + 1, pos.getZ() + .5, remainder);
+                    }
                     break;
                 }
                 moved += removed.getCount();
                 increment(level, worker, "wheat", removed.getCount());
             }
             if (moved == 0) return false;
-            container.setChanged();
             br.com.kraftcity.logistics.DiscardLids.afterApproval(level, level.getBlockEntity(pos));
             markReturn(station);
             return true;

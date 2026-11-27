@@ -915,6 +915,7 @@ public final class IndustryGameTests {
             int expectedSlots=switch(p){
                 case FARMER,BEEKEEPER->66;
                 case LUMBERJACK->65;
+                case COLLECTOR->63;
                 default->68;
             };
             check(a.inventory==b.inventory&&a.slots.size()==expectedSlots&&b.slots.size()==expectedSlots,"dual menu "+p);
@@ -1182,7 +1183,8 @@ public final class IndustryGameTests {
                 default->{}
             }
             step(f,1);check(WorkforceData.get(f.l).progress(f.v.getUUID(),p.id()).xp()==0,"free progress without requirement "+p);
-            check(!f.s.industry.getCompound("alerts").isEmpty(),"missing indispensable warning "+p);
+            check(f.s.industry.getCompound("alerts").isEmpty()==(p==Profession.COLLECTOR),
+                    "indispensable supply warning did not match profession "+p);
         }h.succeed();
     }
 
@@ -1232,15 +1234,19 @@ public final class IndustryGameTests {
     }
 
     @GameTest(template="empty",timeoutTicks=40,batch="industry")
-    public static void farmer_collects_mod_agnostic_ground_items_at_border(GameTestHelper h){
+    public static void farmer_collects_crop_items_at_border(GameTestHelper h){
         var f=fixture(h,Profession.FARMER);
         var at=f.p.east(3).above();
         f.v.setPos(at.getX()+.5,at.getY(),at.getZ()+.5);
-        var inside=new net.minecraft.world.entity.item.ItemEntity(f.l,at.getX()+.5,at.getY(),at.getZ()+.5,new ItemStack(Items.COBBLESTONE,3));
-        var outside=new net.minecraft.world.entity.item.ItemEntity(f.l,at.getX()+1.5,at.getY(),at.getZ()+.5,new ItemStack(Items.GOLD_INGOT));
+        var inside=new net.minecraft.world.entity.item.ItemEntity(f.l,at.getX()+.5,at.getY(),at.getZ()+.5,new ItemStack(Items.CARROT,3));
+        var outside=new net.minecraft.world.entity.item.ItemEntity(f.l,at.getX()+1.5,at.getY(),at.getZ()+.5,new ItemStack(Items.CARROT));
         f.l.addFreshEntity(inside);f.l.addFreshEntity(outside);
+        var unrelated=loose(f,at,Items.COD);
         step(f,1);
-        check(!inside.isAlive()&&count(f,Items.COBBLESTONE)==3&&outside.isAlive(),"wrong pickup boundary or conservation");
+        check(!inside.isAlive()&&count(f,Items.CARROT)==3&&outside.isAlive(),"wrong pickup boundary or conservation");
+        step(f,1);
+        check(unrelated.isAlive()&&count(f,Items.COD)==0,"farmer picked up a non-crop");
+        unrelated.discard();
         outside.discard();
         h.succeed();
     }
@@ -1621,10 +1627,10 @@ public final class IndustryGameTests {
         var wheat=crop(f,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7));
         var empty=wheat.south();
         f.l.setBlock(empty.below(),Blocks.FARMLAND.defaultBlockState(),3);
-        var item=new net.minecraft.world.entity.item.ItemEntity(f.l,f.v.getX(),f.v.getY(),f.v.getZ(),new ItemStack(Items.STICK));
+        var item=new net.minecraft.world.entity.item.ItemEntity(f.l,f.v.getX(),f.v.getY(),f.v.getZ(),new ItemStack(Items.WHEAT));
         f.l.addFreshEntity(item);
         step(f,1);
-        check(!item.isAlive()&&count(f,Items.STICK)==1&&f.l.getBlockState(wheat).getValue(CropBlock.AGE)==7,"harvest outranked pickup");
+        check(!item.isAlive()&&count(f,Items.WHEAT)==1&&f.l.getBlockState(wheat).getValue(CropBlock.AGE)==7,"harvest outranked pickup");
         step(f,1);
         check(f.l.getBlockState(wheat).getValue(CropBlock.AGE)==0&&f.l.getBlockState(empty).isAir(),"sowing outranked harvest");
         h.succeed();
@@ -2103,7 +2109,7 @@ public final class IndustryGameTests {
         var soil=f.p.east(2).north();
         f.l.setBlock(soil,Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE,7),3);
         var item=new net.minecraft.world.entity.item.ItemEntity(f.l,soil.getX()+.5,soil.getY()+.9375,
-            soil.getZ()+.5,new ItemStack(Items.COBBLESTONE,6));
+            soil.getZ()+.5,new ItemStack(Items.BEETROOT,6));
         item.setDeltaMovement(Vec3.ZERO);
         f.l.addFreshEntity(item);
         var chest=f.p.west(4).above();
@@ -2115,7 +2121,7 @@ public final class IndustryGameTests {
         f.l.setDayTime(13001);
         h.startSequence().thenWaitUntil(()->{
             check(f.v.getSleepingPos().filter(bed::equals).isPresent(),"worker did not get to bed");
-            check(!item.isAlive()&&barrel.countItem(Items.COBBLESTONE)==6,"drop on farmland did not reach the barrel");
+            check(!item.isAlive()&&barrel.countItem(Items.BEETROOT)==6,"drop on farmland did not reach the barrel");
         }).thenExecute(()->f.l.setDayTime(1000)).thenSucceed();
     }
 
@@ -2384,17 +2390,17 @@ public final class IndustryGameTests {
         var start=Vec3.atBottomCenterOf(f.p.west().south().above());
         f.v.setPos(start.x,start.y,start.z);
         f.v.setNoAi(false);
-        var moved=new net.minecraft.world.entity.item.ItemEntity(f.l,fence.getX()-.8,fence.getY()+.1,fence.getZ()+.12,new ItemStack(Items.STICK));
+        var moved=new net.minecraft.world.entity.item.ItemEntity(f.l,fence.getX()-.8,fence.getY()+.1,fence.getZ()+.12,new ItemStack(Items.WHEAT));
         moved.setDeltaMovement(.17,0,0);
         f.l.addFreshEntity(moved);
-        var buried=new net.minecraft.world.entity.item.ItemEntity(f.l,stone.getX()+.5,stone.getY()+.5,stone.getZ()+.5,new ItemStack(Items.DIAMOND));
+        var buried=new net.minecraft.world.entity.item.ItemEntity(f.l,stone.getX()+.5,stone.getY()+.5,stone.getZ()+.5,new ItemStack(Items.POTATO));
         buried.setNoGravity(true);
         buried.setDeltaMovement(Vec3.ZERO);
         f.l.addFreshEntity(buried);
         h.startSequence().thenWaitUntil(()->{
-            check(!moved.isAlive()&&count(f,Items.STICK)==1,"moving item near fence was not reached");
+            check(!moved.isAlive()&&count(f,Items.WHEAT)==1,"moving item near fence was not reached");
             check(f.v.distanceToSqr(start)>2,"worker collected from its starting position");
-            check(count(f,Items.DIAMOND)==0,"worker collected through the solid barrier");
+            check(count(f,Items.POTATO)==0,"worker collected through the solid barrier");
         }).thenSucceed();
     }
 
@@ -2446,13 +2452,13 @@ public final class IndustryGameTests {
         var start=Vec3.atBottomCenterOf(f.p.west(2).above());
         f.v.setPos(start.x,start.y,start.z);
         var drop=new net.minecraft.world.entity.item.ItemEntity(f.l,source.getX()+.5,source.getY()+.65,source.getZ()+1.3,
-            new ItemStack(Items.FLINT));
+            new ItemStack(Items.WHEAT));
         drop.setDeltaMovement(0,0,0);
         h.startSequence().thenWaitUntil(()->check(f.l.getFluidState(source.south(2)).is(net.minecraft.tags.FluidTags.WATER),"no flowing water"))
             .thenExecute(()->f.l.addFreshEntity(drop)).thenWaitUntil(()->{
                 check(drop.getZ()>source.getZ()+1.38,"item has not moved along the current: "+drop.position());
             }).thenExecute(()->f.v.setNoAi(false)).thenWaitUntil(()->{
-                check(!drop.isAlive()&&count(f,Items.FLINT)==1,"worker at "+f.v.position()+" did not reach drifting item at "+drop.position());
+                check(!drop.isAlive()&&count(f,Items.WHEAT)==1,"worker at "+f.v.position()+" did not reach drifting item at "+drop.position());
                 check(f.v.distanceToSqr(start)>2,"distant water pickup bypassed walking");
             }).thenSucceed();
     }
@@ -2973,7 +2979,11 @@ public final class IndustryGameTests {
             if(second[0]<0)second[0]=f.l.getGameTime();
             long since=second[0]-first[0];
             check(since>=ticks,"second cut completed too soon at "+since+" ticks");
-            check(count(f,Items.OAK_LOG)==2&&f.s.getItem(27).getDamageValue()==2,"loot or durability did not commit twice");
+            int ground = f.l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                    IndustrialWork.area(f.l, f.s), item -> item.getItem().is(Items.OAK_LOG)).stream()
+                    .mapToInt(item -> item.getItem().getCount()).sum();
+            check(ground==2&&count(f,Items.OAK_LOG)==0&&f.s.getItem(27).getDamageValue()==2,
+                    "two logs should remain physical until the active tree finishes");
             f.v.setNoAi(true);
         });
     }
@@ -3010,7 +3020,7 @@ public final class IndustryGameTests {
             check(f.l.isEmptyBlock(root.above(7)),"waiting for the top log");
             check(count(f,Items.SPRUCE_LOG)==8&&f.s.getItem(27).getDamageValue()==8,"tall tree count or wear");
             check(f.l.getBlockState(outside).is(Blocks.BIRCH_LOG)&&f.l.getBlockState(decorated).is(Blocks.OAK_LOG),"outside tree or decor changed");
-            check(f.l.getBlockState(root.east().above(7)).is(Blocks.SPRUCE_LEAVES),"canopy destroyed immediately");
+            check(f.l.isEmptyBlock(root.east().above(7)), "unsupported canopy remained after tree completion");
             f.v.setNoAi(true);
         });
     }
@@ -3158,15 +3168,15 @@ public final class IndustryGameTests {
         f.s.setItem(27,new ItemStack(Items.NETHERITE_AXE));
         f.v.setPos(f.p.getX()+7.5,f.p.getY(),f.p.getZ()+1.5);
         f.v.setNoAi(false);
-        h.startSequence().thenWaitUntil(()->check(f.l.isEmptyBlock(root)&&count(f,Items.OAK_LOG)==1,"waiting for first cut and pickup"))
+        h.startSequence().thenWaitUntil(()->check(f.l.isEmptyBlock(root)&&count(f,Items.OAK_LOG)==0,"waiting for first cut without pickup"))
             .thenExecute(()->check(IndustrialRules.selectSize(f.l,f.s,15),"shrink area"))
             .thenIdle(85).thenExecute(()->{
-                check(f.l.getBlockState(root.above()).is(Blocks.OAK_LOG)&&count(f,Items.OAK_LOG)==1,"cut outside new area");
+                check(f.l.getBlockState(root.above()).is(Blocks.OAK_LOG)&&count(f,Items.OAK_LOG)==0,"cut or collected outside new area");
                 f.v.setNoAi(true);
             }).thenSucceed();
     }
     @GameTest(template="empty",timeoutTicks=380,batch="lumberjack_physical")
-    public static void lumberjack_walks_to_unrelated_dropped_items(GameTestHelper h){
+    public static void lumberjack_walks_to_forest_drops(GameTestHelper h){
         var f=fixture(h,Profession.LUMBERJACK,12,post->{});
         level(f,2,25);
         check(IndustrialRules.selectSize(f.l,f.s,25),"select larger collection area");
@@ -3177,12 +3187,12 @@ public final class IndustryGameTests {
         var target=Vec3.atBottomCenterOf(f.p.east(11).above());
         f.v.setPos(start);
         f.v.setNoAi(false);
-        var item=new net.minecraft.world.entity.item.ItemEntity(f.l,target.x,target.y,target.z,new ItemStack(Items.WHEAT_SEEDS,3));
+        var item=new net.minecraft.world.entity.item.ItemEntity(f.l,target.x,target.y,target.z,new ItemStack(Items.STICK,3));
         item.setDeltaMovement(Vec3.ZERO);
         f.l.addFreshEntity(item);
-        h.runAfterDelay(2,()->check(item.isAlive()&&count(f,Items.WHEAT_SEEDS)==0,"remote pickup"));
+        h.runAfterDelay(2,()->check(item.isAlive()&&count(f,Items.STICK)==0,"remote pickup"));
         h.succeedWhen(()->{
-            check(count(f,Items.WHEAT_SEEDS)==3,"waiting for physical pickup");
+            check(count(f,Items.STICK)==3,"waiting for physical pickup");
             check(!item.isAlive()&&f.v.distanceToSqr(target)<2.25,"items were collected without reaching them");
             f.v.setNoAi(true);
         });
@@ -3275,21 +3285,21 @@ public final class IndustryGameTests {
     }
 
     @GameTest(template="empty",timeoutTicks=180,batch="shared_pickup_farmer")
-    public static void farmer_collects_unrelated_wood(GameTestHelper h){
-        unrelatedIndustrialPickup(h,Profession.FARMER,Items.OAK_LOG);
+    public static void farmer_collects_wheat(GameTestHelper h){
+        professionalGroundPickup(h,Profession.FARMER,Items.WHEAT);
     }
 
     @GameTest(template="empty",timeoutTicks=180,batch="shared_pickup_apiary")
-    public static void beekeeper_collects_unrelated_cobblestone(GameTestHelper h){
-        unrelatedIndustrialPickup(h,Profession.BEEKEEPER,Items.COBBLESTONE);
+    public static void beekeeper_collects_honeycomb(GameTestHelper h){
+        professionalGroundPickup(h,Profession.BEEKEEPER,Items.HONEYCOMB);
     }
 
     @GameTest(template="empty",timeoutTicks=220,batch="shared_pickup_fisherman")
-    public static void fisherman_collects_unrelated_seeds(GameTestHelper h){
-        unrelatedIndustrialPickup(h,Profession.FISHERMAN,Items.WHEAT_SEEDS);
+    public static void fisherman_collects_cod(GameTestHelper h){
+        professionalGroundPickup(h,Profession.FISHERMAN,Items.COD);
     }
 
-    private static void unrelatedIndustrialPickup(GameTestHelper h,Profession profession,Item type){
+    private static void professionalGroundPickup(GameTestHelper h,Profession profession,Item type){
         var f=fixture(h,profession,32,post->{});
         buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
         var start=Vec3.atBottomCenterOf(f.p.west().above());
@@ -3301,10 +3311,102 @@ public final class IndustryGameTests {
         f.l.addFreshEntity(item);
         h.runAfterDelay(2,()->check(item.isAlive()&&count(f,type)==0,"remote pickup"));
         h.succeedWhen(()->{
-            check(count(f,type)==3,"waiting for unrelated item pickup");
-            check(!item.isAlive()&&f.v.distanceToSqr(target)<2.25,"worker did not approach the unrelated item");
+            check(count(f,type)==3,"waiting for relevant item pickup");
+            check(!item.isAlive()&&f.v.distanceToSqr(target)<2.25,"worker did not approach the relevant item");
             f.v.setNoAi(true);
         });
+    }
+
+    @GameTest(template="empty",timeoutTicks=540,batch="collector_overlap")
+    public static void collector_respects_crop_priority_only_inside_the_active_farm(GameTestHelper h) {
+        var f = fixture(h, Profession.FARMER, 36, post -> {});
+        var pos = f.p.east(5);
+        for (var floor : BlockPos.betweenClosed(f.p.offset(-3, 0, -3), f.p.offset(9, 0, 3)))
+            if (!floor.equals(f.p)) f.l.setBlockAndUpdate(floor, Blocks.STONE.defaultBlockState());
+        f.l.setBlockAndUpdate(pos, WorkModule.INDUSTRIAL.get().defaultBlockState());
+        var station = ((WorkBlockEntity) f.l.getBlockEntity(pos)).station();
+        var collector = EntityType.VILLAGER.create(f.l);
+        collector.setAge(0);
+        collector.setNoAi(true);
+        collector.setPos(Vec3.atBottomCenterOf(pos.east().above()));
+        f.l.addFreshEntity(collector);
+        var home = ResidenceData.get(f.l).owner(f.v.getUUID());
+        check(ResidenceData.get(f.l).link(f.l, home.pos, collector).equals("ok"), "collector residence");
+        var employer = FakePlayerFactory.get(f.l, new GameProfile(UUID.randomUUID(), "CollectorTest"));
+        employer.setPos(collector.position());
+        station.setItem(EmploymentData.PAYMENT, new ItemStack(Items.EMERALD, EmploymentConfig.cost(Profession.Sector.INDUSTRIAL)));
+        check(Employment.hire(employer, station, collector.getUUID(), Profession.COLLECTOR).equals("ok"), "collector hiring");
+        check(IndustrialRules.size(f.l, station) == 15 && !IndustrialRules.selectSize(f.l, station, 25), "level one area");
+        var overlap = f.p.east(2).above();
+        var reserved = loose(f, overlap, Items.CARROT);
+        var leather = loose(f, overlap.south(), Items.LEATHER);
+        var fish = loose(f, overlap.north(), Items.COD);
+        var free = loose(f, pos.east(3).above(), Items.CARROT);
+        var destination = pos.west(5).south(2).above();
+        f.l.setBlockAndUpdate(destination, Blocks.BARREL.defaultBlockState());
+        var barrel = (BarrelBlockEntity) f.l.getBlockEntity(destination);
+        for (int slot = 0; slot < barrel.getContainerSize(); slot++) barrel.setItem(slot, new ItemStack(Items.STONE, 64));
+        UUID identity = UUID.randomUUID();
+        barrel.getPersistentData().putUUID("KraftCityDiscardIdentity", identity);
+        station.industry.putLong("discard_binding_pos", destination.asLong());
+        station.industry.putUUID("discard_binding_id", identity);
+        collector.setNoAi(false);
+        h.startSequence().thenWaitUntil(() -> {
+            check(!leather.isAlive() && !fish.isAlive() && !free.isAlive(), "waiting for physical collector: " + collector.position());
+            check(reserved.isAlive() && station.countItem(Items.CARROT) == 1, "collector took reserved crop");
+            check(station.countItem(Items.LEATHER) == 1 && station.countItem(Items.COD) == 1, "wrong pickup conservation");
+        }).thenIdle(45).thenExecute(() -> {
+            check(station.countItem(Items.LEATHER) == 1 && barrel.countItem(Items.STONE) == 27 * 64,
+                    "collector lost stock or touched the full barrel");
+            barrel.clearContent();
+        }).thenWaitUntil(() -> {
+            check(barrel.countItem(Items.LEATHER) == 1 && barrel.countItem(Items.COD) == 1
+                    && barrel.countItem(Items.CARROT) == 1, "waiting for bound delivery");
+            check(station.countItem(Items.LEATHER) == 0 && reserved.isAlive(), "collector duplicated or took reserved stock");
+        }).thenExecute(() -> Employment.release(f.l, f.v.getUUID()))
+          .thenWaitUntil(() -> {
+              check(barrel.countItem(Items.CARROT) == 2 && !reserved.isAlive(), "vacant farm left a ghost reservation");
+              collector.setNoAi(true);
+          }).thenSucceed();
+    }
+
+    private static net.minecraft.world.entity.item.ItemEntity loose(F f, BlockPos pos, Item type) {
+        var point = Vec3.atBottomCenterOf(pos);
+        var item = new net.minecraft.world.entity.item.ItemEntity(f.l, point.x, point.y, point.z, new ItemStack(type));
+        item.setDeltaMovement(Vec3.ZERO);
+        f.l.addFreshEntity(item);
+        return item;
+    }
+
+    @GameTest(template="empty",timeoutTicks=790,batch="lumberjack_completed_canopy")
+    public static void lumberjack_finishes_canopy_before_pickup_and_starts_a_hundred_tick_cooldown(GameTestHelper h) {
+        var f = fixture(h, Profession.LUMBERJACK, 18, post -> {});
+        buildWalkableFloor(f, ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var root = lumberTree(f, f.p.east(2).above(), Blocks.OAK_LOG, Blocks.OAK_LEAVES, 4);
+        var neighbor = lumberTree(f, root.east(3), Blocks.BIRCH_LOG, Blocks.BIRCH_LEAVES, 4);
+        var crown = root.above(3).west(3);
+        f.l.setBlockAndUpdate(crown.east(), Blocks.OAK_LEAVES.defaultBlockState().setValue(LeavesBlock.DISTANCE, 2));
+        f.l.setBlockAndUpdate(crown, Blocks.OAK_LEAVES.defaultBlockState().setValue(LeavesBlock.DISTANCE, 3));
+        var protectedLeaf = root.above(3).south(2);
+        f.l.setBlockAndUpdate(protectedLeaf, Blocks.OAK_LEAVES.defaultBlockState().setValue(LeavesBlock.PERSISTENT, true));
+        f.s.setItem(EmploymentData.TOOL, new ItemStack(Items.NETHERITE_AXE));
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.east().above()));
+        f.v.setNoAi(false);
+        // The two crowns touch through the shared canopy corridor.
+        f.l.setBlockAndUpdate(root.above(3).east(2), Blocks.BIRCH_LEAVES.defaultBlockState().setValue(LeavesBlock.DISTANCE, 1));
+        h.startSequence().thenWaitUntil(() -> check(f.l.isEmptyBlock(root), "waiting for first log"))
+            .thenExecute(() -> check(count(f, Items.OAK_LOG) == 0, "wood collected before tree finished"))
+            .thenWaitUntil(() -> check(f.l.isEmptyBlock(root.above(3)), "waiting for last log"))
+            .thenExecute(() -> {
+                check(f.l.isEmptyBlock(crown), "unsupported canopy remained after last trunk");
+                check(f.l.getBlockState(neighbor.above(4)).is(Blocks.BIRCH_LEAVES)
+                        && f.l.getBlockState(protectedLeaf).is(Blocks.OAK_LEAVES), "neighbor or persistent foliage removed");
+                long remaining = f.s.industry.getLong("lumberjack_next_tree") - f.l.getGameTime();
+                check(remaining >= 99 && remaining <= 100, "cooldown did not start at tree completion: " + remaining);
+            }).thenIdle(98).thenExecute(() ->
+                check(!f.s.industry.contains("lumberjack_tree"), "second tree started during cooldown"))
+                .thenWaitUntil(() -> check(f.s.industry.contains("lumberjack_tree"), "waiting for second tree after cooldown"))
+                .thenExecute(() -> f.v.setNoAi(true)).thenSucceed();
     }
 
 }

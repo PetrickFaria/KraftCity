@@ -20,9 +20,10 @@ public final class IndustrialRules {
     }
     public static int level(ServerLevel l,EmploymentData.Station s){return s.worker==null||s.profession==null?1:Math.min(5,Math.max(1,WorkforceData.get(l).progress(s.worker,s.profession.id()).level()));}
     public static int maximumSize(int level){return 3+2*Math.min(5,Math.max(1,level));}
-    public static int minimumSize(Profession profession){return profession==Profession.LUMBERJACK?15:profession==Profession.BEEKEEPER?7:5;}
+    public static boolean centeredArea(Profession profession){return profession==Profession.LUMBERJACK||profession==Profession.COLLECTOR;}
+    public static int minimumSize(Profession profession){return centeredArea(profession)?15:profession==Profession.BEEKEEPER?7:5;}
     public static int maximumSize(Profession profession,int level){
-        return profession==Profession.LUMBERJACK?lumberjackWidth(Math.min(5,Math.max(1,level))-1):maximumSize(level)+(minimumSize(profession)-5);
+        return centeredArea(profession)?lumberjackWidth(Math.min(5,Math.max(1,level))-1):maximumSize(level)+(minimumSize(profession)-5);
     }
     public static final int LUMBERJACK_HEIGHT=15;
     public static int lumberjackWidth(int option){return 15+10*option;}
@@ -44,6 +45,7 @@ public final class IndustrialRules {
             int width=s.industry.getInt("lumberjack_width");
             return validLumberjackWidth(width,s.worker==null?lumberjackWidth(4):max)?width:lumberjackWidth(0);
         }
+        if(s.profession==Profession.COLLECTOR)return validLumberjackWidth(selected,s.worker==null?55:max)?selected:15;
         if(s.profession==Profession.BEEKEEPER){
             // Preserve the old selected width where it still exists, even while the post is vacant.
             int migrated=validSize(selected,15)?Math.max(7,selected):7;
@@ -67,7 +69,8 @@ public final class IndustrialRules {
             if(!validLumberjackWidth(size,max))return false;
             setLumberjackWidth(s,size);return true;
         }
-        if(size<minimumSize(s.profession)||!validSize(size,max)||s.profession!=Profession.FARMER&&s.profession!=Profession.BEEKEEPER&&level(l,s)<5&&size!=max)return false;
+        if(s.profession==Profession.COLLECTOR&&!validLumberjackWidth(size,max))return false;
+        if(s.profession!=Profession.COLLECTOR&&(size<minimumSize(s.profession)||!validSize(size,max)||s.profession!=Profession.FARMER&&s.profession!=Profession.BEEKEEPER&&level(l,s)<5&&size!=max))return false;
         s.industry.putInt("size",size);s.industry.remove("cursor");s.setChanged();return true;
     }
     public static int capacity(int level){return 2*Math.min(5,Math.max(1,level));}

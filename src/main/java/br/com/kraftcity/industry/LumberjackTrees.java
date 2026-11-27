@@ -76,7 +76,8 @@ final class LumberjackTrees extends SavedData {
     }
 
     private static void mark(ServerLevel level, BlockPos pos, BlockState state) {
-        if (!state.is(BlockTags.LOGS)) return;
+        if (!state.is(BlockTags.LOGS)
+                && !(state.getBlock() instanceof LeavesBlock && !state.getValue(LeavesBlock.PERSISTENT))) return;
         var data = get(level);
         if (data.constructed.add(pos.asLong())) data.setDirty();
     }

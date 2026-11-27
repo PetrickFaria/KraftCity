@@ -190,7 +190,7 @@ public final class DiscardBinding {
             var target = BlockPos.of(station.industry.getLong(TARGET));
             return level.hasChunkAt(target) ? List.of(target) : List.of();
         }
-        return hadBinding || station.profession == Profession.LUMBERJACK ? List.of() : DiscardChests.destinations(level, station, area);
+        return hadBinding || (station.profession == Profession.LUMBERJACK || station.profession == Profession.COLLECTOR) ? List.of() : DiscardChests.destinations(level, station, area);
     }
 
     private static void message(ServerPlayer player, String message) {

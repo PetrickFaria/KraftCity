@@ -292,7 +292,7 @@ public final class FarmerVisualCheck {
             var channel=CHANNEL.south();
             v.setPos(channel.getX()+.5,channel.getY()+.05,channel.getZ()+.5);
             var dropAt=POST.offset(-1,1,2);
-            var drop=new ItemEntity(l,dropAt.getX()+.5,dropAt.getY()+.1,dropAt.getZ()+.5,new ItemStack(Items.COBBLESTONE,6));
+            var drop=new ItemEntity(l,dropAt.getX()+.5,dropAt.getY()+.1,dropAt.getZ()+.5,new ItemStack(Items.BEETROOT,6));
             drop.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
             drop.setDefaultPickUpDelay();
             l.addFreshEntity(drop);
@@ -311,8 +311,8 @@ public final class FarmerVisualCheck {
             stage=3;
         }else if(stage==3){
             var barrel=(BarrelBlockEntity)l.getBlockEntity(CHEST);
-            int deposited=barrel.countItem(Items.COBBLESTONE);
-            progressDetail="worker="+v.blockPosition()+" chest="+deposited+" stock="+s.countItem(Items.COBBLESTONE)
+            int deposited=barrel.countItem(Items.BEETROOT);
+            progressDetail="worker="+v.blockPosition()+" chest="+deposited+" stock="+s.countItem(Items.BEETROOT)
                 +" groundDrop="+l.getEntity(closingDrop)
                 +" phaseUntil="+s.industry.getLong("farmer_discard_until")+" chestTarget="+s.industry.contains("farmer_discard_pos")
                 +" pickupUntil="+s.industry.getLong("farmer_pickup_until")+" navigation="+v.getNavigation().getTargetPos()
@@ -346,7 +346,7 @@ public final class FarmerVisualCheck {
             s.industry.putUUID("visual_farmer_companion_0",companions.get(0));
             s.industry.putUUID("visual_farmer_companion_1",companions.get(1));
             check(v.getSleepingPos().filter(BED::equals).isPresent(),"farmer slept outside its own bed");
-            check(seenPhysicalDeposit&&deposited==6&&s.countItem(Items.COBBLESTONE)==0,"went to bed before discarding: "+progressDetail+" at designated barrel="+seenPhysicalDeposit);
+            check(seenPhysicalDeposit&&deposited==6&&s.countItem(Items.BEETROOT)==0,"went to bed before discarding: "+progressDetail+" at designated barrel="+seenPhysicalDeposit);
             check(barrelDeparture!=null&&v.distanceToSqr(barrelDeparture)>9
                 &&!s.industry.contains("farmer_discard_pos")&&!s.industry.contains("farmer_discard_until"),
                 "farmer did not spontaneously leave the obstructed barrel and release discard navigation");
@@ -502,7 +502,7 @@ public final class FarmerVisualCheck {
         }
         check(s.industry.getInt("zigzag_harvest")==s.industry.getInt("visual_saved_harvest_cursor")
             &&s.industry.getInt("zigzag_plant")==s.industry.getInt("visual_saved_plant_cursor"),"saved zigzag cursors changed");
-        check(((BarrelBlockEntity)l.getBlockEntity(CHEST)).countItem(Items.COBBLESTONE)==6,"saved discard changed");
+        check(((BarrelBlockEntity)l.getBlockEntity(CHEST)).countItem(Items.BEETROOT)==6,"saved discard changed");
         check(br.com.kraftcity.logistics.DiscardBinding.linked(l,s),"barrel binding was lost after restart");
         for(int i=0;i<2;i++){
             var job=EmploymentData.get(l).assigned(s.industry.getUUID("visual_farmer_companion_"+i));

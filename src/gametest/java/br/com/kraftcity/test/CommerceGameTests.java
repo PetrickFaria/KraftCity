@@ -18,6 +18,7 @@ import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.block.*;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.*;
 import net.minecraft.world.level.block.state.properties.*;
 import net.minecraft.world.phys.*;
@@ -373,6 +374,68 @@ public final class CommerceGameTests {
         farm.l.setBlock(root.above(3),Blocks.AIR.defaultBlockState(),3);IndustrialWork.tick(farm.l,farm.s);var drops=farm.l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,new AABB(root).inflate(1,3,1),e->e.getItem().is(Items.SUGAR_CANE));
         check(count(farm,Items.SUGAR_CANE)==25&&drops.stream().mapToInt(e->e.getItem().getCount()).sum()==2
             &&farm.l.getBlockState(root).is(Blocks.SUGAR_CANE)&&farm.l.getBlockState(root.above()).isAir(),"mature cane harvest");h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=60,batch="baker_distance_selection")
+    public static void baker_includes_each_distance_up_to_but_not_past_one_hundred(GameTestHelper h) {
+        var f = fixture(h, Profession.BAKER);
+        for (int distance : new int[] {10, 30, 50, 75, 99, 100, 101}) {
+            var pos = f.p.east(distance);
+            var farmer = source(f, Profession.FARMER, pos.south(3));
+            var stock = barrel(f, pos);
+            stock.setItem(0, new ItemStack(Items.WHEAT));
+            stock.setItem(1, new ItemStack(Items.CARROT));
+            bind(farmer, stock);
+            f.s.commerce.remove("baker_return");
+            f.v.setPos(Vec3.atBottomCenterOf(pos.south()));
+            work(f, 20);
+            // A completed withdrawal is bound to the tested barrel and leaves its other contents untouched.
+            check(stock.countItem(Items.WHEAT) == (distance <= 100 ? 0 : 1), "incorrect radius at " + distance);
+            check(stock.countItem(Items.CARROT) == 1, "withdrew an unrelated item at " + distance);
+            for (int slot = 0; slot < EmploymentData.COMMON; slot++) f.s.setItem(slot, ItemStack.EMPTY);
+        }
+        check(BakerWork.collected(f.l, f.v) == 6, "incorrect cumulative wheat tally across visits");
+        h.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=1600,batch="baker_distance_hundred")
+    public static void baker_walks_to_the_linked_barrel_at_one_hundred_blocks(GameTestHelper h) {
+        var f = fixture(h, Profession.BAKER);
+        var block = f.p.east(100);
+        var beyond = f.p.east(101);
+        var source = source(f, Profession.FARMER, beyond.south(2));
+        for (var floor : BlockPos.betweenClosed(f.p.offset(1, -1, -2), beyond.offset(1, -1, 2))) {
+            f.l.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+        }
+        var tickets = new HashSet<ChunkPos>();
+        for (int x = 0; x <= 112; x += 16) {
+            var chunk = new ChunkPos(f.p.east(x));
+            if (f.l.setChunkForced(chunk.x, chunk.z, true)) tickets.add(chunk);
+        }
+        var rejected = barrel(f, beyond);
+        rejected.setItem(0, new ItemStack(Items.WHEAT, 15));
+        bind(source, rejected);
+        f.v.setPos(Vec3.atBottomCenterOf(beyond.south()));
+        work(f, 20);
+        check(rejected.countItem(Items.WHEAT) == 15 && count(f, Items.WHEAT) == 0,
+                "barrel at 101 blocks was accessed");
+        var approved = barrel(f, block);
+        approved.setItem(0, new ItemStack(Items.WHEAT, 15));
+        bind(source, approved);
+        var start = Vec3.atBottomCenterOf(f.p.east());
+        f.v.setPos(start);
+        f.v.setNoAi(false);
+        h.startSequence().thenIdle(20).thenExecute(() ->
+            check(approved.countItem(Items.WHEAT) == 15, "wheat was taken remotely"))
+            .thenWaitUntil(() -> {
+                check(count(f, Items.WHEAT) == 15, "waiting for walk to bound barrel: " + f.v.position());
+                check(f.v.distanceToSqr(Vec3.atCenterOf(block)) < 16
+                        && rejected.countItem(Items.WHEAT) == 15 && approved.isEmpty(), "wrong source or remote withdrawal");
+            }).thenWaitUntil(() -> check(f.v.blockPosition().equals(f.p.above()), "waiting for return to bakery"))
+            .thenExecute(() -> {
+                f.v.setNoAi(true);
+                for (var chunk : tickets) f.l.setChunkForced(chunk.x, chunk.z, false);
+            }).thenSucceed();
     }
 
 }

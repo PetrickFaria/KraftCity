@@ -79,8 +79,9 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         addRenderableWidget(new Button(leftPos+8,topPos+151,48,18,Component.literal("<"),b->{page--;buttons();})).active=page>0;
         addRenderableWidget(new Button(leftPos+122,topPos+151,48,18,Component.literal(">"),b->{page++;buttons();})).active=(page+1)*6<candidates.size();
         if(menu.profession!=null)profession=menu.profession;
+        boolean industrial=menu.sector==Profession.Sector.INDUSTRIAL;
         int row=0;for(var p:Profession.values())if(p.sector==menu.sector&&(menu.profession==null||menu.profession==p)){
-            addRenderableWidget(new Button(leftPos+181,topPos+(menu.sector==Profession.Sector.INDUSTRIAL?27:30)+row++*(menu.sector==Profession.Sector.INDUSTRIAL?18:20),161,18,Component.literal((profession==p?"> ":"")+p.label),b->{profession=p;buttons();}));
+            addRenderableWidget(new Button(leftPos+181,topPos+(industrial?27:30)+row++*(industrial?16:20),161,industrial?16:18,Component.literal((profession==p?"> ":"")+p.label),b->{profession=p;buttons();}));
         }
         Button hire=addRenderableWidget(new Button(leftPos+216,topPos+155,126,20,Component.literal(menu.sector==Profession.Sector.MILITARY?"Treinar":"Contratar"),b->{
             if(selected!=null&&profession!=null)WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Hire(menu.containerId,menu.stationId,selected,profession.ordinal()));
@@ -94,12 +95,12 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
                 if(menu.getCarried().isEmpty()){menu.settingsPage=!menu.settingsPage;buttons();}
             })).active=menu.getCarried().isEmpty();
         if(!menu.settingsPage){
-            boolean lumberjack=menu.profession==Profession.LUMBERJACK;
+            boolean centered=IndustrialRules.centeredArea(menu.profession);
             for(int i=0;i<5;i++){
-                int size=lumberjack?IndustrialRules.lumberjackWidth(i):IndustrialRules.minimumSize(menu.profession)+i*2;
-                String dimensions=size+"×"+size+(lumberjack?"×"+IndustrialRules.LUMBERJACK_HEIGHT:"");
+                int size=centered?IndustrialRules.lumberjackWidth(i):IndustrialRules.minimumSize(menu.profession)+i*2;
+                String dimensions=size+"×"+size+(centered?"×"+IndustrialRules.LUMBERJACK_HEIGHT:"");
                 var button=addRenderableWidget(new Button(leftPos+areaButtonX(i),topPos+FARM_AREA_Y,
-                    lumberjack?LUMBER_BUTTON_WIDTH:32,17,Component.literal(dimensions),b->option(size,0)));
+                    centered?LUMBER_BUTTON_WIDTH:32,17,Component.literal(dimensions),b->option(size,0)));
                 button.active=state!=null&&size<=IndustrialRules.maximumSize(menu.profession,state.level());
             }
             if(state!=null&&!state.employed())addRenderableWidget(new Button(leftPos+222,topPos+142,75,16,
@@ -167,7 +168,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         for(var slot:menu.slots){if(!slot.isActive())continue;int x=leftPos+slot.x,y=topPos+slot.y;fill(pose,x-1,y-1,x+17,y+17,0xFF251F18);fill(pose,x,y,x+16,y+16,0xFFB69B73);}
     }
     private int areaButtonX(int option){
-        return menu.profession==Profession.LUMBERJACK?LUMBER_AREA_X+option*LUMBER_AREA_STEP:FARM_AREA_X+option*35;
+        return IndustrialRules.centeredArea(menu.profession)?LUMBER_AREA_X+option*LUMBER_AREA_STEP:FARM_AREA_X+option*35;
     }
     private void drawFarmerBackground(PoseStack pose){
         fill(pose,leftPos+4,topPos+4,leftPos+imageWidth-4,topPos+29,0xFF44372A);
@@ -178,9 +179,9 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         var state=menu.snapshot;
         int minSize=IndustrialRules.minimumSize(menu.profession);
         if(state!=null&&state.size()>=minSize&&state.size()<=IndustrialRules.maximumSize(menu.profession,5)){
-            int index=menu.profession==Profession.LUMBERJACK?IndustrialRules.lumberjackOption(state.size()):(state.size()-minSize)/2;
+            int index=IndustrialRules.centeredArea(menu.profession)?IndustrialRules.lumberjackOption(state.size()):(state.size()-minSize)/2;
             int x=leftPos+areaButtonX(index);
-            int width=menu.profession==Profession.LUMBERJACK?LUMBER_BUTTON_WIDTH:32;
+            int width=IndustrialRules.centeredArea(menu.profession)?LUMBER_BUTTON_WIDTH:32;
             fill(pose,x-1,topPos+FARM_AREA_Y-1,x+width+1,topPos+FARM_AREA_Y+18,0xFFBFD375);
         }
     }
@@ -188,7 +189,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         if(menu.fieldLayout){
             drawCenteredString(pose,font,farmerTitle(imageWidth-54),imageWidth/2,8,0xFFF6E8CC);
             if(menu.settingsPage)return;
-            String[] inputs=menu.farmer?FARM_INPUTS:menu.profession==Profession.LUMBERJACK
+            String[] inputs=menu.profession==Profession.COLLECTOR?new String[0]:menu.farmer?FARM_INPUTS:menu.profession==Profession.LUMBERJACK
                 ?new String[]{"Machado","Mudas"}:new String[]{"Tesoura","Frasco de Vidro","Flor"};
             for(int i=0;i<inputs.length;i++)
                 drawCenteredString(pose,font,inputs[i],WorkMenu.farmAuxX(i)+8,31,0xFFF6E8CC);

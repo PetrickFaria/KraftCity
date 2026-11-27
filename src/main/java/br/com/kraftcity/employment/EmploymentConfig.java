@@ -6,7 +6,6 @@ public final class EmploymentConfig {
     public static final int INDUSTRIAL_COST=10;
     public static final ForgeConfigSpec SPEC;
     public static final ForgeConfigSpec.BooleanValue COMMERCIAL_ENABLED;
-    public static final ForgeConfigSpec.IntValue BAKER_SUPPLY_RANGE;
     public enum CookingFuel { PENDING, VANILLA_FUEL }
     public static final ForgeConfigSpec.EnumValue<CookingFuel> COOKING_FUEL;
     public static final ForgeConfigSpec.IntValue APIARY_HIVE_TICKS, COMMERCIAL_COST, ACTION_TICKS, FISH_TICKS, BREED_TICKS, OTHER_LEVEL_ACTIONS, CARE_TICKS, COMMERCIAL_RULESET;
@@ -26,7 +25,6 @@ public final class EmploymentConfig {
         OTHER_LEVEL_ACTIONS=b.comment("Provisorio: acoes por nivel para Acougueiro/Pescador/Criador/Apicultor; Fazendeiro/Pastoreiro usam 25 fixos.").defineInRange("acoesPorNivelOutrasProfissoes",25,1,10000);
         CARE_TICKS=b.comment("Provisorio: cuidado/treino de lobo logico com um osso, sem ganho passivo de XP.").defineInRange("cuidadoLobosTicks",1200,20,24000);
         b.pop();b.push("comercio");
-        BAKER_SUPPLY_RANGE=b.defineInRange("padeiroAlcanceColeta",32,4,128);
         b.pop(); SPEC=b.build();
     }
     public static int cost(Profession.Sector sector) {

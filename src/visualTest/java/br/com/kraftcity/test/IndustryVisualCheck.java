@@ -242,6 +242,72 @@ public final class IndustryVisualCheck {
         return true;
     }
 
+    private static final BlockPos COLLECTOR_POST = new BlockPos(148, -57, -150);
+    private static final BlockPos COLLECTOR_BARREL = COLLECTOR_POST.west(4);
+    private static UUID collectorStation;
+    private static volatile boolean collectorDelivered;
+    private static int collectorFrames;
+
+    private static boolean collectorScene(Minecraft mc) {
+        var server = mc.getSingleplayerServer();
+        if (collectorFrames++ == 0) server.execute(() -> {
+            var player = server.getPlayerList().getPlayer(mc.player.getUUID());
+            var level = player.getLevel();
+            for (var floor : BlockPos.betweenClosed(COLLECTOR_POST.offset(-6, -1, -3),
+                    COLLECTOR_POST.offset(7, -1, 6))) level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+            var home = COLLECTOR_POST.north(3).below();
+            level.setBlock(home, ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(), 3);
+            ((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity) level.getBlockEntity(home)).setSize(9);
+            var worker = EntityType.VILLAGER.create(level);
+            worker.setAge(0);
+            worker.setInvulnerable(true);
+            worker.setNoAi(true);
+            worker.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(COLLECTOR_POST.south()));
+            level.addFreshEntity(worker);
+            check(ResidenceData.get(level).link(level, home, worker).equals("ok"), "Collector visual residence");
+            level.setBlock(COLLECTOR_POST, WorkModule.INDUSTRIAL.get().defaultBlockState(), 3);
+            player.teleportTo(level, COLLECTOR_POST.getX() + .5, COLLECTOR_POST.getY() + 2,
+                    COLLECTOR_POST.getZ() + 5.5, 180, 20);
+            var station = ((WorkBlockEntity) level.getBlockEntity(COLLECTOR_POST)).station();
+            station.setItem(EmploymentData.PAYMENT, new ItemStack(Items.EMERALD, 10));
+            check(Employment.hire(player, station, worker.getUUID(), Profession.COLLECTOR).equals("ok"), "Collector visual hiring");
+            collectorStation = station.id;
+            level.setBlock(COLLECTOR_BARREL, Blocks.BARREL.defaultBlockState(), 3);
+            br.com.kraftcity.logistics.DiscardBinding.begin(player, station);
+            net.minecraftforge.common.ForgeHooks.onRightClickBlock(player, net.minecraft.world.InteractionHand.MAIN_HAND, COLLECTOR_BARREL,
+                    new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(COLLECTOR_BARREL),
+                            net.minecraft.core.Direction.UP, COLLECTOR_BARREL, false));
+            check(br.com.kraftcity.logistics.DiscardBinding.linked(level, station), "Collector visual barrel binding");
+            var drop = net.minecraft.world.phys.Vec3.atBottomCenterOf(COLLECTOR_POST.east(5).south());
+            var item = new net.minecraft.world.entity.item.ItemEntity(level, drop.x, drop.y, drop.z, new ItemStack(Items.LEATHER, 3));
+            item.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            level.addFreshEntity(item);
+            worker.setNoAi(false);
+        });
+        if (collectorFrames % 10 == 0 && !collectorDelivered) server.execute(() -> {
+            var player = server.getPlayerList().getPlayer(mc.player.getUUID());
+            var level = player.getLevel();
+            var barrel = (net.minecraft.world.level.block.entity.BarrelBlockEntity) level.getBlockEntity(COLLECTOR_BARREL);
+            if (barrel.countItem(Items.LEATHER) != 3) return;
+            var station = EmploymentData.get(level).station(collectorStation);
+            check(count(station, Items.LEATHER) == 0 && WorkforceData.get(level).progress(station.worker, Profession.COLLECTOR.id()).xp() == 1,
+                    "Collector duplicated delivery or XP");
+            WorkBlock.open(player, station);
+            collectorDelivered = true;
+        });
+        check(collectorFrames < 350, "Collector did not physically transfer the drop");
+        if (!collectorDelivered || !(mc.screen instanceof WorkScreen) || !(mc.player.containerMenu instanceof WorkMenu menu)
+                || menu.snapshot == null) return false;
+        check(menu.profession == Profession.COLLECTOR && menu.slots.size() == 63 && menu.snapshot.size() == 15,
+                "Collector menu slots or area");
+        if (!captureReady("visual-collector.png")) return false;
+        mc.player.closeContainer();
+        System.out.println("COLLECTOR_GRAPHICAL_DELIVERY_PASSED");
+        return true;
+    }
+
+    private static boolean collectorSceneDone;
+
     public static void tick(Minecraft mc,int ticks){
         int elapsed=ticks-1120-bindingDelay;if(elapsed<0)return;int i=elapsed/70,phase=elapsed%70;
         if(i<6){
@@ -300,6 +366,10 @@ public final class IndustryVisualCheck {
             });
             if(i==0&&phase==69){check(bounds().stream().anyMatch(b->b.pos().equals(post(0))),"Blue toggle on missing");Screenshot.grab(new File("../build"),"visual-industry-blue-limits.png",mc.getMainRenderTarget(),message->{});System.out.println("INDUSTRY_BLUE_LIMITS_PASSED");}
         }
+        if(elapsed==420&&!collectorSceneDone){
+            collectorSceneDone=collectorScene(mc);
+            if(!collectorSceneDone){bindingDelay++;return;}
+        }
         if(elapsed==425)mc.getSingleplayerServer().execute(()->{
             var l=mc.getSingleplayerServer().overworld();
             var original=(br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)l.getBlockEntity(new BlockPos(1,-58,8));
@@ -357,6 +427,13 @@ public final class IndustryVisualCheck {
             menu.removed(player);
             System.out.println("FARMER_ARCANE_RESTART_PASSED");
         }
+        var collector = ((WorkBlockEntity) l.getBlockEntity(COLLECTOR_POST)).station();
+        var barrel = (net.minecraft.world.level.block.entity.BarrelBlockEntity) l.getBlockEntity(COLLECTOR_BARREL);
+        check(collector.profession == Profession.COLLECTOR && collector.worker != null
+                && IndustrialRules.size(l, collector) == 15
+                && br.com.kraftcity.logistics.DiscardBinding.linked(l, collector)
+                && barrel.countItem(Items.LEATHER) == 3, "Collector link, worker or delivery lost after restart");
+        System.out.println("COLLECTOR_WORLD_RESTART_PASSED");
         FarmerVisualCheck.verifyRestore(l);
         System.out.println("INDUSTRY_SIX_JOBS_WORLD_RESTART_PASSED");
     }

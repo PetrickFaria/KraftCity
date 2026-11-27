@@ -26,13 +26,14 @@ import net.minecraftforge.event.ForgeEventFactory;
 public final class FarmerLogistics {
     public static final String HARVEST_STATION="KraftCityHarvestStation";
 
-    private static UUID harvestStation(ItemEntity item){
+    static UUID harvestStation(ItemEntity item){
         var data=item.getPersistentData();
         return data.hasUUID(HARVEST_STATION)?data.getUUID(HARVEST_STATION):null;
     }
 
     public static boolean sameHarvestOrigin(ItemEntity first,ItemEntity second){
-        return Objects.equals(harvestStation(first),harvestStation(second));
+        return Objects.equals(harvestStation(first),harvestStation(second))
+            && br.com.kraftcity.military.MilitaryDropOrigin.same(first,second);
     }
 
     public static boolean blocksVanillaPickup(Villager worker,ItemEntity item){
@@ -307,17 +308,18 @@ public final class FarmerLogistics {
         var area=IndustrialWork.area(l,s);
         boolean field=fieldWorker(s);
         var search=field?pickupArea(area):area;
-        var farms=EmploymentData.get(l).stations().stream().filter(other->other!=s&&other.active&&other.worker!=null
+        var reservations=s.profession==Profession.COLLECTOR?ProfessionalLoot.reservations(l,search):List.<ProfessionalLoot.Reservation>of();
+        var farms=EmploymentData.get(l).stations().stream().filter(other->other!=s&&ProfessionalLoot.active(l,other)
             &&fieldWorker(other)&&other.dimension.equals(l.dimension()))
             .map(other->new NeighborFarm(other,IndustrialWork.area(l,other)))
             .filter(other->pickupArea(other.area).intersects(search)).toList();
         var rejected=UNREACHABLE_ITEMS.computeIfAbsent(v,k->new HashMap<>());
         rejected.values().removeIf(until->until<=now);
         ItemEntity item=state!=null&&state.item!=null&&l.getEntity(state.item) instanceof ItemEntity e?e:null;
-        if(!eligible(l,s,area,search,farms,item,false)){
+        if(!eligible(l,s,area,search,farms,reservations,item,false)){
             if(item!=null)stopRoute(v);
             if(state!=null&&state.nextScan>now)return closing;
-            item=l.getEntitiesOfClass(ItemEntity.class,search,e->!rejected.containsKey(e.getUUID())&&eligible(l,s,area,search,farms,e,false)).stream()
+            item=l.getEntitiesOfClass(ItemEntity.class,search,e->!rejected.containsKey(e.getUUID())&&eligible(l,s,area,search,farms,reservations,e,false)).stream()
                 .min(Comparator.<ItemEntity>comparingInt(e->area.expandTowards(0,-1,0).contains(e.position())?0:1)
                     .thenComparingDouble(v::distanceToSqr)).orElse(null);
             if(item!=null||!closing)PICKUPS.put(v,new Pickup(item==null?null:item.getUUID(),now+(closing?10:20)));
@@ -327,7 +329,7 @@ public final class FarmerLogistics {
             if(!closing)return false;
             // Tile drops may still have their vanilla pickup delay at a time jump.
             boolean pending=!l.getEntitiesOfClass(ItemEntity.class,search,e->e.hasPickUpDelay()
-                &&eligible(l,s,area,search,farms,e,true)&&!rejected.containsKey(e.getUUID())).isEmpty();
+                &&eligible(l,s,area,search,farms,reservations,e,true)&&!rejected.containsKey(e.getUUID())).isEmpty();
             if(pending)PICKUPS.put(v,new Pickup(null,now+5));
             return pending;
         }
@@ -341,7 +343,7 @@ public final class FarmerLogistics {
             }
         }
         if(IndustrialWork.allowed(l,s,v,item.blockPosition(),item,switch(s.profession){case BEEKEEPER->"apiary_collect";case FARMER->"farmer_collect";case LUMBERJACK->"lumberjack_collect";default->"worker_collect";})
-            &&eligible(l,s,area,search,farms,item,false)&&(field||area.contains(v.position()))&&pickupReach(l,v,item)
+            &&eligible(l,s,area,search,farms,s.profession==Profession.COLLECTOR?ProfessionalLoot.reservations(l,search):reservations,item,false)&&(field||area.contains(v.position()))&&pickupReach(l,v,item)
             &&Employment.valid(l,v.getUUID())&&v.getUUID().equals(s.worker)){
             var take=item.getItem().copy();
             while(!take.isEmpty()&&!IndustrialWork.insert(s,take,false))take.shrink(1);
@@ -349,6 +351,7 @@ public final class FarmerLogistics {
                 var remaining=item.getItem().copy();
                 remaining.shrink(take.getCount());
                 v.take(item,take.getCount());
+                if(s.profession==Profession.COLLECTOR)IndustrialRules.progress(l,s);
                 if(remaining.isEmpty())item.discard();else item.setItem(remaining);
                 stopRoute(v);
                 rescan(v);
@@ -431,20 +434,21 @@ public final class FarmerLogistics {
     }
 
     private static boolean eligible(ServerLevel l,EmploymentData.Station s,net.minecraft.world.phys.AABB area,
-                                    net.minecraft.world.phys.AABB search,List<NeighborFarm> farms,ItemEntity e,boolean allowDelay){
+                                    net.minecraft.world.phys.AABB search,List<NeighborFarm> farms,List<ProfessionalLoot.Reservation> reservations,ItemEntity e,boolean allowDelay){
         if(e==null||e.getOwner()!=null||!e.isAlive()||!allowDelay&&e.hasPickUpDelay()||!search.contains(e.position())||!l.hasChunkAt(e.blockPosition()))return false;
+        if(!ProfessionalLoot.eligible(l,s,e,reservations))return false;
         var point=e.position();
         if(exclusiveNeighbor(area,farms,point))return false;
         UUID source=harvestStation(e);
         if(source!=null&&!source.equals(s.id)){
             var owner=EmploymentData.get(l).station(source);
-            if(owner!=null&&owner.active&&owner.worker!=null)return false;
+            if(s.profession!=Profession.COLLECTOR&&ProfessionalLoot.active(l,owner))return false;
         }
-        if(!s.id.equals(source)){
+        if(s.profession!=Profession.COLLECTOR&&!s.id.equals(source)){
             boolean inside=area.expandTowards(0,-1,0).contains(point);
             double distance=point.distanceToSqr(Vec3.atCenterOf(s.pos));
             for(var other:farms){
-                if(!pickupArea(other.area).contains(point))continue;
+                if(!pickupArea(other.area).contains(point)||!ProfessionalLoot.matches(other.station.profession,e.getItem()))continue;
                 boolean otherInside=other.area.expandTowards(0,-1,0).contains(point);
                 double otherDistance=point.distanceToSqr(Vec3.atCenterOf(other.station.pos));
                 if(otherInside&&!inside||otherInside==inside&&(otherDistance<distance
@@ -473,6 +477,7 @@ public final class FarmerLogistics {
                 case BREEDER->stack.is(net.minecraft.world.item.Items.BONE)
                     ||stack.getItem().isEdible()&&stack.getItem().getFoodProperties().isMeat();
                 case FISHERMAN->stack.is(net.minecraft.world.item.Items.FISHING_ROD);
+                case COLLECTOR->false;
                 default->true;
             };
             return reserved?ItemStack.EMPTY:stack;
@@ -533,20 +538,30 @@ public final class FarmerLogistics {
         return approachDiscard(level,worker,pos,null,null);
     }
 
+    public static int approachSupply(ServerLevel level, Villager worker, BlockPos pos,
+                                     java.util.function.Predicate<net.minecraftforge.items.IItemHandler> hasSupply) {
+        return approachInventory(level, worker, pos, hasSupply);
+    }
+
     private static int approachDiscard(ServerLevel level,Villager worker,BlockPos pos,EmploymentData.Station station,int[] offers){
+        return approachInventory(level,worker,pos,handler->station==null||DiscardChests.accepts(handler,station,offers));
+    }
+
+    private static int approachInventory(ServerLevel level,Villager worker,BlockPos pos,
+                                         java.util.function.Predicate<net.minecraftforge.items.IItemHandler> accepts){
         var be=DiscardChests.capability(level,pos);
         if(be==null){
             int result=approach(level,worker,pos,1.65,1,path->safeDiscardPath(level,worker,path));
             return result==1&&!visible(level,worker,Vec3.atCenterOf(pos),pos)?-1:result;
         }
         var current=DiscardChests.accessibleHandler(be,worker);
-        if(current!=null&&(station==null||DiscardChests.accepts(current,station,offers))
+        if(current!=null&&accepts.test(current)
             &&worker.distanceToSqr(Vec3.atCenterOf(pos))<=2.72&&visible(level,worker,Vec3.atCenterOf(pos),pos))return 1;
         var access=new ArrayList<BlockPos>();
         for(var side:Direction.Plane.HORIZONTAL){
             var at=pos.relative(side);
             var handler=DiscardChests.handler(be,worker,side);
-            if(!level.hasChunkAt(at)||handler==null||station!=null&&!DiscardChests.accepts(handler,station,offers))continue;
+            if(!level.hasChunkAt(at)||handler==null||!accepts.test(handler))continue;
             for(int y=0;y>=-1;y--){
                 var feet=at.above(y);
                 if(level.getBlockState(feet).getCollisionShape(level,feet).isEmpty()
@@ -555,7 +570,7 @@ public final class FarmerLogistics {
         }
         for(var face:List.of(Direction.UP,Direction.DOWN)){
             var handler=DiscardChests.handler(be,worker,face);
-            if(handler==null||station!=null&&!DiscardChests.accepts(handler,station,offers))continue;
+            if(handler==null||!accepts.test(handler))continue;
             var feet=face==Direction.UP?pos.above():pos.below(2);
             if(level.hasChunkAt(feet)&&level.getBlockState(feet).getCollisionShape(level,feet).isEmpty()
                 &&level.getBlockState(feet.above()).getCollisionShape(level,feet.above()).isEmpty()
@@ -566,7 +581,7 @@ public final class FarmerLogistics {
             int travel=approach(level,worker,feet,.68,0,path->safeDiscardPath(level,worker,path));
             if(travel==0)return 0;
             var handler=DiscardChests.accessibleHandler(be,worker);
-            if(travel==1&&handler!=null&&(station==null||DiscardChests.accepts(handler,station,offers))
+            if(travel==1&&handler!=null&&accepts.test(handler)
                 &&visible(level,worker,Vec3.atCenterOf(pos),pos))return 1;
         }
         return -1;
