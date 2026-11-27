@@ -2757,7 +2757,7 @@ public final class IndustryGameTests {
         var level = h.getLevel();
         var logs = new ArrayList<BlockPos>();
         var f = fixture(h, Profession.LUMBERJACK, post -> {
-            for (var floor : BlockPos.betweenClosed(post.offset(-6,-1,-6),post.offset(8,-1,6))) {
+            for (var floor : BlockPos.betweenClosed(post.offset(-9,-1,-10),post.offset(8,-1,9))) {
                 level.setBlockAndUpdate(floor, Blocks.DIRT.defaultBlockState());
             }
             var root = post.east(2);
@@ -2771,7 +2771,8 @@ public final class IndustryGameTests {
             check(logs.stream().anyMatch(pos -> pos.getY() > post.getY() + 4
                     && (pos.getX() != root.getX() || pos.getZ() != root.getZ())), "Generated oak did not have a high branch");
         });
-        f.v.setPos(Vec3.atBottomCenterOf(f.p.west(2).north(2)));
+        var approach=Vec3.atBottomCenterOf(f.p.west(2).north(2));
+        f.v.setPos(approach);
         f.s.setItem(EmploymentData.TOOL, new ItemStack(Items.NETHERITE_AXE));
         level.setDayTime(13000);
         f.v.setNoAi(false);
@@ -2781,6 +2782,8 @@ public final class IndustryGameTests {
             level.setDayTime(1000);
         }).thenExecuteAfter(90, () -> {
             check(logs.stream().allMatch(pos -> level.getBlockState(pos).is(Blocks.OAK_LOG)), "Cut started without an axe");
+            f.v.getNavigation().stop();
+            f.v.setPos(approach);
             f.s.setItem(EmploymentData.TOOL, new ItemStack(Items.NETHERITE_AXE));
         }).thenWaitUntil(() -> {
             var remaining=logs.stream().filter(pos->level.getBlockState(pos).is(Blocks.OAK_LOG)).toList();
