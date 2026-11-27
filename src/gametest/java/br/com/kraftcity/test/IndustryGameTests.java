@@ -638,16 +638,21 @@ public final class IndustryGameTests {
         f.v.setNoAi(false);
         f.s.setItem(27,new ItemStack(Items.IRON_HOE));
         var area=IndustrialWork.area(f.l,f.s);
+        var crop=f.p.east().above();
+        var mature=Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7);
+        long initialXp=WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.FARMER.id()).xp();
         h.startSequence().thenWaitUntil(()->{
             check(area.contains(f.v.position()),"Idle walk escaped professional area");
             check(f.v.distanceToSqr(start)>1,"Waiting for a spontaneous industrial walk");
         }).thenExecute(()->{
-            var crop=f.p.east(2).above();
             f.l.setBlock(crop.below(),Blocks.FARMLAND.defaultBlockState(),3);
-            f.l.setBlock(crop,Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE,7),3);
-        }).thenWaitUntil(()->check(count(f,Items.WHEAT)>0||
-            !f.l.getBlockState(f.p.east(2).above()).is(Blocks.WHEAT),"Idle path blocked a ripe crop"))
-          .thenSucceed();
+            f.l.setBlock(crop,mature,3);
+        }).thenWaitUntil(()->{
+            var state=f.l.getBlockState(crop);
+            long xp=WorkforceData.get(f.l).progress(f.v.getUUID(),Profession.FARMER.id()).xp();
+            check(xp==initialXp+1&&(state.isAir()||
+                state.is(Blocks.WHEAT)&&state.getValue(CropBlock.AGE)<7),"Idle path blocked a ripe crop");
+        }).thenSucceed();
     }
 
     @GameTest(template="empty",timeoutTicks=90,batch="kc130_bond")
