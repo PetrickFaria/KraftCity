@@ -2788,7 +2788,9 @@ public final class IndustryGameTests {
         }).thenWaitUntil(() -> {
             var remaining=logs.stream().filter(pos->level.getBlockState(pos).is(Blocks.OAK_LOG)).toList();
             check(remaining.isEmpty(),"Vanilla fancy oak left uncut logs "+remaining+" at worker "+f.v.position());
-            check(count(f, Items.OAK_LOG) == logs.size(), "Logs missing from a mature tree");
+            check(f.s.getItem(EmploymentData.TOOL).getDamageValue()==logs.size(),"wrong durability for branched oak");
+        }).thenIdle(20).thenExecute(()->decayUnsupportedLeaves(level,f.p.east(2))).thenWaitUntil(()->{
+            check(count(f,Items.OAK_LOG)==logs.size(),"logs still missing after the canopy decayed");
         }).thenExecute(() -> f.v.setNoAi(true)).thenSucceed();
     }
 
@@ -2874,16 +2876,20 @@ public final class IndustryGameTests {
         }).thenIdle(20).thenExecute(()->{
             // The low oak canopy can physically seal drops beside the post.
             // Run vanilla random ticks on already unsupported leaves to exercise collection after decay.
-            for(var pos:BlockPos.betweenClosed(root.offset(-6,0,-6),root.offset(6,16,6))){
-                var state=f.l.getBlockState(pos);
-                if(state.getBlock() instanceof LeavesBlock&&state.getValue(LeavesBlock.DISTANCE)==7)
-                    state.randomTick(f.l,pos,f.l.random);
-            }
+            decayUnsupportedLeaves(f.l,root);
         }).thenWaitUntil(()->{
             check(count(f, wood) == logs.size(), "Some generated logs were not physically collected after decay");
             check(f.s.getItem(EmploymentData.TOOL).getDamageValue() == logs.size(), "Durability did not match actual cuts");
             check(f.l.getBlockState(f.p).is(WorkModule.PROFESSIONAL.get(Profession.LUMBERJACK).get()), "Tree cut affected the work post");
         }).thenExecute(() -> f.v.setNoAi(true)).thenSucceed();
+    }
+
+    private static void decayUnsupportedLeaves(ServerLevel level,BlockPos root){
+        for(var pos:BlockPos.betweenClosed(root.offset(-7,0,-7),root.offset(7,20,7))){
+            var state=level.getBlockState(pos);
+            if(state.getBlock() instanceof LeavesBlock&&state.getValue(LeavesBlock.DISTANCE)==7)
+                state.randomTick(level,pos,level.random);
+        }
     }
 
     @GameTest(template="empty",timeoutTicks=60,batch="lumberjack_bounds")
