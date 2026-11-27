@@ -24,7 +24,7 @@ O Padeiro depende de chunks carregados e de um caminho transitável. Os trabalha
 
 ## D. Correções adicionais
 
-A lista de contratação industrial foi ajustada para acomodar a nova profissão acima do botão de contratação. Os testes que usavam recursos genéricos para verificar rotas mantêm as mesmas verificações físicas e agora usam itens relacionados à profissão. Os testes de corte medem os drops no chão enquanto a árvore está em andamento.
+A coleta de madeira junto a um patamar pode usar um salto físico, com proximidade e visada novamente verificadas antes da transferência. A lista de contratação industrial foi ajustada para acomodar a nova profissão acima do botão de contratação. Os testes que usavam recursos genéricos para verificar rotas mantêm as mesmas verificações físicas e agora usam itens relacionados à profissão. Os testes de corte medem os drops no chão enquanto a árvore está em andamento.
 
 ## E. Testes
 
@@ -38,11 +38,11 @@ O artefato esperado é `kraftcity-1.1.39.jar`, para Minecraft Java 1.19.2, Forge
 
 | Requisito | Status | Evidência |
 | --- | --- | --- |
-| Lenhador conclui a árvore antes da coleta | Parcial | O cenário inspeciona o primeiro drop e o último tronco. |
-| Folhas removidas ao concluir | Parcial | O cenário inclui copas em contato e folhas persistentes. |
-| Espera de cinco segundos | Parcial | O cenário mede a espera no servidor. |
-| Padeiro busca trigo a até 100 blocos | Concluído | Teste direcionado de caminhada até o barril a 100 blocos, retirada e volta ao posto. O barril a 101 blocos fica intacto. |
-| Coletor | Parcial | O teste de sobreposição aprovado usa a IA completa. Validação visual na suíte de entrega. |
+| Lenhador conclui a árvore antes da coleta | Concluído | GameTest com drops no chão durante o corte e captura em uma cópia do mundo Teste. |
+| Folhas removidas ao concluir | Concluído | GameTest com copas em contato e folhas persistentes, e captura da remoção da copa da bétula na cópia do mundo Teste. |
+| Espera de cinco segundos | Concluído | GameTest mede o relógio após o corte e aguarda a próxima seleção. |
+| Padeiro busca trigo a até 100 blocos | Concluído | Teste direcionado de caminhada até o barril a 100 blocos, retirada e volta ao posto. O barril a 101 blocos fica intacto. Teste adicional verifica 10, 30, 50, 75, 99, 100 e 101 blocos. |
+| Coletor | Parcial | O teste de sobreposição usa a IA completa. A captura no cliente Forge confirma a entrega ao barril manual. |
 | Coleta exclusiva por profissão | Parcial | Testes direcionados com trigo, madeira, favo, peixe e drops associados ao Soldado. |
 | Áreas sobrepostas | Concluído | Cenoura reservada no cultivo, cenoura disponível fora do cultivo e coleta de couro e peixe na sobreposição. |
 | Drops de mobs de mods | Não validado | O teste do evento Forge fornece um drop não classificado por tipo e verifica seus metadados. A matriz com mods reais exige um perfil compatível. |

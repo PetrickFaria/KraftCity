@@ -31,7 +31,8 @@ public final class CommerceVisualCheck {
     private static volatile UUID worker;
     private static volatile boolean done,nightReady,restoreComplete;
     private static volatile String problem="";
-    private static int stage=-1,ticks,readyTicks;private static boolean builderReturned, bakerDawnStarted, bakerPartialStarted;
+    private static volatile int stage=-1;
+    private static int ticks,readyTicks;private static boolean builderReturned, bakerDawnStarted, bakerPartialStarted;
     private static final long[] began=new long[3];
     private static final boolean[] visited=new boolean[3];
     private static BlockPos post(int i){return new BlockPos(100+18*i,-60,40);}
@@ -114,6 +115,7 @@ public final class CommerceVisualCheck {
     @net.minecraftforge.eventbus.api.SubscribeEvent(priority=net.minecraftforge.eventbus.api.EventPriority.LOWEST)
     public static void actualSupply(WorkActionEvent e){if(!e.action.equals("commercial_supply")||!e.station.commerce.contains("visual_stage"))return;int i=e.station.commerce.getInt("visual_stage");if(i<0||i>=3||!e.station.pos.equals(post(i)))return;check(e.worker.distanceToSqr(Vec3.atCenterOf(e.position))<=9,"Commercial supply occurred without physical arrival");var inventory=DiscardChests.at(e.level,e.position);check(inventory!=null,"Commercial supply accessed absent container");visited[i]=true;e.station.commerce.putLong("visual_actual_supply",e.position.asLong());}
     private static void poll(ServerPlayer player,int i){
+        if(stage!=i||done)return;
         var l=player.getLevel();var s=station(l,i);
         if(i==1&&s.commerce.hasUUID("visual_cane_post")){
             var source=EmploymentData.get(l).station(s.commerce.getUUID("visual_cane_post"));

@@ -376,26 +376,57 @@ public final class CommerceGameTests {
             &&farm.l.getBlockState(root).is(Blocks.SUGAR_CANE)&&farm.l.getBlockState(root.above()).isAir(),"mature cane harvest");h.succeed();
     }
 
-    @GameTest(template="empty",timeoutTicks=60,batch="baker_distance_selection")
+    // At most one 40-tick source rescan per accepted visit, plus the final rejection window.
+    @GameTest(template="empty",timeoutTicks=360,batch="baker_distance_selection")
     public static void baker_includes_each_distance_up_to_but_not_past_one_hundred(GameTestHelper h) {
         var f = fixture(h, Profession.BAKER);
-        for (int distance : new int[] {10, 30, 50, 75, 99, 100, 101}) {
+        int[] distances = {10, 30, 50, 75, 99, 100, 101};
+        var tickets = new HashSet<ChunkPos>();
+        var stocks = new ArrayList<BarrelBlockEntity>();
+        for (int distance : distances) {
             var pos = f.p.east(distance);
-            var farmer = source(f, Profession.FARMER, pos.south(3));
+            var farmerPos = pos.south(3);
+            for (var cell : List.of(pos, pos.south(), farmerPos)) {
+                var chunk = new ChunkPos(cell);
+                if (f.l.setChunkForced(chunk.x, chunk.z, true)) tickets.add(chunk);
+                f.l.getChunk(chunk.x, chunk.z);
+            }
+            f.l.setBlock(pos.south().below(), Blocks.STONE.defaultBlockState(), 3);
+            f.l.setBlock(pos.south(), Blocks.AIR.defaultBlockState(), 3);
+            f.l.setBlock(pos.south().above(), Blocks.AIR.defaultBlockState(), 3);
+            var farmer = source(f, Profession.FARMER, farmerPos);
             var stock = barrel(f, pos);
-            stock.setItem(0, new ItemStack(Items.WHEAT));
             stock.setItem(1, new ItemStack(Items.CARROT));
             bind(farmer, stock);
-            f.s.commerce.remove("baker_return");
-            f.v.setPos(Vec3.atBottomCenterOf(pos.south()));
-            work(f, 20);
-            // A completed withdrawal is bound to the tested barrel and leaves its other contents untouched.
-            check(stock.countItem(Items.WHEAT) == (distance <= 100 ? 0 : 1), "incorrect radius at " + distance);
-            check(stock.countItem(Items.CARROT) == 1, "withdrew an unrelated item at " + distance);
-            for (int slot = 0; slot < EmploymentData.COMMON; slot++) f.s.setItem(slot, ItemStack.EMPTY);
+            stocks.add(stock);
         }
-        check(BakerWork.collected(f.l, f.v) == 6, "incorrect cumulative wheat tally across visits");
-        h.succeed();
+        var sequence = h.startSequence().thenIdle(12);
+        for (int i = 0; i < distances.length; i++) {
+            int distance = distances[i];
+            var stock = stocks.get(i);
+            sequence.thenExecute(() -> {
+                stock.setItem(0, new ItemStack(Items.WHEAT));
+                f.s.commerce.remove("baker_return");
+                f.v.setPos(Vec3.atBottomCenterOf(stock.getBlockPos().south()));
+            });
+            if (distance <= 100) {
+                sequence.thenWaitUntil(() -> {
+                    work(f, 20);
+                    check(stock.countItem(Items.WHEAT) == 0, "waiting for classified source at " + distance);
+                });
+            } else {
+                sequence.thenIdle(45).thenExecute(() ->
+                        check(stock.countItem(Items.WHEAT) == 1, "withdrawal was allowed at 101 blocks"));
+            }
+            sequence.thenExecute(() -> {
+                check(stock.countItem(Items.CARROT) == 1, "withdrew an unrelated item at " + distance);
+                for (int slot = 0; slot < EmploymentData.COMMON; slot++) f.s.setItem(slot, ItemStack.EMPTY);
+            });
+        }
+        sequence.thenExecute(() -> {
+            check(BakerWork.collected(f.l, f.v) == 6, "incorrect cumulative wheat tally across visits");
+            for (var chunk : tickets) f.l.setChunkForced(chunk.x, chunk.z, false);
+        }).thenSucceed();
     }
 
     @GameTest(template="empty",timeoutTicks=1600,batch="baker_distance_hundred")

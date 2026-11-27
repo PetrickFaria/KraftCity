@@ -39,7 +39,7 @@ public final class EmploymentGameTests {
         check(Employment.hire(f.player,f.station,replacement.getUUID(),Profession.FARMER).equals("ok"),"Captured resident could not be explicitly rehired");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="employment")
-    public static void all_seven_industrial_choices_create_distinct_registered_professional_blocks(GameTestHelper h){
+    public static void all_eight_industrial_choices_create_distinct_registered_professional_blocks(GameTestHelper h){
         var f=fixture(h,Profession.Sector.INDUSTRIAL);int index=0;
         for(Profession profession:Profession.values())if(profession.sector==Profession.Sector.INDUSTRIAL){
             int price=index==0?10:1;BlockPos pos=f.pos.offset(0,0,index++*2);f.level.setBlock(pos,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);
@@ -49,7 +49,7 @@ public final class EmploymentGameTests {
             check(f.level.getBlockState(pos).is(WorkModule.PROFESSIONAL.get(profession).get())&&station.getItem(31).getCount()==10-price,"Choice did not transform/charge: "+profession);
             Employment.release(f.level,f.resident.getUUID());
         }
-        check(index==7,"Industrial choice count changed");h.succeed();
+        check(index==8,"Industrial choice count changed");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="employment")
     public static void candidate_filter_excludes_babies_nitwits_vanilla_workers_and_nonresidents(GameTestHelper h){
