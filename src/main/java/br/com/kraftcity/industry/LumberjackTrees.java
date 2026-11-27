@@ -51,13 +51,25 @@ final class LumberjackTrees extends SavedData {
     static void placed(BlockEvent.EntityPlaceEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level) || event.isCanceled()) return;
         if (event instanceof BlockEvent.EntityMultiPlaceEvent multiple) {
+            var snapshots = multiple.getReplacedBlockSnapshots();
             // Forge wraps player use of bone meal in the same event as construction.
             if (event.getEntity() instanceof Player player
                     && (player.getMainHandItem().is(Items.BONE_MEAL) || player.getOffhandItem().is(Items.BONE_MEAL))
-                    && multiple.getReplacedBlockSnapshots().stream().anyMatch(snapshot ->
+                    && snapshots.stream().anyMatch(snapshot ->
                         snapshot.getReplacedBlock().getBlock() instanceof SaplingBlock
-                            && level.getBlockState(snapshot.getPos()).is(BlockTags.LOGS))) return;
-            for (var snapshot : multiple.getReplacedBlockSnapshots()) mark(level, snapshot.getPos(), level.getBlockState(snapshot.getPos()));
+                            && level.getBlockState(snapshot.getPos()).is(BlockTags.LOGS))) {
+                var data = get(level);
+                var visited = new HashSet<Long>();
+                for (var snapshot : snapshots) {
+                    var pos = snapshot.getPos();
+                    // Only a confirmed replacement of a non-log can retire an old record.
+                    if (visited.add(pos.asLong()) && !snapshot.getReplacedBlock().is(BlockTags.LOGS)
+                            && level.getBlockState(pos).is(BlockTags.LOGS)
+                            && data.constructed.remove(pos.asLong())) data.setDirty();
+                }
+                return;
+            }
+            for (var snapshot : snapshots) mark(level, snapshot.getPos(), level.getBlockState(snapshot.getPos()));
         } else {
             mark(level, event.getPos(), event.getPlacedBlock());
         }

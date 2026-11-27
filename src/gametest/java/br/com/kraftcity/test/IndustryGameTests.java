@@ -2712,12 +2712,12 @@ public final class IndustryGameTests {
 
     @GameTest(template="empty",timeoutTicks=650,batch="lumberjack_vanilla_growth")
     public static void lumberjack_finishes_an_oak_grown_after_hiring_beside_its_post(GameTestHelper h){
-        assertLumberjackFellsVanillaOak(h, false);
+        assertLumberjackFellsVanillaTree(h, false);
     }
 
     @GameTest(template="empty",timeoutTicks=650,batch="lumberjack_vanilla_growth")
-    public static void lumberjack_finishes_bonemealed_oak_at_area_edge(GameTestHelper h){
-        assertLumberjackFellsVanillaOak(h, true);
+    public static void lumberjack_finishes_bonemealed_birch_at_area_edge(GameTestHelper h){
+        assertLumberjackFellsVanillaTree(h, true);
     }
 
     @GameTest(template="empty",timeoutTicks=1300,batch="lumberjack_vanilla_branched")
@@ -2780,7 +2780,7 @@ public final class IndustryGameTests {
         });
     }
 
-    private static void assertLumberjackFellsVanillaOak(GameTestHelper h, boolean boneMeal) {
+    private static void assertLumberjackFellsVanillaTree(GameTestHelper h, boolean boneMeal) {
         var f = fixture(h, Profession.LUMBERJACK);
         // The full suite reuses space for multiple batches. Keep this approach and canopy clear.
         for (var cell : BlockPos.betweenClosed(f.p.offset(-4,-1,-4),f.p.offset(4,12,4))) {
@@ -2797,8 +2797,17 @@ public final class IndustryGameTests {
         f.v.setPos(start);
         f.s.setItem(EmploymentData.TOOL, new ItemStack(Items.NETHERITE_AXE));
         f.v.setNoAi(false);
-        f.l.setBlockAndUpdate(root, Blocks.OAK_SAPLING.defaultBlockState());
-        var sapling = (SaplingBlock) Blocks.OAK_SAPLING;
+        var log=boneMeal?Blocks.BIRCH_LOG:Blocks.OAK_LOG;
+        var wood=boneMeal?Items.BIRCH_LOG:Items.OAK_LOG;
+        var sapling=(SaplingBlock)(boneMeal?Blocks.BIRCH_SAPLING:Blocks.OAK_SAPLING);
+        if (boneMeal) {
+            var previousBuilder=FakePlayerFactory.get(f.l,new GameProfile(UUID.randomUUID(),"PreviousBuilder"));
+            f.l.setBlockAndUpdate(root,Blocks.OAK_LOG.defaultBlockState());
+            var snapshot=net.minecraftforge.common.util.BlockSnapshot.create(f.l.dimension(),f.l,root);
+            MinecraftForge.EVENT_BUS.post(new net.minecraftforge.event.level.BlockEvent.EntityPlaceEvent(
+                    snapshot,f.l.getBlockState(root.below()),previousBuilder));
+        }
+        f.l.setBlockAndUpdate(root, sapling.defaultBlockState());
         var random = net.minecraft.util.RandomSource.create(9);
         var logs = new ArrayList<BlockPos>();
         h.startSequence().thenExecuteAfter(100, () -> {
@@ -2815,18 +2824,18 @@ public final class IndustryGameTests {
                         new net.minecraft.world.item.context.UseOnContext(actor,net.minecraft.world.InteractionHand.MAIN_HAND,hit));
                 } else sapling.randomTick(state, f.l, root, random);
             }
-            check(f.l.getBlockState(root).is(Blocks.OAK_LOG), "Vanilla sapling did not grow");
+            check(f.l.getBlockState(root).is(log), "Vanilla sapling did not grow");
             for (var pos : BlockPos.betweenClosed(root.offset(-4,0,-4),root.offset(4,16,4))) {
-                if (f.l.getBlockState(pos).is(Blocks.OAK_LOG)) logs.add(pos.immutable());
+                if (f.l.getBlockState(pos).is(log)) logs.add(pos.immutable());
             }
             check(logs.size() >= 4, "Vanilla tree had fewer than four logs");
             f.l.setBlockAndUpdate(root.east(),Blocks.STONE.defaultBlockState());
         }).thenWaitUntil(() -> {
-            var remaining = logs.stream().filter(pos -> f.l.getBlockState(pos).is(Blocks.OAK_LOG)).toList();
-            check(remaining.isEmpty(), "Vanilla oak left uncut logs " + remaining + " at post " + f.p
+            var remaining = logs.stream().filter(pos -> f.l.getBlockState(pos).is(log)).toList();
+            check(remaining.isEmpty(), "Vanilla tree left uncut logs " + remaining + " at post " + f.p
                     + " with worker at " + f.v.position() + " and axe damage " + f.s.getItem(EmploymentData.TOOL).getDamageValue());
             check(f.v.position().distanceToSqr(start) > 1, "Worker never approached the trunk");
-            check(count(f, Items.OAK_LOG) == logs.size(), "Some generated logs were not collected");
+            check(count(f, wood) == logs.size(), "Some generated logs were not collected");
             check(f.s.getItem(EmploymentData.TOOL).getDamageValue() == logs.size(), "Durability did not match actual cuts");
             check(f.l.getBlockState(f.p).is(WorkModule.PROFESSIONAL.get(Profession.LUMBERJACK).get()), "Tree cut affected the work post");
         }).thenExecute(() -> f.v.setNoAi(true)).thenSucceed();
