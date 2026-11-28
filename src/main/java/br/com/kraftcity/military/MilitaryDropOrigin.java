@@ -56,13 +56,7 @@ public final class MilitaryDropOrigin {
 
     public static boolean reserved(ServerLevel level, ItemEntity item) {
         UUID worker = worker(item);
-        if (worker == null) {
-            if (item.getOwner() != null || item.getPersistentData().getBoolean(PERSONAL)) return false;
-            if (!item.getPersistentData().getBoolean(HOSTILE) && !item.getItem().is(COMMON)) return false;
-            return EmploymentData.get(level).stations().stream().anyMatch(station ->
-                    Military.military(station) && station.active && station.worker != null
-                    && station.dimension.equals(level.dimension()) && within(station, item.position()));
-        }
+        if (worker == null || item.getOwner() != null || item.getPersistentData().getBoolean(PERSONAL)) return false;
         var station = EmploymentData.get(level).assigned(worker);
         return Military.military(station) && station.active && station.dimension.equals(level.dimension())
                 && level.hasChunkAt(station.pos) && level.getBlockEntity(station.pos) instanceof WorkBlockEntity post

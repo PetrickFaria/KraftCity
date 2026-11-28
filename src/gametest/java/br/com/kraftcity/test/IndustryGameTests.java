@@ -3435,4 +3435,24 @@ public final class IndustryGameTests {
         }).thenSucceed();
     }
 
+    @GameTest(template="empty",timeoutTicks=520,batch="collector_return_at_dawn")
+    public static void collector_walks_from_residence_to_work_at_dawn(GameTestHelper h){
+        var f=fixture(h,Profession.COLLECTOR,36,post->{});
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var start=Vec3.atBottomCenterOf(home.north(3).above());
+        var drop=loose(f,f.p.east(2).above(),Items.LEATHER);
+        f.v.setPos(start);
+        f.v.setNoAi(false);
+        f.l.setDayTime(13000);
+        h.startSequence().thenIdle(30).thenExecute(()->{
+            check(drop.isAlive()&&count(f,Items.LEATHER)==0,"collector worked at night");
+            f.l.setDayTime(24000);
+        }).thenWaitUntil(()->{
+            check(count(f,Items.LEATHER)==1&&!drop.isAlive(),"waiting for collection after dawn");
+            check(f.v.distanceToSqr(start)>16,"collector did not walk out of the residence");
+            f.v.setNoAi(true);
+        }).thenSucceed();
+    }
+
 }

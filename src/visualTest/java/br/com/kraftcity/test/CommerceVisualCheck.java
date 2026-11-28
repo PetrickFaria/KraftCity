@@ -32,7 +32,7 @@ public final class CommerceVisualCheck {
     private static volatile boolean done,nightReady,restoreComplete;
     private static volatile String problem="";
     private static volatile int stage=-1;
-    private static int ticks,readyTicks;private static boolean builderReturned, bakerDawnStarted, bakerPartialStarted;
+    private static int ticks,readyTicks,paymentWait;private static boolean builderReturned, bakerDawnStarted, bakerPartialStarted;
     private static final long[] began=new long[3];
     private static final boolean[] visited=new boolean[3];
     private static BlockPos post(int i){return new BlockPos(100+18*i,-60,40);}
@@ -162,6 +162,13 @@ public final class CommerceVisualCheck {
             if(ticks==25){check(mc.screen instanceof WorkScreen,"Commercial hiring screen missing");select(mc);}
             if(ticks==30&&i==0){var m=(WorkMenu)mc.player.containerMenu;check(m.snapshot!=null&&m.snapshot.cost()==10,"Commercial price is not ten");capture(mc,"visual-commerce-hiring.png");}
             if(ticks==35)click((WorkScreen)mc.screen,"Contratar");
+            if(ticks==41&&!PaymentVisualCheck.ready(mc,9)
+                    ||ticks==48&&!PaymentVisualCheck.synchronizedFunds(mc,10,1)
+                    ||ticks==55&&!PaymentVisualCheck.employed(mc)){
+                check(++paymentWait<240,"Commercial payment synchronization timed out at step "+ticks);
+                ticks--;
+                return;
+            }
             if(ticks==41)PaymentVisualCheck.fund(mc,9);
             if(ticks==48)PaymentVisualCheck.confirm(mc,10,1);
             if(ticks==55)mc.getSingleplayerServer().execute(()->{
@@ -173,7 +180,7 @@ public final class CommerceVisualCheck {
             if(done){
                 readyTicks++;
                 if(readyTicks==15){check(mc.screen instanceof WorkScreen&&mc.player.containerMenu instanceof WorkMenu m&&m.snapshot!=null&&!m.hiring,"Commercial inventory screen not synchronized");capture(mc,"visual-commerce-"+JOBS[i].path+".png");}
-                if(readyTicks==25){mc.player.closeContainer();stage++;ticks=0;readyTicks=0;done=false;
+                if(readyTicks==25){mc.player.closeContainer();stage++;ticks=0;readyTicks=0;paymentWait=0;done=false;
                     if(stage<3){int next=stage;mc.getSingleplayerServer().execute(()->setup(mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID()),next));}
                 }
             }

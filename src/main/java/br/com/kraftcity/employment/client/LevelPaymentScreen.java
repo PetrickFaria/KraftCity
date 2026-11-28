@@ -30,7 +30,8 @@ public final class LevelPaymentScreen extends AbstractContainerScreen<LevelPayme
     }
 
     @Override protected void renderLabels(PoseStack pose,int x,int y){
-        super.renderLabels(pose,x,y);
+        font.draw(pose,title,titleLabelX,titleLabelY,0xFFF1D9A9);
+        font.draw(pose,playerInventoryTitle,inventoryLabelX,inventoryLabelY,0xFFF1D9A9);
         font.draw(pose,font.plainSubstrByWidth(menu.resident+" · "+menu.profession.label,158),8,22,0xFFF1D9A9);
         int size=menu.current==0?5:1;
         for(int i=0;i<size;i++)drawCenteredString(pose,font,"Lv"+(menu.current+i+1),

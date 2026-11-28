@@ -45,7 +45,7 @@ public final class MilitaryVisualCheck {
     private static volatile boolean won,finished;
     private static volatile ItemStack savedWeapon,savedAmmo;
     private static boolean bowPose,crossbowPose;
-    private static int wonAt=-1,openedAt=-1,trainedAt=-1;
+    private static int wonAt=-1,openedAt=-1,trainedAt=-1,paymentDelay;
     private static EmploymentData.Station station(ServerLevel l){return ((WorkBlockEntity)l.getBlockEntity(POST)).station();}
     private static void check(boolean b,String m){if(!b)throw new IllegalStateException(m);}
     private static void capture(Minecraft mc,String name){Screenshot.grab(new File("../build"),name,mc.getMainRenderTarget(),message->{});}
@@ -77,10 +77,14 @@ public final class MilitaryVisualCheck {
                 return;
             }
         }
-        int t=elapsedTicks-openedAt;
+        int t=elapsedTicks-openedAt-paymentDelay;
         if(t==25){check(mc.screen instanceof WorkScreen,"Military hiring screen");String id=worker.toString().substring(0,6);for(int i=0;i<100&&mc.screen.children().stream().noneMatch(x->x instanceof Button b&&b.getMessage().getString().contains(id));i++)click(mc,">");click(mc,id);click(mc,"Soldado");}
         if(t==30)capture(mc,"visual-military-hiring.png");
         if(t==35)click(mc,"Contratar");
+        if(t==41&&!PaymentVisualCheck.ready(mc,9)||t==49&&!PaymentVisualCheck.synchronizedFunds(mc,10,1)){
+            check(++paymentDelay<240,"Military payment synchronization timed out at step "+t);
+            return;
+        }
         if(t==41)PaymentVisualCheck.fund(mc,9);
         if(t==49)PaymentVisualCheck.confirm(mc,10,1);
         if(t>=36&&trainedAt<0){

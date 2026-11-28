@@ -30,6 +30,7 @@ public final class EmploymentVisualCheck {
     private static volatile UUID worker;
     private static com.electronwill.nightconfig.core.CommentedConfig approvedConfig;
     private static volatile boolean hired,shared,portable,pending,rehired;
+    private static int paymentDelay;
     private static void check(boolean value,String message){if(!value)throw new IllegalStateException(message);}
     private static EmploymentData.Station station(ServerLevel level,BlockPos pos){return ((WorkBlockEntity)level.getBlockEntity(pos)).station();}
     private static void open(ServerPlayer player,BlockPos pos){player.teleportTo(player.getLevel(),pos.getX()+.5,pos.getY(),pos.getZ()+1.5,180F,20F);WorkBlock.open(player,station(player.getLevel(),pos));}
@@ -108,6 +109,19 @@ public final class EmploymentVisualCheck {
 
     private static void capture(Minecraft mc,String name){Screenshot.grab(new File("../build"),name,mc.getMainRenderTarget(),message->{});}
     public static void tick(Minecraft mc,int ticks){
+        ticks-=paymentDelay;
+        boolean ready=switch(ticks){
+            case 815,1046->PaymentVisualCheck.ready(mc,1);
+            case 825->PaymentVisualCheck.synchronizedFunds(mc,25,2);
+            case 850,1060->PaymentVisualCheck.employed(mc);
+            case 854->hired;
+            case 861->PaymentVisualCheck.ready(mc,9);
+            case 866,1053->PaymentVisualCheck.synchronizedFunds(mc,10,1);
+            case 868->PaymentVisualCheck.employed(mc);
+            case 870->mc.player.containerMenu instanceof WorkMenu m&&m.snapshot!=null&&m.snapshot.level()==3&&m.snapshot.xp()==57;
+            default->true;
+        };
+        if(!ready){check(++paymentDelay<240,"Employment payment synchronization timed out at step "+ticks);return;}
         var server=mc.getSingleplayerServer();UUID playerId=mc.player.getUUID();
         if(ticks==770)server.execute(()->{
             var level=server.overworld();
@@ -163,6 +177,7 @@ public final class EmploymentVisualCheck {
             var level=server.overworld();
             var progress=WorkforceData.get(level).progress(worker,Profession.FARMER.id());
             check(progress.level()==3&&progress.xp()==7,"Purchased level did not preserve partial XP");
+            System.out.println("EMPLOYMENT_PURCHASED_LEVEL_AND_XP_PASSED");
             WorkforceData.get(level).setProgress(worker,Profession.FARMER.id(),3,57);
         });
         if(ticks==870){check(hired&&mc.player.containerMenu instanceof WorkMenu m&&!m.hiring&&m.slots.get(0).getItem().getCount()==13,"Professional menu inventory did not sync");checkFarmerHeader(screen(mc),"Steve (Fazendeiro) - Lv. 3",50);
@@ -271,7 +286,6 @@ public final class EmploymentVisualCheck {
         if(ticks==1020)click(screen(mc),"Contratar");
         if(ticks==1040){
             selectWorker(mc);
-            var menu=(WorkMenu)mc.player.containerMenu;
             click(screen(mc),"Contratar");
         }
         if(ticks==1046)PaymentVisualCheck.fund(mc,1);
