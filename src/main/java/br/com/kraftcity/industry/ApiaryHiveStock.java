@@ -98,7 +98,7 @@ final class ApiaryHiveStock {
             for(var cell:BlockPos.betweenClosed(min,max)){
                 var pos=cell.immutable();
                 if(level.hasChunkAt(pos)&&level.isEmptyBlock(pos)&&isolated(level,pos.below())
-                        &&belongsHere(level,station,pos)&&facing(level,pos,area)!=null
+                        &&belongsHere(level,station,pos)&&facing(level,station,pos,area)!=null
                         &&level.getEntities(worker,new AABB(pos)).isEmpty())sites.add(pos);
             }
             sites.sort(Comparator.comparingDouble(pos->worker.distanceToSqr(Vec3.atCenterOf(pos))));
@@ -132,7 +132,7 @@ final class ApiaryHiveStock {
         var hit=new BlockHitResult(Vec3.atBottomCenterOf(pos),Direction.UP,support,false);
         if(!ApiaryWork.visible(level,worker,hit.getLocation(),support))
             return ApiaryWork.approachHive(level,station,worker,pos);
-        var direction=facing(level,pos,area);
+        var direction=facing(level,station,pos,area);
         var item=station.getItem(slot);
         if(direction==null||!isHive(item)||!IndustrialWork.allowed(level,station,worker,pos,null,"apiary_hive_place")
                 ||!isolated(level,support)||!level.isEmptyBlock(pos)||!level.getEntities(worker,new AABB(pos)).isEmpty()
@@ -176,13 +176,13 @@ final class ApiaryHiveStock {
             &&!fence.getValue(FenceBlock.SOUTH)&&!fence.getValue(FenceBlock.EAST)&&!fence.getValue(FenceBlock.WEST);
     }
 
-    private static Direction facing(ServerLevel level,BlockPos pos,AABB area){
-        for(var direction:Direction.Plane.HORIZONTAL){
-            var exit=pos.relative(direction);
-            if(area.contains(Vec3.atCenterOf(exit))&&level.hasChunkAt(exit)
-                    &&level.getBlockState(exit).getCollisionShape(level,exit).isEmpty()
-                    &&level.getFluidState(exit).isEmpty())return direction;
-        }
-        return null;
+    private static Direction facing(ServerLevel level,EmploymentData.Station station,BlockPos pos,AABB area){
+        var post=level.getBlockState(station.pos);
+        if(!post.hasProperty(br.com.kraftcity.employment.WorkBlock.FACING))return null;
+        var direction=post.getValue(br.com.kraftcity.employment.WorkBlock.FACING);
+        var exit=pos.relative(direction);
+        return area.contains(Vec3.atCenterOf(exit))&&level.hasChunkAt(exit)
+                &&level.getBlockState(exit).getCollisionShape(level,exit).isEmpty()
+                &&level.getFluidState(exit).isEmpty()?direction:null;
     }
 }

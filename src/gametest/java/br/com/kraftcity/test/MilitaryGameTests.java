@@ -793,6 +793,29 @@ public final class MilitaryGameTests {
         h.succeed();
     }
 
+    @GameTest(template="empty",timeoutTicks=200,batch="military_third_party_hostile_loot")
+    public static void patrol_walks_to_verified_equipment_from_a_hostile_mob(GameTestHelper h){
+        var f=fixture(h);
+        clearTestHostiles(f);
+        var origin=f.p.east();
+        var destination=f.p.east(4);
+        mode(f,Military.Mode.FREE);
+        f.v.setPos(Vec3.atBottomCenterOf(origin));
+        var drop=cityLoot(f.l,destination,Items.IRON_SWORD,1);
+        drop.getItem().setDamageValue(123);
+        var skeleton=EntityType.SKELETON.create(f.l);
+        skeleton.setPos(Vec3.atBottomCenterOf(destination));
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(new net.minecraftforge.event.entity.living.LivingDropsEvent(
+                skeleton,DamageSource.ON_FIRE,List.of(drop),0,false));
+        f.v.setNoAi(false);
+        h.succeedWhen(()->{
+            check(!drop.isAlive()&&f.s.countItem(Items.IRON_SWORD)==1,"waiting for legitimate equipment from a hostile mob");
+            check(f.s.getItem(0).getDamageValue()==123&&f.v.distanceToSqr(Vec3.atBottomCenterOf(origin))>4,
+                    "equipment metadata lost or pickup was remote");
+            f.v.setNoAi(true);
+        });
+    }
+
     private static net.minecraft.world.entity.item.ItemEntity cityLoot(ServerLevel level,BlockPos pos,Item item,int count){
         var center=Vec3.atBottomCenterOf(pos);
         var loot=new net.minecraft.world.entity.item.ItemEntity(level,center.x,center.y+.05,center.z,new ItemStack(item,count));

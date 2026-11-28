@@ -27,7 +27,7 @@ final class ProfessionalLoot {
             case LUMBERJACK -> stack.is(ItemTags.LOGS) || stack.is(ItemTags.LEAVES)
                     || stack.is(ItemTags.SAPLINGS) || stack.is(ItemTags.PLANKS)
                     || stack.is(Items.STICK) || stack.is(Items.APPLE) || LumberjackWork.cutTicks(stack) > 0;
-            case BEEKEEPER -> stack.is(ItemTags.FLOWERS) || stack.is(Items.HONEYCOMB) || stack.is(Items.HONEY_BOTTLE)
+            case BEEKEEPER -> ApiaryHiveStock.isHive(stack) || stack.is(ItemTags.FLOWERS) || stack.is(Items.HONEYCOMB) || stack.is(Items.HONEY_BOTTLE)
                     || stack.is(Items.SHEARS) || stack.is(Items.GLASS_BOTTLE);
             case FISHERMAN -> stack.is(ItemTags.FISHES) || stack.is(Items.INK_SAC) || stack.is(Items.FISHING_ROD);
             case SHEPHERD -> stack.is(ItemTags.WOOL) || stack.is(Items.WHEAT) || stack.is(Items.SHEARS);

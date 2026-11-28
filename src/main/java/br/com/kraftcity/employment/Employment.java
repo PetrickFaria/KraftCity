@@ -15,6 +15,8 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
 /** All mutations run on the server thread; no client price/identity is trusted. */
 public final class Employment {
+    /** Base speed used by the vanilla Villager work, idle and rest behavior packages. */
+    public static final double WALK_SPEED = 0.5;
     static final ThreadLocal<Boolean> CONVERTING=ThreadLocal.withInitial(()->false);
     private Employment(){}
     public static boolean eligible(ServerLevel level,Villager v){

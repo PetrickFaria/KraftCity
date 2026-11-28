@@ -112,7 +112,7 @@ public final class FarmerLogistics {
         v.getNavigation().stop();
         var path=retries<=2?workPath(l,v,pos,accuracy,avoid,permitted):null;
         if(path==null&&avoid!=null&&retries<=2)path=workPath(l,v,pos,accuracy,null,permitted);
-        if(path!=null&&path.canReach()&&permitted.test(path)&&v.getNavigation().moveTo(path,.8)){
+        if(path!=null&&path.canReach()&&permitted.test(path)&&v.getNavigation().moveTo(path,Employment.WALK_SPEED)){
             ROUTES.put(v,new Route(pos.immutable(),path.getTarget(),remaining(v),now,retries));
             return 0;
         }

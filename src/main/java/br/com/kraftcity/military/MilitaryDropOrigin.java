@@ -13,6 +13,7 @@ import net.minecraftforge.event.entity.living.LivingDropsEvent;
 
 public final class MilitaryDropOrigin {
     private static final String HOSTILE = "KraftCityHostileDrop";
+    private static final String PASSIVE = "KraftCityNonHostileDrop";
     private static final String PERSONAL = "KraftCityPlayerToss";
     private static final net.minecraft.tags.TagKey<net.minecraft.world.item.Item> COMMON =
             net.minecraft.tags.TagKey.create(net.minecraft.core.Registry.ITEM_REGISTRY,
@@ -21,13 +22,14 @@ public final class MilitaryDropOrigin {
 
     static void record(LivingDropsEvent event) {
         if (!(event.getEntity() instanceof Mob) || !(event.getEntity().level instanceof ServerLevel level)) return;
-        boolean hostile = event.getEntity() instanceof net.minecraft.world.entity.monster.Enemy;
+        boolean hostile = event.getEntity() instanceof net.minecraft.world.entity.monster.Enemy
+                || event.getEntity().getType().getCategory() == net.minecraft.world.entity.MobCategory.MONSTER;
         Villager soldier = event.getSource().getEntity() instanceof Villager v && Military.isSoldier(v) ? v : null;
         var station = soldier == null ? null : Military.station(soldier);
         for (var drop : event.getDrops()) {
             if (station != null && within(station, event.getEntity().position()))
                 drop.getPersistentData().putUUID(ORIGIN, soldier.getUUID());
-            else if (hostile) drop.getPersistentData().putBoolean(HOSTILE, true);
+            drop.getPersistentData().putBoolean(hostile ? HOSTILE : PASSIVE, true);
         }
     }
 
@@ -43,14 +45,15 @@ public final class MilitaryDropOrigin {
     static boolean belongsTo(ItemEntity item, Villager soldier) {
         if (item.getOwner() != null || item.getPersistentData().getBoolean(PERSONAL)) return false;
         UUID owner = worker(item);
-        return owner != null ? owner.equals(soldier.getUUID())
-                : item.getPersistentData().getBoolean(HOSTILE)
-                || (!item.getItem().isDamageableItem() && !item.getItem().hasTag() && item.getItem().is(COMMON));
+        return item.getPersistentData().getBoolean(HOSTILE)
+                || (owner != null ? owner.equals(soldier.getUUID())
+                : !item.getPersistentData().getBoolean(PASSIVE) && !item.getItem().isDamageableItem() && !item.getItem().hasTag() && item.getItem().is(COMMON));
     }
 
     public static boolean same(ItemEntity a, ItemEntity b) {
         return Objects.equals(worker(a), worker(b))
                 && a.getPersistentData().getBoolean(HOSTILE) == b.getPersistentData().getBoolean(HOSTILE)
+                && a.getPersistentData().getBoolean(PASSIVE) == b.getPersistentData().getBoolean(PASSIVE)
                 && a.getPersistentData().getBoolean(PERSONAL) == b.getPersistentData().getBoolean(PERSONAL);
     }
 

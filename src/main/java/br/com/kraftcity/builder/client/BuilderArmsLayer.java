@@ -48,7 +48,10 @@ public final class BuilderArmsLayer extends RenderLayer<Villager,VillagerModel<V
         var villagerType=net.minecraft.core.Registry.VILLAGER_TYPE.getKey(worker.getVillagerData().getType());
         var robe=new net.minecraft.resources.ResourceLocation(villagerType.getNamespace(),
             "textures/entity/villager/type/"+villagerType.getPath()+".png");
-        root.render(pose,buffers.getBuffer(RenderType.entityTranslucent(WorkerTextures.arms(texture,robe))),light,OverlayTexture.NO_OVERLAY,1,1,1,1);
+        var sleeves=WorkerTextures.arms(texture,robe);
+        var pass=skin==null?RenderType.entityTranslucent(sleeves)
+                :br.com.residenciasaldeoes.client.ResidentSkinRenderType.blended(sleeves);
+        root.render(pose,buffers.getBuffer(pass),light,OverlayTexture.NO_OVERLAY,1,1,1,1);
         if(WorkerPose.active(worker)){
             renderTool(pose,buffers,light,worker,right);
             if(WorkerPose.soldier(worker))renderShield(pose,buffers,light,worker,left);

@@ -135,7 +135,7 @@ public final class IndustrialWork {
                 }
             for(var target:targets.stream().sorted(java.util.Comparator.comparingDouble(worker.blockPosition()::distSqr)).toList()){
                 var path=navigation.createPath(target,0,112);
-                if(path!=null&&path.canReach()&&navigation.moveTo(path,.8))return true;
+                if(path!=null&&path.canReach()&&navigation.moveTo(path,Employment.WALK_SPEED))return true;
             }
             FarmerLogistics.stayInField(level,station,worker);
         }finally{
@@ -166,7 +166,7 @@ public final class IndustrialWork {
     }
     private static boolean reach(Villager v,BlockPos p){
         if(v.distanceToSqr(Vec3.atCenterOf(p))<=9){v.getNavigation().stop();v.lookAt(EntityAnchorArgument.Anchor.EYES,Vec3.atCenterOf(p));return true;}
-        v.getNavigation().moveTo(p.getX()+.5,p.getY(),p.getZ()+.5,.75);return false;
+        v.getNavigation().moveTo(p.getX()+.5,p.getY(),p.getZ()+.5,Employment.WALK_SPEED);return false;
     }
     private static void showTool(Villager v,EmploymentData.Station s){
         if(!v.getPersistentData().contains("KCOriginalHand"))v.getPersistentData().put("KCOriginalHand",v.getMainHandItem().save(new CompoundTag()));

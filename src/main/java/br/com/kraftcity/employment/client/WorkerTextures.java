@@ -97,9 +97,9 @@ public final class WorkerTextures {
         try(var robeFile=mc.getResourceManager().open(garment);var fabric=NativeImage.read(robeFile)){
             NativeImage sleeve;
             if(source instanceof DynamicTexture dynamic && dynamic.getPixels()!=null){
-                sleeve=sleeves(dynamic.getPixels(),fabric,true);
+                sleeve=customSleeves(dynamic.getPixels());
             }else try(var input=mc.getResourceManager().open(skin);var original=NativeImage.read(input)){
-                sleeve=sleeves(original,fabric,false);
+                sleeve=sleeves(original,fabric);
             }
             if(previous!=null)textures.release(previous.generated);
             if(ARMS.size()>=128&&previous==null){
@@ -117,7 +117,20 @@ public final class WorkerTextures {
         }
     }
 
-    private static NativeImage sleeves(NativeImage source,NativeImage fabric,boolean custom){
+    private static NativeImage customSleeves(NativeImage source){
+        var result=new NativeImage(64,64,true);
+        // Vanilla's crossed-arm sleeves are 4×8×4 cuboids at UV (44,22).
+        // Preserve each face and stretch only the vertical sides to the straight-arm height.
+        for(int y=22;y<38;y++){
+            int sourceY=y<26?y:26+(y-26)*8/12;
+            for(int x=44;x<60;x++){
+                result.setPixelRGBA(x,y,source.getPixelRGBA(x*source.getWidth()/64,sourceY*source.getHeight()/64));
+            }
+        }
+        return result;
+    }
+
+    private static NativeImage sleeves(NativeImage source,NativeImage fabric){
         var result=new NativeImage(64,64,true);
         int skin=findOpaque(source,8,8,16,12);
         if(skin==0)skin=findOpaque(source,0,0,32,18);
@@ -128,8 +141,7 @@ public final class WorkerTextures {
             int pixel;
             if(row<7){
                 int biome=sample(fabric,24+column,29+yOffset%4,sample(fabric,29,31,0xFF36605E));
-                int torso=custom?sample(source,24+column,29+yOffset%4,biome):biome;
-                pixel=sample(source,8+column,46+yOffset,torso);
+                pixel=sample(source,8+column,46+yOffset,biome);
             }else pixel=sample(source,10+column,9+((row-7)%2),skin);
             result.setPixelRGBA(x,y,pixel|0xFF000000);
         }

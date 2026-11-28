@@ -1,5 +1,6 @@
 package br.com.kraftcity.industry;
 
+import br.com.kraftcity.employment.Employment;
 import br.com.kraftcity.employment.EmploymentData;
 import br.com.kraftcity.employment.Profession;
 import java.util.ArrayList;
@@ -277,7 +278,7 @@ public final class ApiaryWork {
                 inside=false;
                 break;
             }
-            if(inside&&worker.getNavigation().moveTo(path,.68))return true;
+            if(inside&&worker.getNavigation().moveTo(path,Employment.WALK_SPEED))return true;
         }
         return false;
     }
@@ -367,7 +368,7 @@ public final class ApiaryWork {
         show(worker,flowers);
         for(var bee:pair){
             if(!visible(level,worker,bee.getEyePosition(),null)){
-                worker.getNavigation().moveTo(bee,.68);
+                worker.getNavigation().moveTo(bee,Employment.WALK_SPEED);
                 return true;
             }
             if(!IndustrialWork.allowed(level,station,worker,bee.blockPosition(),bee,"apiary_breed"))return false;

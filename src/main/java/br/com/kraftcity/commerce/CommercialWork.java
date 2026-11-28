@@ -92,7 +92,7 @@ public final class CommercialWork {
     public static int count(EmploymentData.Station s,Item input){int n=s.getItem(28).is(input)?s.getItem(28).getCount():0;for(int i=0;i<27;i++)if(s.getItem(i).is(input))n+=s.getItem(i).getCount();return n;}
     private static boolean reach(Villager v,BlockPos p){
         if(v.distanceToSqr(Vec3.atCenterOf(p))<=9){v.getNavigation().stop();return true;}
-        v.getNavigation().moveTo(p.getX()+.5,p.getY(),p.getZ()+.5,.75);return false;
+        v.getNavigation().moveTo(p.getX()+.5,p.getY(),p.getZ()+.5,Employment.WALK_SPEED);return false;
     }
     static void state(EmploymentData.Station s,String value){if(!s.commerce.getString("status").equals(value)){s.commerce.putString("status",value);s.setChanged();}}
     private static void pause(EmploymentData.Station s){state(s,"Pausa noturna/retorno residencial; progresso preservado.");}

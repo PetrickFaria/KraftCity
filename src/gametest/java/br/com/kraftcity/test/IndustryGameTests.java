@@ -719,6 +719,7 @@ public final class IndustryGameTests {
             check(saved.getTagElement("BlockEntityTag").getList("Bees",Tag.TAG_COMPOUND).size()==1,"Nest occupant lost");
             check(saved.getTagElement("BlockStateTag").getString("honey_level").equals("3"),"Nest honey lost");
             level(f,2,25);
+            f.l.setBlock(f.p,f.l.getBlockState(f.p).setValue(br.com.kraftcity.employment.WorkBlock.FACING,Direction.EAST),3);
             f.l.setBlock(fence,Blocks.OAK_FENCE.defaultBlockState(),3);
         }).thenIdle(30).thenExecute(()->{
             check(f.l.isEmptyBlock(fence.above()),"Promotion alone placed a second hive");
@@ -729,9 +730,33 @@ public final class IndustryGameTests {
             f.l.removeBlock(fence.east(),false);
         }).thenWaitUntil(()->{
             check(f.l.getBlockState(fence.above()).is(Blocks.BEE_NEST),"Waiting for an isolated fence placement");
+            check(f.l.getBlockState(fence.above()).getValue(BeehiveBlock.FACING)==Direction.EAST,"hive did not face the work block front");
             check(count(f,Items.BEE_NEST)==0&&f.l.getBlockState(fence.above()).getValue(BeehiveBlock.HONEY_LEVEL)==3
                 &&((BeehiveBlockEntity)f.l.getBlockEntity(fence.above())).getOccupantCount()==1,"Placement lost data or duplicated stock");
         }).thenSucceed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=360,batch="apiary_hive_front")
+    public static void apiary_places_the_hive_facing_each_work_block_front(GameTestHelper h){
+        var f=fixture(h,Profession.BEEKEEPER);
+        buildWalkableFloor(f,ResidenceData.get(f.l).owner(f.v.getUUID()).pos);
+        var fence=f.p.south(2).above();
+        var hive=fence.above();
+        f.l.setBlockAndUpdate(fence,Blocks.OAK_FENCE.defaultBlockState());
+        f.v.setPos(Vec3.atBottomCenterOf(f.p.south().above()));
+        f.v.setNoAi(false);
+        var sequence=h.startSequence();
+        for(var direction:Direction.Plane.HORIZONTAL){
+            sequence.thenExecute(()->{
+                f.l.setBlockAndUpdate(f.p,f.l.getBlockState(f.p).setValue(br.com.kraftcity.employment.WorkBlock.FACING,direction));
+                f.s.setItem(0,new ItemStack(Items.BEEHIVE));
+            }).thenWaitUntil(()->{
+                var state=f.l.getBlockState(hive);
+                check(state.is(Blocks.BEEHIVE),"waiting for a hive facing "+direction);
+                check(state.getValue(BeehiveBlock.FACING)==direction&&f.s.getItem(0).isEmpty(),"wrong hive front or stock for "+direction);
+            }).thenExecute(()->f.l.removeBlock(hive,false));
+        }
+        sequence.thenExecute(()->f.v.setNoAi(true)).thenSucceed();
     }
 
     @GameTest(template="empty",timeoutTicks=450,batch="kc131_hive_reduction")
@@ -3025,6 +3050,25 @@ public final class IndustryGameTests {
         });
     }
 
+    @GameTest(template="empty",timeoutTicks=360,batch="lumberjack_minimum_replant")
+    public static void lumberjack_walks_to_legal_ground_in_the_minimum_area(GameTestHelper h){
+        var f=fixture(h,Profession.LUMBERJACK,36,post->{});
+        var root=f.p.east(4);
+        var start=Vec3.atBottomCenterOf(f.p.west(4));
+        for(var soil:BlockPos.betweenClosed(f.p.offset(-7,-1,-7),f.p.offset(7,-1,7)))
+            f.l.setBlockAndUpdate(soil,Blocks.STONE.defaultBlockState());
+        lumberClearance(f,root);
+        f.l.setBlockAndUpdate(root.below(),Blocks.DIRT.defaultBlockState());
+        f.v.setPos(start);
+        f.s.setItem(EmploymentData.INPUT_A,new ItemStack(Items.OAK_SAPLING));
+        f.v.setNoAi(false);
+        h.succeedWhen(()->{
+            check(f.l.getBlockState(root).is(Blocks.OAK_SAPLING),"waiting for a valid sapling near the station");
+            check(f.v.distanceToSqr(start)>9&&f.s.getItem(EmploymentData.INPUT_A).isEmpty(),"replant did not require walking and exactly one seed");
+            f.v.setNoAi(true);
+        });
+    }
+
     @GameTest(template="empty",timeoutTicks=360,batch="lumberjack_replant")
     public static void lumberjack_replants_a_single_sapling_after_respecting_the_clearance(GameTestHelper h){
         var f=fixture(h,Profession.LUMBERJACK,32,post->{});
@@ -3315,6 +3359,44 @@ public final class IndustryGameTests {
             check(!item.isAlive()&&f.v.distanceToSqr(target)<2.25,"worker did not approach the relevant item");
             f.v.setNoAi(true);
         });
+    }
+
+    @GameTest(template="empty",timeoutTicks=540,batch="collector_apiary_overlap")
+    public static void collector_yields_hives_to_an_active_apiary(GameTestHelper h) {
+        var f = fixture(h, Profession.BEEKEEPER, 36, post -> {});
+        var pos = f.p.east(5);
+        for (var floor : BlockPos.betweenClosed(f.p.offset(-3, 0, -3), f.p.offset(9, 0, 3)))
+            if (!floor.equals(f.p)) f.l.setBlockAndUpdate(floor, Blocks.STONE.defaultBlockState());
+        f.l.setBlockAndUpdate(pos, WorkModule.INDUSTRIAL.get().defaultBlockState());
+        var station = ((WorkBlockEntity) f.l.getBlockEntity(pos)).station();
+        var collector = EntityType.VILLAGER.create(f.l);
+        collector.setAge(0);
+        collector.setNoAi(true);
+        collector.setPos(Vec3.atBottomCenterOf(pos.east().above()));
+        f.l.addFreshEntity(collector);
+        var home = ResidenceData.get(f.l).owner(f.v.getUUID());
+        check(ResidenceData.get(f.l).link(f.l, home.pos, collector).equals("ok"), "collector residence");
+        var employer = FakePlayerFactory.get(f.l, new GameProfile(UUID.randomUUID(), "CollectorTest"));
+        employer.setPos(collector.position());
+        station.setItem(EmploymentData.PAYMENT, new ItemStack(Items.EMERALD, EmploymentConfig.cost(Profession.Sector.INDUSTRIAL)));
+        check(Employment.hire(employer, station, collector.getUUID(), Profession.COLLECTOR).equals("ok"), "collector hiring");
+        check(IndustrialRules.size(f.l, station) == 15 && !IndustrialRules.selectSize(f.l, station, 25), "level one area");
+        var overlap = f.p.east(2).above();
+        var reserved = loose(f, overlap, Items.BEEHIVE);
+        var free = loose(f, pos.east(3).above(), Items.BEEHIVE);
+        collector.setNoAi(false);
+        h.startSequence().thenWaitUntil(() -> {
+            check(!free.isAlive() && station.countItem(Items.BEEHIVE)==1, "waiting for collector-exclusive hive");
+            check(reserved.isAlive(), "collector took the apiary's hive");
+        }).thenExecute(() -> {
+            f.v.setPos(Vec3.atBottomCenterOf(f.p.west().above()));
+            f.v.setNoAi(false);
+        }).thenWaitUntil(() -> {
+            check(!reserved.isAlive() && count(f,Items.BEEHIVE)==1, "waiting for the beekeeper to collect the hive");
+            check(station.countItem(Items.BEEHIVE)==1, "collector duplicated or took the apiary hive");
+            collector.setNoAi(true);
+            f.v.setNoAi(true);
+        }).thenSucceed();
     }
 
     @GameTest(template="empty",timeoutTicks=540,batch="collector_overlap")

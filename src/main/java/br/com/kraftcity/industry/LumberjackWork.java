@@ -1,5 +1,6 @@
 package br.com.kraftcity.industry;
 
+import br.com.kraftcity.employment.Employment;
 import br.com.kraftcity.builder.BuilderData;
 import br.com.kraftcity.employment.EmploymentData;
 import br.com.kraftcity.workforce.WorkerRecord;
@@ -222,7 +223,8 @@ public final class LumberjackWork {
                     return chop(level, station, worker, session, area, job, axe);
                 }
             }
-            if (session.planting == null && job.isEmpty()) {
+            if (session.planting == null && job.isEmpty()
+                    && level.getGameTime() >= station.industry.getLong("lumberjack_next_tree")) {
                 var planting = findPlanting(level, station, worker, session, area);
                 if (planting != null) {
                     session.planting = planting.pos();
@@ -546,7 +548,7 @@ public final class LumberjackWork {
             var path = worker.getNavigation().createPath(cell,0);
             if (path == null || !path.canReach() || !insidePath(path,area,worker)) continue;
             IndustrialIdle.interrupt(worker);
-            if (worker.getNavigation().moveTo(path,.7)) {
+            if (worker.getNavigation().moveTo(path,Employment.WALK_SPEED)) {
                 session.path = path;
                 return true;
             }
@@ -603,7 +605,7 @@ public final class LumberjackWork {
         for (int slot : seeds) {
             var stack = station.getItem(slot);
             for (var pos : candidates) {
-                if (!plantable(level,area,protectedAreas,pos,stack)) continue;
+                if (!plantable(level,station.pos,area,protectedAreas,pos,stack)) continue;
                 session.routeAfter=0;
                 var footprint = plantingCells(pos, stack);
                 if (canPlantFromHere(level, worker, area, pos, footprint)
@@ -625,7 +627,7 @@ public final class LumberjackWork {
         return seed.is(Items.DARK_OAK_SAPLING)?List.of(pos,pos.east(),pos.south(),pos.south().east()):List.of(pos);
     }
 
-    static boolean plantable(ServerLevel level, AABB area, List<AABB> protectedAreas, BlockPos pos, ItemStack seed) {
+    static boolean plantable(ServerLevel level, BlockPos ownPost, AABB area, List<AABB> protectedAreas, BlockPos pos, ItemStack seed) {
         if (!sapling(seed)) return false;
         var footprint = plantingCells(pos,seed);
         if (seed.getCount()<footprint.size()) return false;
@@ -639,6 +641,8 @@ public final class LumberjackWork {
                 if (x*x+z*z>=49) continue;
                 for (int y=0;y<clearance;y++) {
                     var test = root.offset(x,y,z);
+                    // Allow this station in the outer setback, but keep the growth space clear.
+                    if(test.equals(ownPost)&&x*x+z*z>4)continue;
                     if (!LumberjackTrees.loaded(level,test) || !level.getFluidState(test).isEmpty()
                             || !low(level.getBlockState(test))) return false;
                 }
@@ -659,7 +663,7 @@ public final class LumberjackWork {
         for(var other:EmploymentData.get(level).stations()){
             if(other==station||!other.active||!other.dimension.equals(level.dimension()))continue;
             AABB bounds=IndustrialWork.industrial(other)?IndustrialWork.area(level,other):
-                other.profession==Profession.SOLDIER?br.com.kraftcity.military.Military.areaBounds(other.pos):null;
+                other.profession==Profession.SOLDIER?new AABB(other.pos):null;
             if(bounds!=null&&nearby.intersects(bounds))result.add(bounds);
             if(other.worker!=null)WorkforceData.get(level).worker(other.worker).flatMap(WorkerRecord::area)
                 .filter(work->work.dimension().equals(level.dimension()))
@@ -716,7 +720,7 @@ public final class LumberjackWork {
                 && worker.getNavigation().getPath()==session.path && !worker.getNavigation().isDone()) return true;
         session.plantCheckAfter=level.getGameTime()+10;
         var protectedAreas=protectedAreas(level,station,area);
-        if (plantable(level,area,protectedAreas,pos,seed)) {
+        if (plantable(level,station.pos,area,protectedAreas,pos,seed)) {
             ItemStack display=seed.copy();
             display.setCount(1);
             IndustrialWork.displayTool(worker,display);
@@ -726,7 +730,7 @@ public final class LumberjackWork {
                 var block = ((BlockItem)seed.getItem()).getBlock().defaultBlockState();
                 if (cells.stream().allMatch(cell -> reachable(level,worker,area,cell,pos,false)
                         && level.mayInteract(IndustrialWork.actor(level,station,worker),cell)
-                        && IndustrialWork.placeAllowed(level,station,worker,cell,block)) && plantable(level,area,protectedAreas(level,station,area),pos,seed)) {
+                        && IndustrialWork.placeAllowed(level,station,worker,cell,block)) && plantable(level,station.pos,area,protectedAreas(level,station,area),pos,seed)) {
                     var old = cells.stream().map(level::getBlockState).toList();
                     int placed = 0;
                     for (var cell : cells) {
