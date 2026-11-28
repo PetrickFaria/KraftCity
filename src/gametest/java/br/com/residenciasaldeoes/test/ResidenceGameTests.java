@@ -218,6 +218,9 @@ public final class ResidenceGameTests {
     }
     @GameTest(template="empty",timeoutTicks=900,batch="missing")
     public static void missing_chest_and_temporary_obstruction(GameTestHelper h){
+        // Production at dawn is verified separately. This scenario owns a fixed backlog of 19.
+        h.getLevel().setDayTime(6_000L);
+        h.getLevel().setWeatherParameters(2_000,0,false,false);
         floor(h);BlockPos hp=new BlockPos(6,1,6),cp=new BlockPos(10,2,6);
         h.setBlock(hp,ResidenciasDosAldeoes.ANCHOR.get());
         ResidentialAnchorBlockEntity anchor=(ResidentialAnchorBlockEntity)h.getBlockEntity(hp);
@@ -238,7 +241,7 @@ public final class ResidenceGameTests {
         h.succeedWhen(()->{
             var chest=(EmeraldChestBlockEntity)h.getBlockEntity(cp);
             check(chest!=null&&!chest.isEmpty(),"Waiting for retry after obstruction removed");
-            check(chest.getItem(0).getCount()==19&&anchor.isEmpty(),"Retry lost/duplicated fragments");
+            check(chest.getItem(0).getCount()==19&&anchor.isEmpty(),"Retry lost/duplicated fragments: chest="+chest.getItem(0).getCount()+" anchor="+anchor.getItem(0).getCount());
         });
     }
     @GameTest(template="empty",timeoutTicks=700,batch="available")
