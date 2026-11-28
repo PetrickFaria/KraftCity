@@ -218,10 +218,16 @@ public final class ResidenceGameTests {
     }
     @GameTest(template="empty",timeoutTicks=900,batch="missing")
     public static void missing_chest_and_temporary_obstruction(GameTestHelper h){
-        // Production at dawn is verified separately. This scenario owns a fixed backlog of 19.
+        // The fixture has 19 fragments, requiring at least two physical trips.
         h.getLevel().setDayTime(6_000L);
         h.getLevel().setWeatherParameters(2_000,0,false,false);
         floor(h);BlockPos hp=new BlockPos(6,1,6),cp=new BlockPos(10,2,6);
+        // Keep both trips on the same level route, independent of idle wandering
+        // while the chest is missing and of routes over the blocking stones.
+        for(int x=1;x<15;x++)for(int y=2;y<=4;y++){
+            h.setBlock(new BlockPos(x,y,5),Blocks.STONE);
+            h.setBlock(new BlockPos(x,y,7),Blocks.STONE);
+        }
         h.setBlock(hp,ResidenciasDosAldeoes.ANCHOR.get());
         ResidentialAnchorBlockEntity anchor=(ResidentialAnchorBlockEntity)h.getBlockEntity(hp);
         Villager v=h.spawn(EntityType.VILLAGER,new BlockPos(4,2,6));v.setAge(0);
@@ -236,7 +242,7 @@ public final class ResidenceGameTests {
         h.runAtTickTime(150,()->{
             check(anchor.getItem(0).getCount()==19&&!v.getPersistentData().contains(JOB),"Blocked path consumed fragments or assigned an unreachable courier");
             check(!home.pendingCollections.isEmpty(),"Unavailable route deleted queued work");
-            for(Direction direction:Direction.Plane.HORIZONTAL)for(int y=0;y<3;y++)h.setBlock(cp.relative(direction).above(y),Blocks.AIR);
+            for(int y=0;y<3;y++)h.setBlock(cp.west().above(y),Blocks.AIR);
         });
         h.succeedWhen(()->{
             var chest=(EmeraldChestBlockEntity)h.getBlockEntity(cp);

@@ -135,7 +135,7 @@ public final class IndustrialWork {
                 }
             for(var target:targets.stream().sorted(java.util.Comparator.comparingDouble(worker.blockPosition()::distSqr)).toList()){
                 var path=navigation.createPath(target,0,112);
-                if(path!=null&&path.canReach()&&navigation.moveTo(path,Employment.WALK_SPEED))return true;
+                if(path!=null&&path.canReach()&&navigation.moveTo(path,.8))return true;
             }
             FarmerLogistics.stayInField(level,station,worker);
         }finally{

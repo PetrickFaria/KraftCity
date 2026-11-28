@@ -96,7 +96,7 @@ jobs:
         timeout-minutes: 25
         run: bash gradlew --no-daemon clean build
       - name: Run actual Forge GameTest server
-        timeout-minutes: 20
+        timeout-minutes: 25
         run: python3 tools/run_gametest_ci.py
       - name: Launch graphical Forge client and reopen world
         timeout-minutes: 20

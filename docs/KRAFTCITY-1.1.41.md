@@ -16,7 +16,7 @@
 - `ApiaryHiveStock` usa a propriedade de orientação do posto e só aceita um local com saída livre nessa direção. A colocação usa o item e seus dados existentes.
 - `ProfessionalLoot` reconhece colmeias artificiais e ninhos no mesmo predicado usado pelo Apicultor e pelo Coletor.
 - `WorkerTextures` remapeia as faces das mangas personalizadas do atlas Villager e preserva seu alfa. `BuilderArmsLayer` usa o passe de transparência das skins nas mangas personalizadas.
-- As rotas comuns de coleta, lenha, apiário, comércio e volta ao posto usam o multiplicador de caminhada 0,50 lido no Minecraft 1.19.2. As rotas de fuga e combate conservam seus multiplicadores. A entrega de fechamento e a aproximação aos cultivos conservam o passo original para respeitar a janela de entrega e os movimentos de recuperação e salto do Fazendeiro.
+- As rotas comuns de coleta, lenha, apiário e comércio usam o multiplicador de caminhada 0,50 lido no Minecraft 1.19.2. As rotas de fuga e combate conservam seus multiplicadores. A volta ao posto após interrupções, a entrega de fechamento e a aproximação aos cultivos conservam o passo original para respeitar a janela de entrega e os movimentos de recuperação e salto do Fazendeiro.
 
 ## C. Validação pendente
 
