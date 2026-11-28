@@ -112,7 +112,10 @@ public final class FarmerLogistics {
         v.getNavigation().stop();
         var path=retries<=2?workPath(l,v,pos,accuracy,avoid,permitted):null;
         if(path==null&&avoid!=null&&retries<=2)path=workPath(l,v,pos,accuracy,null,permitted);
-        if(path!=null&&path.canReach()&&permitted.test(path)&&v.getNavigation().moveTo(path,Employment.WALK_SPEED)){
+        var station=EmploymentData.get(l).assigned(v.getUUID());
+        // Crop approaches share recovery and jump timing. Keep the validated field speed.
+        double speed=station!=null&&station.profession==Profession.FARMER?.8:Employment.WALK_SPEED;
+        if(path!=null&&path.canReach()&&permitted.test(path)&&v.getNavigation().moveTo(path,speed)){
             ROUTES.put(v,new Route(pos.immutable(),path.getTarget(),remaining(v),now,retries));
             return 0;
         }
