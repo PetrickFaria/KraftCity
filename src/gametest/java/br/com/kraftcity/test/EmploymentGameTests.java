@@ -279,6 +279,8 @@ public final class EmploymentGameTests {
         payload.writeLong(Employment.epoch(f.station));
         payload.writeUtf("Morador");
         var checkout=new LevelPaymentMenu(31,f.player.getInventory(),payload);
+        payload.readerIndex(0);
+        var second=new LevelPaymentMenu(32,f.player.getInventory(),payload);
         payload.release();
         f.player.getInventory().setItem(9,new ItemStack(Items.EMERALD,25));
         check(checkout.getSlot(0).getMaxStackSize()==10&&!checkout.getSlot(1).mayPlace(new ItemStack(Items.EMERALD)),"Sequential payment");
@@ -286,6 +288,12 @@ public final class EmploymentGameTests {
         check(checkout.completeSlots()==2&&checkout.deposited()==25&&checkout.getSlot(2).getItem().getCount()==5,"Quick move did not split 10+10+5");
         checkout.removed(f.player);
         check(f.player.getInventory().countItem(Items.EMERALD)==25&&f.station.getItem(31).isEmpty(),"Cancellation refund altered station");
+        f.player.getInventory().clearContent();
+        f.player.getInventory().setItem(9,new ItemStack(Items.EMERALD,47));
+        second.quickMoveStack(f.player,5);
+        check(second.completeSlots()==4&&second.getSlot(4).getItem().getCount()==7,"Quick move did not split 10+10+10+10+7");
+        second.removed(f.player);
+        check(f.player.getInventory().countItem(Items.EMERALD)==47,"Second cancellation refund");
         f.player.getInventory().clearContent();
         f.player.getInventory().setItem(9,new ItemStack(Items.EMERALD,49));
         payment.set(new ItemStack(Items.EMERALD,35));

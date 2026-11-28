@@ -45,7 +45,8 @@ public final class IndustrialWork {
     public static void tick(ServerLevel l,EmploymentData.Station s){
         if(!industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
         boolean returnsToPost=IndustrialRules.centeredArea(s.profession);
-        if(returnsToPost&&(l.isThundering()||!day(l)||v.isSleeping()))
+        if(returnsToPost&&(l.isThundering()||!day(l)||v.isSleeping()
+                ||v.getPersistentData().getBoolean("residenciasaldeoes_home_return_forced")))
             v.getPersistentData().putBoolean("KCIndustrialReturnToPost",true);
         if(l.isThundering()||Employment.fleeing(v)){
             if(s.profession==Profession.LUMBERJACK){

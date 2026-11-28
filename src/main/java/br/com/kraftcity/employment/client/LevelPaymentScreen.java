@@ -19,9 +19,9 @@ public final class LevelPaymentScreen extends AbstractContainerScreen<LevelPayme
 
     @Override protected void init(){
         super.init();
-        confirm=addRenderableWidget(new Button(leftPos+8,topPos+83,106,18,
-                Component.literal("Confirmar"),b->minecraft.gameMode.handleInventoryButtonClick(menu.containerId,0)));
-        addRenderableWidget(new Button(leftPos+118,topPos+83,50,18,
+        confirm=addRenderableWidget(new Button(leftPos+8,topPos+83,110,18,
+                Component.literal(menu.current==0?"Confirmar Contratação":"Confirmar Nível"),b->minecraft.gameMode.handleInventoryButtonClick(menu.containerId,0)));
+        addRenderableWidget(new Button(leftPos+120,topPos+83,48,18,
                 Component.literal("Cancelar"),b->minecraft.gameMode.handleInventoryButtonClick(menu.containerId,1)));
     }
 

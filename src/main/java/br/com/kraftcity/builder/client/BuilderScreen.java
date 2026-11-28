@@ -17,7 +17,18 @@ public final class BuilderScreen extends AbstractContainerScreen<BuilderMenu> {
     @Override protected void init(){super.init();buttons();}
     private void command(int op,String value){BuilderNetwork.CHANNEL.sendToServer(new BuilderNetwork.Command(menu.containerId,menu.stationId,op,value));}
     private Button button(int x,int y,int w,String label,Runnable r){return addRenderableWidget(new Button(leftPos+x,topPos+y,w,16,Component.literal(label),b->r.run()));}
-    public void buttons(){clearWidgets();if(materialView){button(8,26,130,"Total do esquema",()->command(9,"schema"));button(146,26,130,"Faltas da obra",()->command(9,"job")).active=menu.selectedJob!=null;button(302,26,130,"Voltar",()->{materialView=false;buttons();});button(8,272,80,"<",()->{materialPage=Math.max(0,materialPage-1);buttons();});button(94,272,80,">",()->{materialPage++;buttons();});return;}page=Math.max(0,Math.min(page,Math.max(0,(menu.library.size()-1)/7)));for(int i=0;i<7&&page*7+i<menu.library.size();i++){var e=menu.library.get(page*7+i);var id=e.getUUID("id");button(8,31+i*20,170,(id.equals(menu.selectedSchema)?"> ":"")+font.plainSubstrByWidth(e.getString("name"),150),()->command(0,id.toString()));}
+    private boolean professionalSettings;
+
+    public void buttons(){clearWidgets();
+        if(professionalSettings){
+            button(8,4,88,"Voltar",()->{professionalSettings=false;buttons();});
+            int level=menu.snapshot.getInt("level");
+            if(menu.snapshot.getBoolean("employed"))
+                button(8,31,130,level>=5?"Nível máximo":"Aumentar Nível",
+                        ()->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(new br.com.kraftcity.employment.WorkNetwork.Upgrade(menu.containerId,menu.stationId))).active=level<5;
+            return;
+        }
+        if(materialView){button(8,26,130,"Total do esquema",()->command(9,"schema"));button(146,26,130,"Faltas da obra",()->command(9,"job")).active=menu.selectedJob!=null;button(302,26,130,"Voltar",()->{materialView=false;buttons();});button(8,272,80,"<",()->{materialPage=Math.max(0,materialPage-1);buttons();});button(94,272,80,">",()->{materialPage++;buttons();});return;}page=Math.max(0,Math.min(page,Math.max(0,(menu.library.size()-1)/7)));for(int i=0;i<7&&page*7+i<menu.library.size();i++){var e=menu.library.get(page*7+i);var id=e.getUUID("id");button(8,31+i*20,170,(id.equals(menu.selectedSchema)?"> ":"")+font.plainSubstrByWidth(e.getString("name"),150),()->command(0,id.toString()));}
         button(8,174,40,"<",()->{page--;buttons();});button(52,174,40,">",()->{page++;buttons();});button(96,174,82,"Atualizar",()->command(2,""));
         button(184,26,68,"Materiais",()->command(9,"schema"));
         int required=1000;for(var e:menu.library)if(e.getUUID("id").equals(menu.selectedSchema))required=Math.min(1000,e.getInt("blocks"));button(270,126,116,"Gravar (5 s)",()->command(1,"")).active=menu.selectedSchema!=null&&!menu.snapshot.getBoolean("printing")&&menu.stock.getItem(29).is(BuilderModule.BLANK.get())&&menu.stock.getItem(30).isEmpty()&&menu.snapshot.getLong("inkAvailable")>=required;
@@ -25,9 +36,7 @@ public final class BuilderScreen extends AbstractContainerScreen<BuilderMenu> {
         var jobs=menu.snapshot.getList("jobs",Tag.TAG_COMPOUND);jobPage=Math.max(0,Math.min(jobPage,Math.max(0,jobs.size()-1)));if(!jobs.isEmpty()){var e=jobs.getCompound(jobPage);button(8,213,228,(e.getUUID("id").equals(menu.selectedJob)?"> ":"")+font.plainSubstrByWidth(e.getString("name")+" "+e.getInt("done")+"/"+e.getInt("total"),207),()->command(4,e.getUUID("id").toString()));}
         button(8,232,32,"<",()->{jobPage--;buttons();});button(44,232,32,">",()->{jobPage++;buttons();});
         if(menu.snapshot.getBoolean("employed")){
-            int level=menu.snapshot.getInt("level");
-            button(264,272,126,level>=5?"Nível máximo":"Aumentar Nível",
-                    ()->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(new br.com.kraftcity.employment.WorkNetwork.Upgrade(menu.containerId,menu.stationId))).active=level<5;
+            button(284,2,76,"Opções",()->{professionalSettings=true;buttons();});
             long epoch=menu.snapshot.getLong("employment_epoch");
             addRenderableWidget(new Button(leftPos+366,topPos+2,66,14,Component.translatable("gui.kraftcity.dismiss"),
                 b->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(

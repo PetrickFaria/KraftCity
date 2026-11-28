@@ -20,6 +20,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     private UUID selected;
     private Profession profession;
     private int page;
+    private boolean professionalSettings;
     private static final int LUMBER_AREA_X=18, LUMBER_AREA_STEP=54, LUMBER_BUTTON_WIDTH=52;
     private static final int FARM_AREA_X=(WorkMenu.FARM_WIDTH-172)/2, FARM_AREA_Y=123, XP_WIDTH=182, XP_Y=22;
     private static final String[] FARM_INPUTS={"Enxada","Farinha de Osso","Balde de Água"};
@@ -45,6 +46,12 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     private void buttons(){
         clearWidgets();if(menu.fieldLayout){farmerButtons();return;}if(!menu.hiring){
             if(menu.profession!=null){
+                addRenderableWidget(new Button(leftPos+8,topPos+5,22,15,
+                        Component.literal(professionalSettings?"‹":"›"),b->{professionalSettings=!professionalSettings;buttons();}));
+                if(professionalSettings){
+                    if(menu.snapshot!=null&&menu.snapshot.employed())addUpgrade(12,48,menu.snapshot.level());
+                    return;
+                }
                 for(int i=0;i<5;i++){
                     final int size=5+2*i;
                     var button=addRenderableWidget(new Button(leftPos+8+i*36,topPos+165,34,18,Component.literal(size+"×"+size),b->option(size,0)));
@@ -52,7 +59,6 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
                 }
                 addRenderableWidget(new LimitsButton(leftPos+191,topPos+165,70,18,Component.literal("Limites"),b->option(0,1),()->menu.snapshot!=null&&menu.snapshot.preview()));
                 var current=menu.snapshot;
-                if(current!=null&&current.employed())addUpgrade(217,121,current.level());
                 if(current!=null&&current.employed())addRenderableWidget(new Button(leftPos+276,topPos+2,66,14,
                     Component.translatable("gui.kraftcity.dismiss"),b->WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Dismiss(menu.containerId,menu.stationId,current.epoch()))));
                 if(menu.sector==Profession.Sector.COMMERCIAL)addRenderableWidget(new Button(leftPos+8,topPos+121,96,16,Component.literal("Cancelar operação"),b->option(0,4)));
