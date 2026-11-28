@@ -3053,8 +3053,8 @@ public final class IndustryGameTests {
     @GameTest(template="empty",timeoutTicks=360,batch="lumberjack_minimum_replant")
     public static void lumberjack_walks_to_legal_ground_in_the_minimum_area(GameTestHelper h){
         var f=fixture(h,Profession.LUMBERJACK,36,post->{});
-        var root=f.p.east(4);
-        var start=Vec3.atBottomCenterOf(f.p.west(4));
+        var root=f.p.east(4).south(3);
+        var start=Vec3.atBottomCenterOf(f.p.west(4).south(3));
         for(var soil:BlockPos.betweenClosed(f.p.offset(-7,-1,-7),f.p.offset(7,-1,7)))
             f.l.setBlockAndUpdate(soil,Blocks.STONE.defaultBlockState());
         lumberClearance(f,root);

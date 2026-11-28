@@ -104,6 +104,22 @@ public final class EmploymentVisualCheck {
             check(pixels.getPixelRGBA(44,30)==robe.getPixelRGBA(24,29),"Default sleeve did not use the brown robe");
         }catch(java.io.IOException ex){throw new IllegalStateException(ex);}
         check(pixels.getPixelRGBA(44,30)!=pixels.getPixelRGBA(44,35),"Sleeve and hand did not use distinct texels");
+        var custom=new net.minecraft.resources.ResourceLocation("residenciasaldeoes","test_custom_sleeve_uv");
+        var customPixels=new com.mojang.blaze3d.platform.NativeImage(64,64,true);
+        customPixels.setPixelRGBA(48,22,0xFF102030);
+        customPixels.setPixelRGBA(44,26,0x7D552211);
+        customPixels.setPixelRGBA(48,26,0xFF337799);
+        customPixels.setPixelRGBA(56,33,0xFFEE6644);
+        mc.getTextureManager().register(custom,new net.minecraft.client.renderer.texture.DynamicTexture(customPixels));
+        try{
+            var mapped=br.com.kraftcity.employment.client.WorkerTextures.arms(custom,br.com.kraftcity.employment.client.WorkerTextures.DEFAULT_ROBE);
+            var result=((net.minecraft.client.renderer.texture.DynamicTexture)mc.getTextureManager().getTexture(mapped)).getPixels();
+            check(result.getPixelRGBA(48,22)==0xFF102030&&result.getPixelRGBA(44,27)==0x7D552211
+                &&result.getPixelRGBA(48,27)==0xFF337799&&result.getPixelRGBA(56,37)==0xFFEE6644
+                &&result.getPixelRGBA(45,27)==0,"Custom sleeve faces or alpha were altered");
+        }finally{
+            mc.getTextureManager().release(custom);
+        }
         System.out.println("PROFESSIONAL_XP_SHADING_AND_OPAQUE_SLEEVES_PASSED");
     }
 
