@@ -30,6 +30,7 @@ public final class WorkModule {
     }
     public static final RegistryObject<BlockEntityType<WorkBlockEntity>> ENTITY=ENTITIES.register("workstation",()->BlockEntityType.Builder.of(WorkBlockEntity::new,BLOCKS.getEntries().stream().map(RegistryObject::get).toArray(Block[]::new)).build(null));
     public static final RegistryObject<MenuType<WorkMenu>> MENU=MENUS.register("workstation",()->IForgeMenuType.create(WorkMenu::new));
+    public static final RegistryObject<MenuType<LevelPaymentMenu>> LEVEL_PAYMENT=MENUS.register("level_payment",()->IForgeMenuType.create(LevelPaymentMenu::new));
     public static void initialize(IEventBus bus){
         br.com.kraftcity.api.ResidentialWorkIndicator.register(Employment::indicator);
         br.com.kraftcity.industry.IndustrialTools.register(bus);

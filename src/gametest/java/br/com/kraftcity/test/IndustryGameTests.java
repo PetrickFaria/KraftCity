@@ -3409,4 +3409,30 @@ public final class IndustryGameTests {
                 .thenExecute(() -> f.v.setNoAi(true)).thenSucceed();
     }
 
+    @GameTest(template="empty",timeoutTicks=520,batch="collector_return_to_work")
+    public static void collector_walks_from_shelter_back_to_work_during_ordinary_rain(GameTestHelper h){
+        var f=fixture(h,Profession.COLLECTOR,36,post->{});
+        var home=ResidenceData.get(f.l).owner(f.v.getUUID()).pos;
+        buildWalkableFloor(f,home);
+        var shelter=home.north(3).above();
+        var cell=f.p.east(2).above();
+        var drop=loose(f,cell,Items.LEATHER);
+        f.v.setPos(Vec3.atBottomCenterOf(shelter));
+        f.v.setNoAi(false);
+        f.l.setWeatherParameters(0,10000,true,true);
+        f.l.setRainLevel(1);
+        f.l.setThunderLevel(1);
+        h.startSequence().thenIdle(30).thenExecute(()->{
+            check(drop.isAlive()&&count(f,Items.LEATHER)==0,"collector worked in thunder");
+            f.l.setWeatherParameters(0,10000,true,false);
+            f.l.setThunderLevel(0);
+        }).thenWaitUntil(()->{
+            check(count(f,Items.LEATHER)==1&&!drop.isAlive(),"waiting for a physical return and collection");
+            check(f.v.distanceToSqr(Vec3.atBottomCenterOf(shelter))>16&&f.l.isRaining(),"did not resume outside shelter in ordinary rain");
+            f.v.setNoAi(true);
+            f.l.setWeatherParameters(10000,0,false,false);
+            f.l.setRainLevel(0);
+        }).thenSucceed();
+    }
+
 }

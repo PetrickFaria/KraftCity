@@ -11,14 +11,14 @@ import net.minecraftforge.network.*;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class WorkNetwork {
-    public static final SimpleChannel CHANNEL=NetworkRegistry.newSimpleChannel(new ResourceLocation("residenciasaldeoes","employment"),()->"16","16"::equals,"16"::equals);
+    public static final SimpleChannel CHANNEL=NetworkRegistry.newSimpleChannel(new ResourceLocation("residenciasaldeoes","employment"),()->"17","17"::equals,"17"::equals);
     public record Candidate(UUID id,String name,int cost){}
     public record Hire(int menu,UUID station,UUID worker,int profession){
         void encode(FriendlyByteBuf b){b.writeVarInt(menu);b.writeUUID(station);b.writeUUID(worker);b.writeInt(profession);}
         static Hire decode(FriendlyByteBuf b){return new Hire(b.readVarInt(),b.readUUID(),b.readUUID(),b.readInt());}
         void handle(Supplier<NetworkEvent.Context> ctx){var p=ctx.get().getSender();
             if(p!=null&&p.containerMenu instanceof WorkMenu m&&m.containerId==menu&&m.stationId.equals(station)){
-                if(profession==-2)m.openHiring(p);else if(profession==-3)m.recoverBalance(p);else if(profession==-4)m.selectMilitaryCandidate(p,worker);else m.hire(p,worker,profession);
+                if(profession==-2)m.openHiring(p);else if(profession==-3)m.recoverBalance(p);else m.openPayment(p,worker,profession);
             }
             ctx.get().setPacketHandled(true);
         }
@@ -55,7 +55,24 @@ public final class WorkNetwork {
             c.get().setPacketHandled(true);
         }
     }
+    public record Upgrade(int menu,UUID station){
+        void encode(FriendlyByteBuf data){data.writeVarInt(menu);data.writeUUID(station);}
+        static Upgrade decode(FriendlyByteBuf data){return new Upgrade(data.readVarInt(),data.readUUID());}
+        void handle(Supplier<NetworkEvent.Context> ctx){
+            var player=ctx.get().getSender();
+            if(player!=null&&player.containerMenu.containerId==menu&&player.containerMenu.stillValid(player)){
+                var current=player.containerMenu;
+                EmploymentData.Station post=null;
+                if(current instanceof WorkMenu work&&!work.hiring&&work.stationId.equals(station))post=work.station();
+                if(current instanceof br.com.kraftcity.military.SoldierMenu soldier&&soldier.stationId.equals(station))post=soldier.station();
+                if(current instanceof br.com.kraftcity.builder.BuilderMenu builder&&builder.stationId.equals(station))post=builder.station();
+                if(post!=null&&post.worker!=null)LevelPaymentMenu.open(player,post,post.worker,post.profession,LevelPaymentMenu.level(post,player));
+            }
+            ctx.get().setPacketHandled(true);
+        }
+    }
     public static void register(){
+        CHANNEL.messageBuilder(Upgrade.class,6,NetworkDirection.PLAY_TO_SERVER).encoder(Upgrade::encode).decoder(Upgrade::decode).consumerMainThread(Upgrade::handle).add();
         CHANNEL.messageBuilder(Activity.class,5,NetworkDirection.PLAY_TO_CLIENT).encoder(Activity::encode).decoder(Activity::decode).consumerMainThread(Activity::handle).add();
         CHANNEL.messageBuilder(Dismiss.class,4,NetworkDirection.PLAY_TO_SERVER).encoder(Dismiss::encode).decoder(Dismiss::decode).consumerMainThread(Dismiss::handle).add();
         CHANNEL.messageBuilder(Hire.class,0,NetworkDirection.PLAY_TO_SERVER).encoder(Hire::encode).decoder(Hire::decode).consumerMainThread(Hire::handle).add();

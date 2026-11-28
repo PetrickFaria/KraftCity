@@ -109,11 +109,11 @@ public final class BuilderWork {
         if(!ready(l,pos,state)){j.status="Aguardando suporte/parte anterior em "+pos.toShortString();return;}
         var wanted=cost(b,j,i);boolean waterNeeded=needsWater(l,pos,state);if(waterNeeded&&!has(d.stock,Items.WATER_BUCKET)){s.industry.putString("builder_fetch","minecraft:water_bucket");s.setChanged();if(supply(l,d,j,s,v,Items.WATER_BUCKET))return;j.status="Falta balde de água para bloco alagado.";alert(l,j,"material",j.status);return;}if(!has(d.stock,wanted)){s.industry.putString("builder_fetch",net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(wanted).toString());s.setChanged();if(supply(l,d,j,s,v,wanted))return;j.status="Faltam materiais: "+wanted.getDescription().getString();if(l.getGameTime()-j.alertAt>=300)alert(l,j,"material",missing(l,d,j,b,wanted));return;}
         if(d.charge<=0){j.status="Faltam esmeraldas/carga de construção.";alert(l,j,"charge",j.status);return;}
-        v.getLookControl().setLookAt(pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,30F,30F);var progress=WorkforceData.get(l).progress(v.getUUID(),Profession.BUILDER.id());int duration=duration(progress.xp());if(ticks>0)task.lastActive=l.getGameTime();task.elapsed=Math.min(duration,task.elapsed+ticks);j.status="Construindo "+b.name+".";d.setDirty();
+        v.getLookControl().setLookAt(pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,30F,30F);var progress=WorkforceData.get(l).progress(v.getUUID(),Profession.BUILDER.id());int duration=(6-Math.max(progress.level(),level(progress.xp())))*20;if(ticks>0)task.lastActive=l.getGameTime();task.elapsed=Math.min(duration,task.elapsed+ticks);j.status="Construindo "+b.name+".";d.setDirty();
         if(task.elapsed>=Math.max(0,duration-20)&&(task.flightAt<0||l.getGameTime()-task.flightAt>40)){task.flightAt=l.getGameTime();BuilderNetwork.flight(l,v,pos,state,Math.max(1,duration-task.elapsed));}
         if(task.elapsed<duration)return;if(!place(l,d,j,b,s,v,task,wanted))return;
         j.done.set(i);j.placed++;j.tasks.remove(i);j.credits.clear(i);int peer=b.peer(i);if(wanted!=Items.AIR&&peer>=0&&!j.done.get(peer))j.credits.set(peer);
-        long xp=progress.xp()+1;WorkforceData.get(l).setProgress(v.getUUID(),Profession.BUILDER.id(),level(xp),xp);d.setDirty();
+        long xp=progress.xp()+1;WorkforceData.get(l).setProgress(v.getUUID(),Profession.BUILDER.id(),Math.max(progress.level(),level(xp)),xp);d.setDirty();
     }
     public static Item cost(Blueprint b,BuilderData.Job j,int index){return j.credits.get(index)?Items.AIR:Blueprint.material(b.cells.get(index).state());}
     public static boolean has(Container stock,Item item){if(item==Items.AIR)return true;for(int i=0;i<27;i++)if(stock.getItem(i).is(item))return true;return false;}

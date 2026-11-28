@@ -113,7 +113,9 @@ public class AnchorScreen extends AbstractContainerScreen<AnchorMenu> {
         renameButton=addStyledButton(leftPos+actionRowLeft+118,topPos+REGISTER_BUTTON_Y,112,20,Component.translatable("gui.residenciasaldeoes.customization"),b->openCustomization(),0xFF0D4B25,0xFF70C982);renameButton.active=selected!=null;
         unlinkResidentButton=addStyledButton(leftPos+actionRowLeft,topPos+UNLINK_BUTTON_Y,112,20,Component.literal("Desvincular Residente"),b->{if(selected!=null)ModNetwork.unlinkResident(menu.getPos(),selected);},0xFF0D4B25,0xFF70C982);unlinkResidentButton.active=selected!=null;
         unlinkAllButton=addStyledButton(leftPos+actionRowLeft+118,topPos+UNLINK_BUTTON_Y,112,20,unlinkAllLabel(),b->{if(confirmAll){ModNetwork.unlinkAll(menu.getPos());confirmAll=false;}else confirmAll=true;b.setMessage(unlinkAllLabel());},0xFF0D4B25,0xFF70C982);
-        previewButton=addStyledButton(leftPos+actionRowLeft,topPos+PREVIEW_BUTTON_Y,230,20,previewLabel(),b->{previewOn=!previewOn;b.setMessage(previewLabel());ModNetwork.setPreview(menu.getPos(),previewOn);},0xFF0D4B25,0xFF70C982);
+        previewButton=addRenderableWidget(new br.com.kraftcity.employment.client.LimitsButton(leftPos+actionRowLeft,
+                topPos+PREVIEW_BUTTON_Y,230,20,previewLabel(),b->{previewOn=!previewOn;b.setMessage(previewLabel());
+                    ModNetwork.setPreview(menu.getPos(),previewOn);},()->previewOn));
         // Pull an authoritative snapshot when a screen opens; the client cache is
         // only a fast initial display and may belong to an earlier menu session.
         ModNetwork.requestResidents(menu.getPos());

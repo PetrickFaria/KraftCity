@@ -1210,6 +1210,13 @@ public class VillagerResidenceEvents {
             villager.getBrain().eraseMemory(MemoryModuleType.PATH);
         }
 
+        if(!night&&!weather&&forced&&entityData.getBoolean("KCIndustrialReturnToPost")
+                &&!br.com.kraftcity.employment.Employment.fleeing(villager)){
+            villager.getNavigation().stop();
+            villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+            villager.getBrain().eraseMemory(MemoryModuleType.PATH);
+            forced=false;
+        }
         if(!night&&!weather&&!forced){
             clearHomeReturn(entityData);
             RETURN_PROGRESS.remove(villager);

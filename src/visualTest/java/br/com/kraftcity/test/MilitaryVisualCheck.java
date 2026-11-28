@@ -65,7 +65,7 @@ public final class MilitaryVisualCheck {
         l.getEntitiesOfClass(net.minecraft.world.entity.Mob.class,bounds,
             mob->mob instanceof net.minecraft.world.entity.monster.Enemy&&Military.insideArea(s,mob.position()))
             .forEach(net.minecraft.world.entity.Entity::discard);
-        s.setItem(31,new ItemStack(Items.EMERALD,30));
+        p.getInventory().setItem(9,new ItemStack(Items.EMERALD,10));
         WorkBlock.open(p,s);
     }
     public static void tick(Minecraft mc,int elapsedTicks){
@@ -80,7 +80,9 @@ public final class MilitaryVisualCheck {
         int t=elapsedTicks-openedAt;
         if(t==25){check(mc.screen instanceof WorkScreen,"Military hiring screen");String id=worker.toString().substring(0,6);for(int i=0;i<100&&mc.screen.children().stream().noneMatch(x->x instanceof Button b&&b.getMessage().getString().contains(id));i++)click(mc,">");click(mc,id);click(mc,"Soldado");}
         if(t==30)capture(mc,"visual-military-hiring.png");
-        if(t==35)click(mc,"Treinar");
+        if(t==35)click(mc,"Contratar");
+        if(t==41)PaymentVisualCheck.fund(mc,9);
+        if(t==49)PaymentVisualCheck.confirm(mc,10,1);
         if(t>=36&&trainedAt<0){
             if(mc.screen instanceof SoldierScreen&&mc.player.containerMenu instanceof SoldierMenu m
                     &&m.slots.size()==74&&m.state!=null&&m.state.employed())trainedAt=t;

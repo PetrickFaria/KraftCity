@@ -12,16 +12,27 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.entity.living.LivingDropsEvent;
 
 public final class MilitaryDropOrigin {
+    private static final String HOSTILE = "KraftCityHostileDrop";
+    private static final String PERSONAL = "KraftCityPlayerToss";
+    private static final net.minecraft.tags.TagKey<net.minecraft.world.item.Item> COMMON =
+            net.minecraft.tags.TagKey.create(net.minecraft.core.Registry.ITEM_REGISTRY,
+                    new net.minecraft.resources.ResourceLocation("kraftcity", "military_common_drops"));
     private static final String ORIGIN = "KraftCityMilitaryDropWorker";
 
     static void record(LivingDropsEvent event) {
         if (!(event.getEntity() instanceof Mob) || !(event.getEntity().level instanceof ServerLevel level)) return;
-        if (!(event.getSource().getEntity() instanceof Villager soldier) || !Military.isSoldier(soldier)) return;
-        var station = Military.station(soldier);
-        if (station == null || !within(station, event.getEntity().position())) return;
+        boolean hostile = event.getEntity() instanceof net.minecraft.world.entity.monster.Enemy;
+        Villager soldier = event.getSource().getEntity() instanceof Villager v && Military.isSoldier(v) ? v : null;
+        var station = soldier == null ? null : Military.station(soldier);
         for (var drop : event.getDrops()) {
-            drop.getPersistentData().putUUID(ORIGIN, soldier.getUUID());
+            if (station != null && within(station, event.getEntity().position()))
+                drop.getPersistentData().putUUID(ORIGIN, soldier.getUUID());
+            else if (hostile) drop.getPersistentData().putBoolean(HOSTILE, true);
         }
+    }
+
+    static void playerToss(ItemEntity item) {
+        item.getPersistentData().putBoolean(PERSONAL, true);
     }
 
     private static UUID worker(ItemEntity item) {
@@ -30,16 +41,28 @@ public final class MilitaryDropOrigin {
     }
 
     static boolean belongsTo(ItemEntity item, Villager soldier) {
-        return item.getOwner() == null && soldier.getUUID().equals(worker(item));
+        if (item.getOwner() != null || item.getPersistentData().getBoolean(PERSONAL)) return false;
+        UUID owner = worker(item);
+        return owner != null ? owner.equals(soldier.getUUID())
+                : item.getPersistentData().getBoolean(HOSTILE)
+                || (!item.getItem().isDamageableItem() && !item.getItem().hasTag() && item.getItem().is(COMMON));
     }
 
     public static boolean same(ItemEntity a, ItemEntity b) {
-        return Objects.equals(worker(a), worker(b));
+        return Objects.equals(worker(a), worker(b))
+                && a.getPersistentData().getBoolean(HOSTILE) == b.getPersistentData().getBoolean(HOSTILE)
+                && a.getPersistentData().getBoolean(PERSONAL) == b.getPersistentData().getBoolean(PERSONAL);
     }
 
     public static boolean reserved(ServerLevel level, ItemEntity item) {
         UUID worker = worker(item);
-        if (worker == null) return false;
+        if (worker == null) {
+            if (item.getOwner() != null || item.getPersistentData().getBoolean(PERSONAL)) return false;
+            if (!item.getPersistentData().getBoolean(HOSTILE) && !item.getItem().is(COMMON)) return false;
+            return EmploymentData.get(level).stations().stream().anyMatch(station ->
+                    Military.military(station) && station.active && station.worker != null
+                    && station.dimension.equals(level.dimension()) && within(station, item.position()));
+        }
         var station = EmploymentData.get(level).assigned(worker);
         return Military.military(station) && station.active && station.dimension.equals(level.dimension())
                 && level.hasChunkAt(station.pos) && level.getBlockEntity(station.pos) instanceof WorkBlockEntity post

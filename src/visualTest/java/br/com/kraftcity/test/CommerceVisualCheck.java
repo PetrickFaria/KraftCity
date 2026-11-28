@@ -58,7 +58,7 @@ public final class CommerceVisualCheck {
         var home=p.offset(-3,-1,0);l.setBlock(home.below(),Blocks.STONE.defaultBlockState(),3);ResidenceData.get(l).unlinkAll(l,l.dimension(),home);l.setBlock(home,ResidenciasDosAldeoes.ANCHOR.get().defaultBlockState(),3);((br.com.residenciasaldeoes.block.ResidentialAnchorBlockEntity)l.getBlockEntity(home)).setSize(11);
         Villager v=EntityType.VILLAGER.create(l);v.setAge(0);v.setNoAi(true);v.setInvulnerable(true);v.setPos(home.getX()+1.5,p.getY(),home.getZ()+.5);l.addFreshEntity(v);
         check(ResidenceData.get(l).link(l,home,v).equals("ok"),"Commercial visual residence");ResidenceData.get(l).renameResident(v.getUUID(),"Comerciante "+JOBS[i].label);worker=v.getUUID();v.setPos(p.getX()+.5,p.getY(),p.getZ()+1.5);
-        l.setBlock(p,WorkModule.COMMERCIAL.get().defaultBlockState(),3);var s=station(l,i);s.setItem(31,new ItemStack(Items.EMERALD,30));
+        l.setBlock(p,WorkModule.COMMERCIAL.get().defaultBlockState(),3);var s=station(l,i);player.getInventory().setItem(9,new ItemStack(Items.EMERALD,10));
         // Upstream materials come from real mature crop / adult animal operations.
         var sourcePos=p.east(8);l.setBlock(sourcePos,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);var src=((WorkBlockEntity)l.getBlockEntity(sourcePos)).station();
         var supplier=EntityType.VILLAGER.create(l);supplier.setAge(0);supplier.setNoAi(true);supplier.setInvulnerable(true);supplier.setPos(home.getX()+1.5,p.getY(),home.getZ()+.5);l.addFreshEntity(supplier);
@@ -149,7 +149,7 @@ public final class CommerceVisualCheck {
         if(produced>0&&!done){
             check(visited[i],"Merchant did not physically reach upstream chest");
             check(l.getGameTime()-began[i]>=CommercialWork.duration(i==0?1:5),"Commercial product completed before real operation duration");
-            check(s.getItem(31).getCount()==20&&s.profession==JOBS[i]&&ResidenceData.get(l).owner(s.worker)!=null,"Contract/home conservation");
+            check(s.getItem(31).isEmpty()&&s.profession==JOBS[i]&&ResidenceData.get(l).owner(s.worker)!=null,"Contract/home conservation");
             var data=WorkforceData.get(l).progress(s.worker,JOBS[i].id());check(data.xp()>=(i==0?1:101),"Commercial XP missing");
             s.commerce.putBoolean("visual_chain_passed",true);s.setChanged();done=true;System.out.println("COMMERCE_"+JOBS[i].name()+"_CHAIN_AND_TIMER_PASSED");
         }
@@ -162,8 +162,10 @@ public final class CommerceVisualCheck {
             if(ticks==25){check(mc.screen instanceof WorkScreen,"Commercial hiring screen missing");select(mc);}
             if(ticks==30&&i==0){var m=(WorkMenu)mc.player.containerMenu;check(m.snapshot!=null&&m.snapshot.cost()==10,"Commercial price is not ten");capture(mc,"visual-commerce-hiring.png");}
             if(ticks==35)click((WorkScreen)mc.screen,"Contratar");
+            if(ticks==41)PaymentVisualCheck.fund(mc,9);
+            if(ticks==48)PaymentVisualCheck.confirm(mc,10,1);
             if(ticks==55)mc.getSingleplayerServer().execute(()->{
-                var l=mc.getSingleplayerServer().overworld();var s=station(l,i);check(s.worker!=null&&s.worker.equals(worker)&&s.profession==JOBS[i]&&s.getItem(31).getCount()==20,"Commercial hire packet failed");
+                var l=mc.getSingleplayerServer().overworld();var s=station(l,i);check(s.worker!=null&&s.worker.equals(worker)&&s.profession==JOBS[i]&&s.getItem(31).isEmpty(),"Commercial hire packet failed");
                 if(i>0)WorkforceData.get(l).setProgress(s.worker,JOBS[i].id(),5,100);
                 ((Villager)l.getEntity(s.worker)).setNoAi(false);began[i]=l.getGameTime();
             });
@@ -210,7 +212,7 @@ public final class CommerceVisualCheck {
     }
     public static void verifyRestore(ServerLevel l){
         for(int i=0;i<3;i++){
-            var s=station(l,i);check(s.active&&s.worker!=null&&s.profession==JOBS[i]&&s.commerce.getBoolean("visual_chain_passed")&&s.getItem(31).getCount()==20,"Commercial reload contract "+i);
+            var s=station(l,i);check(s.active&&s.worker!=null&&s.profession==JOBS[i]&&s.commerce.getBoolean("visual_chain_passed")&&s.getItem(31).isEmpty(),"Commercial reload contract "+i);
             check(ResidenceData.get(l).owner(s.worker)!=null&&WorkforceData.get(l).progress(s.worker,JOBS[i].id()).xp()>=(i==0?1:101),"Commercial history/home reload "+i);
         }
         var baker=station(l,0);check(baker.commerce.getInt("elapsed")==baker.commerce.getInt("visual_partial")&&CommercialWork.count(baker,Items.WHEAT)>=3&&count(baker,Items.BREAD)==baker.commerce.getInt("visual_bread_before"),"Partial recipe changed during offline/night pause");

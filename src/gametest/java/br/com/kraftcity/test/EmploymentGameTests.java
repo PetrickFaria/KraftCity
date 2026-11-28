@@ -265,22 +265,30 @@ public final class EmploymentGameTests {
         check(reconnected.slots.get(0).getItem().getCount()==7,"Reconnect lost block items");h.succeed();
     }
     @GameTest(template="empty",timeoutTicks=40,batch="employment")
-    public static void farmer_hiring_payment_caps_normal_and_quick_move_without_losing_existing_balance(GameTestHelper h){
+    public static void hiring_checkout_splits_emeralds_and_refunds_on_close(GameTestHelper h){
         var f=fixture(h,Profession.Sector.INDUSTRIAL);
         f.station.setItem(EmploymentData.PAYMENT,ItemStack.EMPTY);
         var menu=new WorkMenu(30,f.player.getInventory(),f.station,true,null);
         var payment=menu.getSlot(0);
-        check(payment.getMaxStackSize()==15&&payment.mayPlace(new ItemStack(Items.EMERALD))
-            &&!payment.mayPlace(new ItemStack(Items.DIAMOND)),"Payment limit or currency filter");
-        f.player.getInventory().setItem(9,new ItemStack(Items.EMERALD,64));
-        menu.quickMoveStack(f.player,1);
-        check(payment.getItem().getCount()==15&&f.player.getInventory().getItem(9).getCount()==49,"Quick move did not cap payment");
-        var extra=new ItemStack(Items.EMERALD,6);
-        payment.safeInsert(extra);
-        check(extra.getCount()==6&&payment.getItem().getCount()==15,"Full payment accepted more emeralds");
+        check(!payment.isActive()&&!payment.mayPlace(new ItemStack(Items.EMERALD)),"Selection exposed payment");
+        var payload=new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        payload.writeUUID(f.station.id);
+        payload.writeUUID(f.resident.getUUID());
+        payload.writeEnum(Profession.FARMER);
+        payload.writeVarInt(0);
+        payload.writeLong(Employment.epoch(f.station));
+        payload.writeUtf("Morador");
+        var checkout=new LevelPaymentMenu(31,f.player.getInventory(),payload);
+        payload.release();
+        f.player.getInventory().setItem(9,new ItemStack(Items.EMERALD,25));
+        check(checkout.getSlot(0).getMaxStackSize()==10&&!checkout.getSlot(1).mayPlace(new ItemStack(Items.EMERALD)),"Sequential payment");
+        checkout.quickMoveStack(f.player,5);
+        check(checkout.completeSlots()==2&&checkout.deposited()==25&&checkout.getSlot(2).getItem().getCount()==5,"Quick move did not split 10+10+5");
+        checkout.removed(f.player);
+        check(f.player.getInventory().countItem(Items.EMERALD)==25&&f.station.getItem(31).isEmpty(),"Cancellation refund altered station");
+        f.player.getInventory().clearContent();
+        f.player.getInventory().setItem(9,new ItemStack(Items.EMERALD,49));
         payment.set(new ItemStack(Items.EMERALD,35));
-        payment.safeInsert(extra);
-        check(payment.getItem().getCount()==35&&extra.getCount()==6,"Existing balance changed");
         check(Employment.hire(f.player,f.station,f.resident.getUUID(),Profession.FARMER).equals("ok"),"Direct fixture hire");
         menu.quickMoveStack(f.player,0);
         check(f.station.getItem(31).getCount()==25,"Stale hiring menu manipulated hired station");

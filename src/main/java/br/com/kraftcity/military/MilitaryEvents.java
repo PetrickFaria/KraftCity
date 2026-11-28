@@ -66,6 +66,9 @@ public final class MilitaryEvents {
         if(Military.isSoldier(e.getEntity()))Military.death(l,e.getEntity());
         Military.award(l,e.getEntity(),e.getSource().getEntity()!=null?e.getSource().getEntity():e.getEntity().getKillCredit());
     }
+    @SubscribeEvent public void tossed(net.minecraftforge.event.entity.item.ItemTossEvent event){
+        MilitaryDropOrigin.playerToss(event.getEntity());
+    }
     @SubscribeEvent(priority=EventPriority.LOWEST) public void drops(LivingDropsEvent event){
         MilitaryDropOrigin.record(event);
     }

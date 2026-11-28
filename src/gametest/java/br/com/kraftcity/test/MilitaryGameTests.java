@@ -177,21 +177,16 @@ public final class MilitaryGameTests {
     }
 
     @GameTest(template="empty",batch="military_inventory")
-    public static void soldier_hiring_caps_payment_at_selected_price(GameTestHelper h){
+    public static void soldier_hiring_selection_keeps_emeralds_in_player_inventory(GameTestHelper h){
         var f=fixture(h);
         Employment.release(f.l,f.v.getUUID());
         f.s.setItem(31,ItemStack.EMPTY);
         var menu=new WorkMenu(1,f.player.getInventory(),f.s,true,null);
         var source=menu.getSlot(1);
-        source.set(new ItemStack(Items.DIAMOND,2));
-        check(menu.quickMoveStack(f.player,1).isEmpty()&&f.s.getItem(31).isEmpty(),"Accepted invalid payment");
-        menu.selectMilitaryCandidate(f.player,f.v.getUUID());
-        int price=Employment.cost(f.l,Profession.Sector.MILITARY,f.v.getUUID());
         source.set(new ItemStack(Items.EMERALD,32));
         menu.quickMoveStack(f.player,1);
-        check(f.s.getItem(31).getCount()==price&&source.getItem().getCount()==32-price,"Incorrect contract cap");
-        var loaded=EmploymentData.load(EmploymentData.get(f.l).save(new CompoundTag())).station(f.s.id);
-        check(loaded.getItem(31).getCount()==price,"Unconfirmed payment disappeared");
+        check(!menu.getSlot(0).isActive()&&f.s.getItem(31).isEmpty()&&source.getItem().getCount()==32,
+                "Military resident selection must leave funds in the player's inventory");
         h.succeed();
     }
 
@@ -779,6 +774,23 @@ public final class MilitaryGameTests {
                     + "; items=" + drops.stream().map(item -> item.getItem() + "@" + item.position()
                     + " delayed=" + item.hasPickUpDelay() + " data=" + item.getPersistentData()).toList());
         });
+    }
+
+    @GameTest(template="empty",batch="military_public_drops")
+    public static void soldier_collects_common_untagged_loot_but_skips_player_tosses(GameTestHelper h) {
+        var f=fixture(h);
+        clearTestHostiles(f);
+        var where=f.v.blockPosition();
+        var common=cityLoot(f.l,where,Items.ROTTEN_FLESH,3);
+        var personal=cityLoot(f.l,where,Items.BONE,2);
+        var equipment=cityLoot(f.l,where,Items.IRON_SWORD,1);
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                new net.minecraftforge.event.entity.item.ItemTossEvent(personal,f.player));
+        Military.tick(f.l,f.s,f.v);
+        Military.tick(f.l,f.s,f.v);
+        check(!common.isAlive()&&f.s.countItem(Items.ROTTEN_FLESH)==3,"ordinary military loot stayed on the ground");
+        check(personal.isAlive()&&equipment.isAlive(),"soldier took a personal item");
+        h.succeed();
     }
 
     private static net.minecraft.world.entity.item.ItemEntity cityLoot(ServerLevel level,BlockPos pos,Item item,int count){

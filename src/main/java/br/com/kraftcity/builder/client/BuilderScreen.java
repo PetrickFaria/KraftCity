@@ -25,6 +25,9 @@ public final class BuilderScreen extends AbstractContainerScreen<BuilderMenu> {
         var jobs=menu.snapshot.getList("jobs",Tag.TAG_COMPOUND);jobPage=Math.max(0,Math.min(jobPage,Math.max(0,jobs.size()-1)));if(!jobs.isEmpty()){var e=jobs.getCompound(jobPage);button(8,213,228,(e.getUUID("id").equals(menu.selectedJob)?"> ":"")+font.plainSubstrByWidth(e.getString("name")+" "+e.getInt("done")+"/"+e.getInt("total"),207),()->command(4,e.getUUID("id").toString()));}
         button(8,232,32,"<",()->{jobPage--;buttons();});button(44,232,32,">",()->{jobPage++;buttons();});
         if(menu.snapshot.getBoolean("employed")){
+            int level=menu.snapshot.getInt("level");
+            button(264,272,126,level>=5?"Nível máximo":"Aumentar Nível",
+                    ()->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(new br.com.kraftcity.employment.WorkNetwork.Upgrade(menu.containerId,menu.stationId))).active=level<5;
             long epoch=menu.snapshot.getLong("employment_epoch");
             addRenderableWidget(new Button(leftPos+366,topPos+2,66,14,Component.translatable("gui.kraftcity.dismiss"),
                 b->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(

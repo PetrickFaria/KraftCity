@@ -64,8 +64,10 @@ public final class WorkMenu extends AbstractContainerMenu {
             }else for(int i=0;i<4;i++)addSlot(new Slot(inventory,EmploymentData.TOOL+i,94+i*36,101));
         }
         if(!fieldLayout)addSlot(new Slot(inventory,EmploymentData.PAYMENT,hiring?187:274,hiring?158:101){
+            @Override public boolean isActive(){return !hiring;}
+            @Override public boolean mayPickup(Player player){return !hiring;}
             @Override public boolean mayPlace(ItemStack stack){
-                return stack.is(Items.EMERALD)&&getItem().getCount()<getMaxStackSize();
+                return !hiring&&stack.is(Items.EMERALD)&&getItem().getCount()<getMaxStackSize();
             }
             @Override public int getMaxStackSize(){if(hiring&&sector==Profession.Sector.MILITARY)return militaryPaymentLimit;
                 return hiring&&sector==Profession.Sector.INDUSTRIAL?PAYMENT_LIMIT:super.getMaxStackSize();}
@@ -112,6 +114,11 @@ public final class WorkMenu extends AbstractContainerMenu {
             station.setChanged();
         }
     }
+    public void openPayment(ServerPlayer player,UUID worker,int selected){
+        if(!hiring||!stillValid(player)||selected<0||selected>=Profession.values().length)return;
+        LevelPaymentMenu.open(player,station(),worker,Profession.values()[selected],0);
+    }
+
     public void hire(ServerPlayer p,UUID worker,int selected){
         if(!hiring||!stillValid(p)||selected<0||selected>=Profession.values().length)return;
         var job=Profession.values()[selected];

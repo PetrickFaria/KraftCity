@@ -308,6 +308,10 @@ public final class Employment {
     }
 
     public static String hire(ServerPlayer player,EmploymentData.Station s,UUID worker,Profession profession){
+        return hire(player,s,worker,profession,0);
+    }
+
+    static String hire(ServerPlayer player,EmploymentData.Station s,UUID worker,Profession profession,int paidLevel){
         ServerLevel level=player.getLevel();
         if(!level.getServer().isSameThread())throw new IllegalStateException("Hiring off server thread");
         if(s==null)return "invalid";
@@ -316,7 +320,8 @@ public final class Employment {
         if(!(level.getBlockEntity(s.pos) instanceof WorkBlockEntity be)||!s.id.equals(be.identity())
                 ||player.distanceToSqr(s.pos.getX()+.5,s.pos.getY()+.5,s.pos.getZ()+.5)>64)return "invalid";
         if(!(level.getEntity(worker) instanceof Villager villager)||!eligible(level,villager))return "ineligible";
-        int price=cost(level,s.sector,worker);if(price<0)return "pending";
+        if(EmploymentConfig.cost(s.sector)<0)return "pending";
+        int price=paidLevel==0?cost(level,s.sector,worker):0;
         var payment=s.getItem(EmploymentData.PAYMENT);
         if(price>0&&(!payment.is(Items.EMERALD)||payment.getCount()<price))return "payment";
         // Physical replacement first. A failed block operation never consumes payment.
@@ -351,13 +356,14 @@ public final class Employment {
         converted.bind(s.id);s.profession=profession;s.worker=worker;s.industry.putLong("employment_epoch",epoch(s)+1);s.setChanged();
         var workforce=WorkforceData.get(level);var progress=workforce.progress(worker,profession.id());
         var previous=workforce.worker(worker).orElse(null);
-        workforce.setProgress(worker,profession.id(),progress.level(),progress.xp());
-        workforce.put(new WorkerRecord(worker,Optional.of(profession.id()),progress.level(),
+        int starting=Math.max(paidLevel,Math.max(1,progress.level()));
+        if(profession==Profession.BUILDER)starting=Math.max(starting,br.com.kraftcity.builder.BuilderWork.level(progress.xp()));
+        workforce.setProgress(worker,profession.id(),starting,progress.xp());
+        workforce.put(new WorkerRecord(worker,Optional.of(profession.id()),starting,
                 Optional.of(new Workstation(profession.id(),level.dimension(),s.pos)),previous==null?Optional.empty():previous.area(),List.of()));
         // The custom block is the workstation. Never assign a conflicting vanilla career/POI.
         villager.releasePoi(MemoryModuleType.JOB_SITE);villager.releasePoi(MemoryModuleType.POTENTIAL_JOB_SITE);
         villager.getBrain().eraseMemory(MemoryModuleType.JOB_SITE);villager.getBrain().eraseMemory(MemoryModuleType.POTENTIAL_JOB_SITE);
-        if(profession==Profession.BUILDER)workforce.setProgress(worker,profession.id(),br.com.kraftcity.builder.BuilderWork.level(progress.xp()),progress.xp());
         payment.shrink(price);s.setChanged();if(profession==Profession.SOLDIER)br.com.kraftcity.military.Military.trained(level,s,villager,player);else br.com.kraftcity.military.Military.residentHealth(level,villager);return "ok";
     }
 }

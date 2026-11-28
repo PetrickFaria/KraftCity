@@ -131,33 +131,39 @@ public final class EmploymentVisualCheck {
             level.setBlock(POST,WorkModule.INDUSTRIAL.get().defaultBlockState(),3);level.setBlock(COMMERCIAL,WorkModule.COMMERCIAL.get().defaultBlockState(),3);
             station(level,POST).setItem(31,ItemStack.EMPTY);
             var player=server.getPlayerList().getPlayer(playerId);
-            player.getInventory().setItem(1,new ItemStack(Items.EMERALD,20));
+            player.getInventory().setItem(1,new ItemStack(Items.EMERALD,25));
             open(player,POST);
         });
         if(ticks==800){selectWorker(mc);click(screen(mc),"Fazendeiro");}
-        if(ticks==804){
-            var menu=(WorkMenu)mc.player.containerMenu;
-            mc.gameMode.handleInventoryMouseClick(menu.containerId,29,0,net.minecraft.world.inventory.ClickType.QUICK_MOVE,mc.player);
-        }
-        if(ticks==810){
-            check(mc.player.containerMenu.getSlot(0).getItem().getCount()==15,"Payment above 15 or missing client sync");
-            capture(mc,"visual-industrial-hiring.png");
-        }
-        if(ticks==815){
-            WorkMenu menu=(WorkMenu)mc.player.containerMenu;int id=menu.containerId;UUID stationId=menu.stationId;
-            click(screen(mc),"Contratar");
-            WorkNetwork.CHANNEL.sendToServer(new WorkNetwork.Hire(id,stationId,worker,Profession.FARMER.ordinal()));
+        if(ticks==804)capture(mc,"visual-industrial-hiring.png");
+        if(ticks==810)click(screen(mc),"Contratar");
+        if(ticks==815)PaymentVisualCheck.fund(mc,1);
+        if(ticks==825){
+            capture(mc,"visual-industrial-payment.png");
+            PaymentVisualCheck.confirm(mc,25,2);
         }
         if(ticks==850)server.execute(()->{
             var level=server.overworld();var s=station(level,POST);
-            check(server.getPlayerList().getPlayer(playerId).getInventory().getItem(1).getCount()==10,"First hire did not return five emeralds");
+            check(server.getPlayerList().getPlayer(playerId).getInventory().countItem(Items.EMERALD)==5,"First hire did not return five emeralds");
             ResidenceData.get(level).renameResident(worker,"Steve");
             ResidenceData.get(level).applyResidentName((Villager)level.getEntity(worker));
             check(s.worker.equals(worker)&&s.getItem(31).isEmpty()&&level.getBlockState(POST).is(WorkModule.PROFESSIONAL.get(Profession.FARMER).get()),"Real industrial transaction/double-click failed");
             check(ResidenceData.get(level).bedClaim(worker).bed().equals(BED)&&Employment.indicator(level,worker,false),"Hiring lost bed or work indicator");
+            check(WorkforceData.get(level).progress(worker,Profession.FARMER.id()).level()==2,"Initial Lv2");
             s.setItem(0,new ItemStack(Items.APPLE,13));s.setItem(27,new ItemStack(Items.IRON_HOE));s.setItem(28,new ItemStack(Items.BONE_MEAL,3));s.setItem(29,new ItemStack(Items.PUMPKIN_SEEDS,2));s.setItem(30,new ItemStack(Items.WATER_BUCKET));
-            WorkforceData.get(level).setProgress(worker,Profession.FARMER.id(),3,57);hired=true;
+            WorkforceData.get(level).setProgress(worker,Profession.FARMER.id(),2,7);
+            server.getPlayerList().getPlayer(playerId).getInventory().setItem(9,new ItemStack(Items.EMERALD,10));hired=true;
             System.out.println("EMPLOYMENT_GRAPHICAL_CONTRACT_PASSED");
+        });
+        if(ticks==854)click(screen(mc),"›");
+        if(ticks==857)click(screen(mc),"Aumentar Nível");
+        if(ticks==861)PaymentVisualCheck.fund(mc,9);
+        if(ticks==866)PaymentVisualCheck.confirm(mc,10,1);
+        if(ticks==868)server.execute(()->{
+            var level=server.overworld();
+            var progress=WorkforceData.get(level).progress(worker,Profession.FARMER.id());
+            check(progress.level()==3&&progress.xp()==7,"Purchased level did not preserve partial XP");
+            WorkforceData.get(level).setProgress(worker,Profession.FARMER.id(),3,57);
         });
         if(ticks==870){check(hired&&mc.player.containerMenu instanceof WorkMenu m&&!m.hiring&&m.slots.get(0).getItem().getCount()==13,"Professional menu inventory did not sync");checkFarmerHeader(screen(mc),"Steve (Fazendeiro) - Lv. 3",50);
             checkCompactFarmer(mc,screen(mc),(WorkMenu)mc.player.containerMenu);
@@ -260,19 +266,19 @@ public final class EmploymentVisualCheck {
         if(ticks==1000)server.execute(()->{
             var level=server.overworld();var s=station(level,COMMERCIAL);check(s.worker==null&&s.getItem(31).getCount()==20,"Forged commercial request charged emeralds");
             EmploymentConfig.SPEC.setConfig(approvedConfig);approvedConfig=null;
-            pending=true;System.out.println("COMMERCIAL_PENDING_NO_CHARGE_PASSED");station(level,POST).setItem(31,new ItemStack(Items.EMERALD,15));open(server.getPlayerList().getPlayer(playerId),POST);
+            pending=true;System.out.println("COMMERCIAL_PENDING_NO_CHARGE_PASSED");station(level,POST).setItem(31,ItemStack.EMPTY);server.getPlayerList().getPlayer(playerId).getInventory().setItem(1,new ItemStack(Items.EMERALD,10));open(server.getPlayerList().getPlayer(playerId),POST);
         });
         if(ticks==1020)click(screen(mc),"Contratar");
         if(ticks==1040){
             selectWorker(mc);
             var menu=(WorkMenu)mc.player.containerMenu;
-            check(menu.snapshot.candidates().stream().anyMatch(candidate->candidate.id().equals(worker)&&candidate.cost()==1),
-                "Server did not synchronize one-emerald rehire price");
             click(screen(mc),"Contratar");
         }
+        if(ticks==1046)PaymentVisualCheck.fund(mc,1);
+        if(ticks==1053)PaymentVisualCheck.confirm(mc,10,1);
         if(ticks==1060)server.execute(()->{
             var level=server.overworld();var s=station(level,POST);var progress=WorkforceData.get(level).progress(worker,Profession.FARMER.id());
-            check(server.getPlayerList().getPlayer(playerId).getInventory().getItem(1).getCount()==24,"Rehire did not return fourteen emeralds");
+            check(server.getPlayerList().getPlayer(playerId).getInventory().getItem(1).isEmpty(),"Rehire did not consume ten emeralds");
             check(worker.equals(s.worker)&&progress.level()==3&&progress.xp()==57&&s.getItem(0).getCount()==13&&s.getItem(31).isEmpty(),"Rehire lost progression/items or charged incorrectly");
             check(ResidenceData.get(level).bedClaim(worker)!=null&&ResidenceData.get(level).bedClaim(worker).bed().equals(BED),"Bed claim changed during employment lifecycle");
             rehired=true;System.out.println("EMPLOYMENT_REHIRE_PROGRESS_PASSED");

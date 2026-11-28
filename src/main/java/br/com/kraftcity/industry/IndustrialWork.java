@@ -44,6 +44,9 @@ public final class IndustrialWork {
     public static AABB area(ServerLevel l,EmploymentData.Station s){if(IndustrialRules.centeredArea(s.profession))return LumberjackWork.bounds(s.pos,IndustrialRules.size(l,s));int r=IndustrialRules.size(l,s)/2;if(s.profession==Profession.BEEKEEPER)return new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,6,r+1));return s.profession==Profession.FARMER ? new AABB(s.pos.offset(-r,1,-r),s.pos.offset(r+1,FarmerWork.HEIGHT+1,r+1)) : new AABB(s.pos.offset(-r,-3,-r),s.pos.offset(r+1,4,r+1));}
     public static void tick(ServerLevel l,EmploymentData.Station s){
         if(!industrial(s)||!l.hasChunkAt(s.pos)||!Employment.valid(l,s.worker)||!(l.getEntity(s.worker) instanceof Villager v))return;
+        boolean returnsToPost=IndustrialRules.centeredArea(s.profession);
+        if(returnsToPost&&(l.isThundering()||!day(l)||v.isSleeping()))
+            v.getPersistentData().putBoolean("KCIndustrialReturnToPost",true);
         if(l.isThundering()||Employment.fleeing(v)){
             if(s.profession==Profession.LUMBERJACK){
                 LumberjackWork.trace(v,"blocked: storm or danger");
@@ -74,6 +77,10 @@ public final class IndustrialWork {
             IndustrialIdle.interrupt(v);
             if(s.profession==Profession.BEEKEEPER)ApiaryWork.blocked(l,s,v,"residential_or_safety_route");
             return;
+        }
+        if(returnsToPost&&v.getPersistentData().getBoolean("KCIndustrialReturnToPost")){
+            if(resumeAtPost(l,s,v))return;
+            v.getPersistentData().remove("KCIndustrialReturnToPost");
         }
         long day=Math.floorDiv(l.getDayTime()+1000,24000);
         if((s.profession==Profession.BUTCHER||s.profession==Profession.SHEPHERD)&&s.industry.getLong("supplied_day")!=day+1){
@@ -109,6 +116,33 @@ public final class IndustrialWork {
         if(busy)IndustrialIdle.interrupt(v);
         else IndustrialIdle.tick(l,s,v);
     }
+    private static boolean resumeAtPost(ServerLevel level,EmploymentData.Station station,Villager worker){
+        if(worker.isNoAi())return true;
+        if(worker.distanceToSqr(Vec3.atCenterOf(station.pos))<=9)return false;
+        var navigation=worker.getNavigation();
+        var active=navigation.getPath();
+        if(active!=null&&!navigation.isDone()&&active.getTarget().distSqr(station.pos)<=9)return true;
+        if(worker.tickCount%10!=0)return true;
+        navigation.setMaxVisitedNodesMultiplier(5);
+        try{
+            var targets=new java.util.HashSet<BlockPos>();
+            for(var direction:Direction.Plane.HORIZONTAL)
+                for(int y=-1;y<=1;y++) {
+                    var feet=station.pos.relative(direction).above(y);
+                    if(level.hasChunkAt(feet)&&level.getBlockState(feet).getCollisionShape(level,feet).isEmpty()
+                            &&level.getBlockState(feet.below()).isFaceSturdy(level,feet.below(),Direction.UP))targets.add(feet);
+                }
+            for(var target:targets.stream().sorted(java.util.Comparator.comparingDouble(worker.blockPosition()::distSqr)).toList()){
+                var path=navigation.createPath(target,0,112);
+                if(path!=null&&path.canReach()&&navigation.moveTo(path,.8))return true;
+            }
+            FarmerLogistics.stayInField(level,station,worker);
+        }finally{
+            navigation.resetMaxVisitedNodesMultiplier();
+        }
+        return true;
+    }
+
     public static void alert(ServerLevel l,EmploymentData.Station s,String cause,String message){
         CompoundTag alerts=s.industry.getCompound("alerts");long now=l.getGameTime();
         if(alerts.contains(cause)&&now>=alerts.getLong(cause)&&now-alerts.getLong(cause)<300)return;

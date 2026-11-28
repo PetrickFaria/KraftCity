@@ -41,7 +41,8 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
         if(settings){
             button(8,5,24,"‹",()->{settings=false;buttons();});
             button(36,44,174,"Blacklist",()->{blacklist=true;page=0;buttons();send(3,"");});
-            button(36,68,174,"Limites",()->MilitaryPreview.toggle(menu.pos));
+            addRenderableWidget(new br.com.kraftcity.employment.client.LimitsButton(leftPos+36,topPos+68,174,18,
+                    Component.literal("Limites"),b->MilitaryPreview.toggle(menu.pos),()->MilitaryPreview.enabled(menu.pos)));
             if(state!=null&&state.employed()){
                 button(36,92,174,state.discard()!=null?"Desvincular baú":"Vincular baú especial",()->{
                     if(state.discard()==null)send(5,"");
@@ -52,6 +53,8 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
                 });
             }
             else if(state!=null)button(36,92,174,"Treinar residente",()->send(4,""));
+            if(state!=null&&state.employed())button(36,116,174,state.level()>=5?"Nível máximo":"Aumentar Nível",
+                    ()->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(new br.com.kraftcity.employment.WorkNetwork.Upgrade(menu.containerId,menu.stationId))).active=state.level()<5;
             if(state!=null&&state.employed())addRenderableWidget(new Button(leftPos+36,topPos+146,174,18,
             Component.translatable("gui.kraftcity.dismiss"),b->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(
                 new br.com.kraftcity.employment.WorkNetwork.Dismiss(menu.containerId,menu.stationId,state.epoch()))));
