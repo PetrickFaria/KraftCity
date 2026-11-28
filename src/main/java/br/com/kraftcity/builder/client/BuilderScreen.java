@@ -51,27 +51,9 @@ public final class BuilderScreen extends AbstractContainerScreen<BuilderMenu> {
         var selected=menu.snapshot.getList("jobs",Tag.TAG_COMPOUND);for(var raw:selected){var e=(CompoundTag)raw;if(e.getUUID("id").equals(menu.selectedJob)){int total=Math.max(1,e.getInt("total"));font.draw(p,font.plainSubstrByWidth(e.getInt("done")*100/total+"% · ativos "+e.getInt("workers"),154),82,235,0xFFB8F0BB);font.draw(p,font.plainSubstrByWidth(e.getInt("placed")+" colocados · "+(e.getBoolean("replace")?"Substituir":"Preservar")+" · "+e.getString("status"),228),8,251,0xFFFFD68A);}}
         font.draw(p,"Taxa",8,264,0xFFC7D6E7);font.draw(p,font.plainSubstrByWidth(menu.snapshot.getString("status"),246),184,80,0xFFFFD68A);
     }
-    @Override public boolean mouseClicked(double x,double y,int button){
-        if(!professionalSettings)return super.mouseClicked(x,y,button);
-        for(var child:children())if(child.mouseClicked(x,y,button)){setFocused(child);return true;}
-        return false;
-    }
-    @Override public boolean mouseReleased(double x,double y,int button){
-        return !professionalSettings&&super.mouseReleased(x,y,button);
-    }
-    @Override public boolean mouseDragged(double x,double y,int button,double dx,double dy){
-        return !professionalSettings&&super.mouseDragged(x,y,button,dx,dy);
-    }
-    @Override public boolean keyPressed(int key,int scan,int modifiers){
-        if(!professionalSettings)return super.keyPressed(key,scan,modifiers);
-        if(key!=256)return false;
-        professionalSettings=false;
-        buttons();
-        return true;
-    }
     @Override public void render(PoseStack p,int x,int y,float partial){renderBackground(p);if(!materialView&&!professionalSettings){super.render(p,x,y,partial);renderTooltip(p,x,y);var job=selected();if(job!=null&&x>=leftPos+8&&x<leftPos+236&&y>=topPos+251&&y<topPos+264)renderTooltip(p,Component.literal(job.getString("status")),x,y);}else{renderBg(p,partial,x,y);p.pushPose();p.translate(leftPos,topPos,0);renderLabels(p,x,y);p.popPose();for(var r:renderables)r.render(p,x,y,partial);}}
-    @Override public boolean mouseClicked(double x,double y,int b){if(!materialView)return super.mouseClicked(x,y,b);for(var child:children())if(child.mouseClicked(x,y,b))return true;return false;}
-    @Override public boolean keyPressed(int key,int scan,int modifiers){if(materialView){if(key==256){materialView=false;buttons();}return true;}return super.keyPressed(key,scan,modifiers);}
-    @Override public boolean mouseDragged(double x,double y,int b,double dx,double dy){return !materialView&&super.mouseDragged(x,y,b,dx,dy);}
-    @Override public boolean mouseReleased(double x,double y,int b){return !materialView&&super.mouseReleased(x,y,b);}
+    @Override public boolean mouseClicked(double x,double y,int b){if(!materialView&&!professionalSettings)return super.mouseClicked(x,y,b);for(var child:children())if(child.mouseClicked(x,y,b))return true;return false;}
+    @Override public boolean keyPressed(int key,int scan,int modifiers){if(materialView||professionalSettings){if(key==256){materialView=false;professionalSettings=false;buttons();}return true;}return super.keyPressed(key,scan,modifiers);}
+    @Override public boolean mouseDragged(double x,double y,int b,double dx,double dy){return !materialView&&!professionalSettings&&super.mouseDragged(x,y,b,dx,dy);}
+    @Override public boolean mouseReleased(double x,double y,int b){return !materialView&&!professionalSettings&&super.mouseReleased(x,y,b);}
 }
