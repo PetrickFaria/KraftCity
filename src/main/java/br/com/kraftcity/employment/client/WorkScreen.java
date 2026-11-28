@@ -20,7 +20,6 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
     private UUID selected;
     private Profession profession;
     private int page;
-    private boolean professionalSettings;
     private static final int LUMBER_AREA_X=18, LUMBER_AREA_STEP=54, LUMBER_BUTTON_WIDTH=52;
     private static final int FARM_AREA_X=(WorkMenu.FARM_WIDTH-172)/2, FARM_AREA_Y=123, XP_WIDTH=182, XP_Y=22;
     private static final String[] FARM_INPUTS={"Enxada","Farinha de Osso","Balde de Água"};
@@ -47,8 +46,9 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
         clearWidgets();if(menu.fieldLayout){farmerButtons();return;}if(!menu.hiring){
             if(menu.profession!=null){
                 addRenderableWidget(new Button(leftPos+8,topPos+5,22,15,
-                        Component.literal(professionalSettings?"‹":"›"),b->{professionalSettings=!professionalSettings;buttons();}));
-                if(professionalSettings){
+                        Component.literal(menu.settingsPage?"‹":"›"),b->{menu.settingsPage=!menu.settingsPage;buttons();}))
+                        .active=menu.getCarried().isEmpty();
+                if(menu.settingsPage){
                     if(menu.snapshot!=null&&menu.snapshot.employed())addUpgrade(12,48,menu.snapshot.level());
                     return;
                 }
@@ -209,6 +209,7 @@ public final class WorkScreen extends AbstractContainerScreen<WorkMenu> {
             return;
         }
         drawCenteredString(pose,font,title,imageWidth/2,6,0xFFFFFF);
+        if(menu.settingsPage)return;
         font.draw(pose,playerInventoryTitle,inventoryLabelX,inventoryLabelY,0xFFFFFF);
         var s=menu.snapshot;
         if(menu.hiring){

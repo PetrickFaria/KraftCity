@@ -53,9 +53,9 @@ public final class SoldierScreen extends AbstractContainerScreen<SoldierMenu> {
                 });
             }
             else if(state!=null)button(36,92,174,"Treinar residente",()->send(4,""));
-            if(state!=null&&state.employed())button(36,116,174,state.level()>=5?"Nível máximo":"Aumentar Nível",
+            if(state!=null&&state.employed())button(36,137,174,state.level()>=5?"Nível máximo":"Aumentar Nível",
                     ()->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(new br.com.kraftcity.employment.WorkNetwork.Upgrade(menu.containerId,menu.stationId))).active=state.level()<5;
-            if(state!=null&&state.employed())addRenderableWidget(new Button(leftPos+36,topPos+146,174,18,
+            if(state!=null&&state.employed())addRenderableWidget(new Button(leftPos+36,topPos+162,174,18,
             Component.translatable("gui.kraftcity.dismiss"),b->br.com.kraftcity.employment.WorkNetwork.CHANNEL.sendToServer(
                 new br.com.kraftcity.employment.WorkNetwork.Dismiss(menu.containerId,menu.stationId,state.epoch()))));
             return;
