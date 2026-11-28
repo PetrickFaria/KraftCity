@@ -37,6 +37,8 @@ final class FreshAnimationsFaceTextureAdapter {
     private static final int HEAD_U = 8;
     private static final int HEAD_V = 8;
     private static final int HEAD_SIZE = 8;
+    private static final int VANILLA_BROW_V = 13;
+    private static final int VANILLA_EYES_V = 14;
 
     private FreshAnimationsFaceTextureAdapter() {}
 
@@ -74,12 +76,15 @@ final class FreshAnimationsFaceTextureAdapter {
                     int alpha = alpha(feature);
                     if (alpha == 0) continue;
 
-                    int faceColor = nearestFaceColor(feature, facePalette);
-                    int adaptedPixel = (alpha << 24) | (faceColor & 0x00FFFFFF);
+                    int sourceU = v == 0 ? 9 + u : v == 1 ? vanillaEyeU(u) : -1;
+                    int sourceV = v == 0 ? VANILLA_BROW_V : VANILLA_EYES_V;
+                    int lidPixel = (alpha << 24) | nearestFaceColor(feature, facePalette);
                     for (int dy = 0; dy < scale; dy++) {
                         for (int dx = 0; dx < scale; dx++) {
+                            int pixel = sourceU < 0 ? lidPixel
+                                    : skin.getPixelRGBA(sourceU * scale + dx, sourceV * scale + dy);
                             adapted.setPixelRGBA(FACE_U * scale + u * scale + dx,
-                                    FACE_V * scale + v * scale + dy, adaptedPixel);
+                                    FACE_V * scale + v * scale + dy, pixel);
                         }
                     }
                 }
@@ -96,6 +101,13 @@ final class FreshAnimationsFaceTextureAdapter {
             if (template != null) template.close();
             if (adapted != null) adapted.close();
         }
+    }
+
+    private static int vanillaEyeU(int column) {
+        return switch (column) {
+            case 0, 1, 4, 5 -> 9 + column;
+            default -> -1;
+        };
     }
 
     private static boolean freshAnimations18IsActive() {

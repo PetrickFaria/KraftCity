@@ -20,7 +20,7 @@
 
 ## C. Validação pendente
 
-A lista final deve distinguir os testes automáticos das seis skins originais e da medição física em percursos equivalentes. A cor dos olhos ainda depende da reprodução com os arquivos e as combinações de mods do usuário.
+A lista final deve distinguir os testes automáticos das seis skins originais e da medição física em percursos equivalentes. Duas skins de 64×64 foram recuperadas de uma cópia do mundo Teste. Ainda são necessárias as quatro variantes restantes e a comparação visual com os mods do usuário.
 
 ## D. Diagnóstico
 
@@ -43,7 +43,7 @@ Versão candidata 1.1.41, na branch `fix/professional-field-regressions`.
 | Alcance em Guarnecer | Implementação preservada | Cenários militares existentes. |
 | Orientação das colmeias | Parcial | Casos dos quatro pontos cardeais e do ninho com abelhas. |
 | Prioridade apícola | Parcial | Colmeia na área sobreposta e em área exclusiva do Coletor. |
-| Cor dos olhos | Pendente | Reprodução depende dos arquivos originais. |
+| Cor dos olhos | Parcial | Brancos e pupilas passam a usar os pixels originais no adaptador Fresh Animations 1.8. |
 | Braços retos | Parcial | Remapeamento de UV Villager com alfa. |
 | Auditoria de velocidade | Parcial | Multiplicadores comparados com o vanilla. |
 | Velocidade das rotas comuns | Parcial | Multiplicadores normalizados. |
